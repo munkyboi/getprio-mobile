@@ -29,6 +29,7 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   app_links: ^7.2.1
+  async: ^2.13.1
   crypto: ^3.0.7
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0

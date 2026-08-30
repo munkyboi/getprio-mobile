@@ -20,4 +20,14 @@ flutter analyze
 flutter test
 ```
 
+For a configured run, provide the API origin and approved QR/payment hosts:
+
+```bash
+flutter run \
+  --dart-define=GETPRIO_API_BASE_URL=https://api.example.com \
+  --dart-define=GETPRIO_APPROVED_HOSTS=app.example.com
+```
+
+Firebase/iOS universal-link setup is documented in [`docs/setup/mobile-runtime-configuration.md`](docs/setup/mobile-runtime-configuration.md).
+
 Product decisions and implementation contracts are kept in [`CONTEXT.md`](CONTEXT.md) and [`docs/`](docs/).

@@ -155,6 +155,9 @@ class FakeMessaging implements PushMessagingPort {
   @override
   Stream<PushSignal> get onSignal => _signals.stream;
 
+  @override
+  Future<PushSignal?> get initialSignal async => null;
+
   void emitToken(String value) {
     token = value;
     _tokens.add(value);

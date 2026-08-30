@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:async/async.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -49,6 +50,8 @@ abstract interface class PushMessagingPort {
   Stream<String> get onTokenRefresh;
 
   Stream<PushSignal> get onSignal;
+
+  Future<PushSignal?> get initialSignal;
 }
 
 abstract interface class PushRegistrationApi {
@@ -135,6 +138,8 @@ class PushCoordinator {
     _installationId = await installationStore.getOrCreate();
     _tokenSubscription ??= messaging.onTokenRefresh.listen(_registerToken);
     _signalSubscription ??= messaging.onSignal.listen(_handleSignal);
+    final initialSignal = await messaging.initialSignal;
+    if (initialSignal != null) await _handleSignal(initialSignal);
     final token = await messaging.getToken();
     if (token != null && token.isNotEmpty) await _registerToken(token);
     return true;
@@ -237,9 +242,30 @@ class FirebaseMessagingPort implements PushMessagingPort {
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
   @override
-  Stream<PushSignal> get onSignal => FirebaseMessaging.onMessage.map(
-    (message) => PushSignal.fromData(message.data),
-  );
+  Stream<PushSignal> get onSignal => StreamGroup.merge([
+    FirebaseMessaging.onMessage,
+    FirebaseMessaging.onMessageOpenedApp,
+  ]).expand(_parseSignal);
+
+  @override
+  Future<PushSignal?> get initialSignal async {
+    final message = await _messaging.getInitialMessage();
+    if (message == null) return null;
+    return _tryParseSignal(message.data);
+  }
+}
+
+Iterable<PushSignal> _parseSignal(RemoteMessage message) {
+  final signal = _tryParseSignal(message.data);
+  return signal == null ? const [] : [signal];
+}
+
+PushSignal? _tryParseSignal(Map<String, dynamic> data) {
+  try {
+    return PushSignal.fromData(data);
+  } on FormatException {
+    return null;
+  }
 }
 
 Future<bool> initializeFirebase() async {
