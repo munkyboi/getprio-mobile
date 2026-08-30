@@ -8,6 +8,7 @@ import 'auth/oauth_flow.dart';
 import 'auth/auth_repository.dart';
 import 'account/ticket_repository.dart';
 import 'account/account_settings_repository.dart';
+import 'account/security_repository.dart';
 import 'directory/directory_repository.dart';
 import 'queue/auth_queue_api.dart';
 import 'queue/join_repository.dart';
@@ -76,6 +77,7 @@ class GetPrioApp extends StatelessWidget {
         settingsRepository: AccountSettingsRepository(
           RestAccountSettingsApi(apiClient),
         ),
+        securityRepository: SecurityRepository(RestSecurityApi(apiClient)),
         allowedHosts: _allowedHosts(),
         pushCoordinator: pushCoordinator,
         oauthFlow: oauthFlow,
@@ -114,6 +116,7 @@ class AuthGate extends StatefulWidget {
     required this.queueRepository,
     required this.directoryRepository,
     required this.settingsRepository,
+    required this.securityRepository,
     required this.allowedHosts,
     this.pushCoordinator,
     this.oauthFlow,
@@ -125,6 +128,7 @@ class AuthGate extends StatefulWidget {
   final QueueRepository queueRepository;
   final DirectoryRepository directoryRepository;
   final AccountSettingsRepository settingsRepository;
+  final SecurityRepository securityRepository;
   final Set<String> allowedHosts;
   final PushCoordinator? pushCoordinator;
   final OAuthFlow? oauthFlow;
@@ -154,6 +158,7 @@ class _AuthGateState extends State<AuthGate> {
         queueRepository: widget.queueRepository,
         directoryRepository: widget.directoryRepository,
         settingsRepository: widget.settingsRepository,
+        securityRepository: widget.securityRepository,
         allowedHosts: widget.allowedHosts,
         onSignOut: () async {
           await widget.pushCoordinator?.logout();
@@ -179,6 +184,7 @@ class _AuthGateState extends State<AuthGate> {
             queueRepository: widget.queueRepository,
             directoryRepository: widget.directoryRepository,
             settingsRepository: widget.settingsRepository,
+            securityRepository: widget.securityRepository,
             allowedHosts: widget.allowedHosts,
             onSignOut: () async {
               await widget.pushCoordinator?.logout();
@@ -676,6 +682,7 @@ class CustomerShell extends StatefulWidget {
     this.queueRepository,
     this.directoryRepository,
     this.settingsRepository,
+    this.securityRepository,
     this.allowedHosts = const {},
   });
 
@@ -686,6 +693,7 @@ class CustomerShell extends StatefulWidget {
   final QueueRepository? queueRepository;
   final DirectoryRepository? directoryRepository;
   final AccountSettingsRepository? settingsRepository;
+  final SecurityRepository? securityRepository;
   final Set<String> allowedHosts;
 
   @override
@@ -754,6 +762,7 @@ class _CustomerShellState extends State<CustomerShell> {
             user: widget.user,
             onSignOut: widget.onSignOut,
             settingsRepository: widget.settingsRepository,
+            securityRepository: widget.securityRepository,
           ),
         ],
       ),
@@ -1280,11 +1289,13 @@ class AccountPage extends StatefulWidget {
     this.user,
     this.onSignOut,
     this.settingsRepository,
+    this.securityRepository,
   });
 
   final AuthUser? user;
   final VoidCallback? onSignOut;
   final AccountSettingsRepository? settingsRepository;
+  final SecurityRepository? securityRepository;
 
   @override
   State<AccountPage> createState() => _AccountPageState();
@@ -1370,7 +1381,21 @@ class _AccountPageState extends State<AccountPage> {
         const SizedBox(height: 12),
         OutlineButton(
           leading: const Icon(LucideIcons.shieldCheck),
-          onPressed: () {},
+          onPressed: () => Navigator.of(context).push(
+            PageRouteBuilder<void>(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  SecurityPage(
+                    repository: widget.securityRepository,
+                    onPasswordChanged: widget.onSignOut,
+                  ),
+              transitionsBuilder: (
+                context,
+                animation,
+                secondaryAnimation,
+                child,
+              ) => FadeTransition(opacity: animation, child: child),
+            ),
+          ),
           child: const Text('Password, security, and MFA'),
         ),
         const SizedBox(height: 12),
@@ -1395,6 +1420,199 @@ class _AccountPageState extends State<AccountPage> {
       if (mounted) setState(() => _queueAlerts = settings.queueAlerts);
     } catch (_) {
       if (mounted) setState(() => _queueAlerts = previous);
+    }
+  }
+}
+
+class SecurityPage extends StatefulWidget {
+  const SecurityPage({
+    super.key,
+    required this.repository,
+    this.onPasswordChanged,
+  });
+
+  final SecurityRepository? repository;
+  final VoidCallback? onPasswordChanged;
+
+  @override
+  State<SecurityPage> createState() => _SecurityPageState();
+}
+
+class _SecurityPageState extends State<SecurityPage> {
+  final _currentPassword = TextEditingController();
+  final _newPassword = TextEditingController();
+  final _mfaCode = TextEditingController();
+  MfaEnrollment? _enrollment;
+  List<String>? _recoveryCodes;
+  String? _message;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _currentPassword.dispose();
+    _newPassword.dispose();
+    _mfaCode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      headers: [
+        AppBar(
+          title: const Text('Security and MFA'),
+          leading: [
+            GhostButton(
+              onPressed: () => Navigator.of(context).pop(),
+              density: ButtonDensity.icon,
+              child: const Icon(LucideIcons.arrowLeft),
+            ),
+          ],
+        ),
+      ],
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Text('Change password').h2(),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _currentPassword,
+            hintText: 'Current password',
+            obscureText: true,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _newPassword,
+            hintText: 'New password',
+            obscureText: true,
+          ),
+          const SizedBox(height: 12),
+          PrimaryButton(
+            onPressed: _busy ? null : _changePassword,
+            child: Text(_busy ? 'Saving...' : 'Change password'),
+          ),
+          const SizedBox(height: 28),
+          const Text('Authenticator app').h2(),
+          const SizedBox(height: 8),
+          const Text(
+            'Add an authenticator app for an extra sign-in factor. Recovery codes are shown only after setup.',
+          ),
+          const SizedBox(height: 12),
+          if (_enrollment == null)
+            OutlineButton(
+              onPressed: _busy ? null : _startMfa,
+              child: const Text('Set up MFA'),
+            )
+          else ...[
+            Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Scan this setup URI in your authenticator app.'),
+                  const SizedBox(height: 8),
+                  SelectableText(_enrollment!.otpauthUri.toString()),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _mfaCode,
+              hintText: '6-digit authenticator code',
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            PrimaryButton(
+              onPressed: _busy ? null : _confirmMfa,
+              child: Text(_busy ? 'Confirming...' : 'Confirm MFA setup'),
+            ),
+          ],
+          if (_recoveryCodes != null) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Save your recovery codes').h3(),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Each code can be used once if you lose access to your authenticator app.',
+                  ),
+                  const SizedBox(height: 12),
+                  SelectableText(_recoveryCodes!.join('\n')),
+                  const SizedBox(height: 12),
+                  OutlineButton(
+                    onPressed: () => setState(() => _recoveryCodes = null),
+                    child: const Text('I saved these codes'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_message != null) ...[
+            const SizedBox(height: 16),
+            Text(_message!),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _changePassword() async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await repository.changePassword(
+        currentPassword: _currentPassword.text,
+        newPassword: _newPassword.text,
+      );
+      widget.onPasswordChanged?.call();
+    } catch (error) {
+      if (mounted) setState(() => _message = 'Password change failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _startMfa() async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final enrollment = await repository.startMfaEnrollment();
+      if (mounted) setState(() => _enrollment = enrollment);
+    } catch (error) {
+      if (mounted) setState(() => _message = 'MFA setup failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _confirmMfa() async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final codes = await repository.confirmMfaEnrollment(_mfaCode.text.trim());
+      if (mounted) {
+        setState(() {
+          _recoveryCodes = codes;
+          _enrollment = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _message = 'MFA confirmation failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 }
