@@ -59,6 +59,19 @@ class AuthenticatedApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> put(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    return _send(
+      (token) => _client.put(
+        Uri.parse('$_baseUrl$path'),
+        headers: _headers(token, contentType: true),
+        body: jsonEncode(body),
+      ),
+    );
+  }
+
   Future<Map<String, dynamic>> _send(
     Future<http.Response> Function(String token) request, {
     bool isRetry = false,

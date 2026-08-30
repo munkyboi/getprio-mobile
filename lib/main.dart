@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -10,18 +12,24 @@ import 'queue/join_repository.dart';
 import 'queue/join_ui.dart';
 import 'queue/queue_models.dart';
 import 'queue/queue_repository.dart';
+import 'push/push_coordinator.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  runApp(GetPrioApp());
+  final firebaseEnabled = await initializeFirebase();
+  runApp(GetPrioApp(firebaseEnabled: firebaseEnabled));
 }
 
 class GetPrioApp extends StatelessWidget {
-  GetPrioApp({super.key, AuthRepository? authRepository})
-    : authRepository = authRepository ?? _defaultAuthRepository();
+  GetPrioApp({
+    super.key,
+    AuthRepository? authRepository,
+    this.firebaseEnabled = false,
+  }) : authRepository = authRepository ?? _defaultAuthRepository();
 
   final AuthRepository authRepository;
+  final bool firebaseEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +39,20 @@ class GetPrioApp extends StatelessWidget {
       authRepository: authRepository,
     );
     final joinRepository = JoinRepository(RestJoinApi(apiClient));
+    final ticketRepository = QueueTicketRepository(
+      RestAccountQueueApi(apiClient),
+    );
+    final pushCoordinator = firebaseEnabled
+        ? PushCoordinator(
+            messaging: FirebaseMessagingPort(),
+            api: RestPushRegistrationApi(apiClient),
+            installationStore: SecureInstallationStore(),
+            platform: 'ios',
+            appVersion: '1.0.0',
+            locale: 'en-PH',
+            onSignal: (_) async => ticketRepository.requestRefresh(),
+          )
+        : null;
     return ShadcnApp(
       title: 'GetPrio',
       debugShowCheckedModeBanner: false,
@@ -41,10 +63,11 @@ class GetPrioApp extends StatelessWidget {
       home: AuthGate(
         authRepository: authRepository,
         joinRepository: joinRepository,
-        ticketRepository: QueueTicketRepository(RestAccountQueueApi(apiClient)),
+        ticketRepository: ticketRepository,
         queueRepository: QueueRepository(RestQueueApi(apiClient)),
         directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
         allowedHosts: _allowedHosts(),
+        pushCoordinator: pushCoordinator,
       ),
     );
   }
@@ -80,6 +103,7 @@ class AuthGate extends StatefulWidget {
     required this.queueRepository,
     required this.directoryRepository,
     required this.allowedHosts,
+    this.pushCoordinator,
   });
 
   final AuthRepository authRepository;
@@ -88,6 +112,7 @@ class AuthGate extends StatefulWidget {
   final QueueRepository queueRepository;
   final DirectoryRepository directoryRepository;
   final Set<String> allowedHosts;
+  final PushCoordinator? pushCoordinator;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -96,6 +121,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   late Future<AuthSession?> _restore;
   AuthSession? _session;
+  bool _pushStarted = false;
 
   @override
   void initState() {
@@ -114,6 +140,7 @@ class _AuthGateState extends State<AuthGate> {
         directoryRepository: widget.directoryRepository,
         allowedHosts: widget.allowedHosts,
         onSignOut: () async {
+          await widget.pushCoordinator?.logout();
           await widget.authRepository.logout();
           if (mounted) setState(() => _session = null);
         },
@@ -128,6 +155,7 @@ class _AuthGateState extends State<AuthGate> {
         }
         if (snapshot.hasData) {
           _session = snapshot.data;
+          unawaited(_startPush());
           return CustomerShell(
             user: snapshot.data!.user,
             joinRepository: widget.joinRepository,
@@ -136,6 +164,7 @@ class _AuthGateState extends State<AuthGate> {
             directoryRepository: widget.directoryRepository,
             allowedHosts: widget.allowedHosts,
             onSignOut: () async {
+              await widget.pushCoordinator?.logout();
               await widget.authRepository.logout();
               if (mounted) setState(() => _session = null);
             },
@@ -143,10 +172,23 @@ class _AuthGateState extends State<AuthGate> {
         }
         return SignInPage(
           authRepository: widget.authRepository,
-          onAuthenticated: (session) => setState(() => _session = session),
+          onAuthenticated: (session) {
+            setState(() => _session = session);
+            unawaited(_startPush());
+          },
         );
       },
     );
+  }
+
+  Future<void> _startPush() async {
+    if (_pushStarted || widget.pushCoordinator == null) return;
+    _pushStarted = true;
+    try {
+      await widget.pushCoordinator!.initialize();
+    } catch (_) {
+      // Push is best effort and must never block queue actions.
+    }
   }
 }
 
@@ -607,7 +649,14 @@ class _TicketsPageState extends State<TicketsPage> {
   @override
   void initState() {
     super.initState();
+    widget.ticketRepository?.refreshVersion.addListener(_reload);
     _tickets = _loadTickets();
+  }
+
+  @override
+  void dispose() {
+    widget.ticketRepository?.refreshVersion.removeListener(_reload);
+    super.dispose();
   }
 
   Future<List<QueueTicket>> _loadTickets() async {

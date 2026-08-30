@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../queue/auth_queue_api.dart';
 import '../queue/queue_models.dart';
 
@@ -14,6 +16,9 @@ class QueueTicketRepository {
   QueueTicketRepository(this.api);
 
   final AccountQueueApi api;
+  final refreshVersion = ValueNotifier<int>(0);
+
+  void requestRefresh() => refreshVersion.value++;
 
   Future<List<QueueTicket>> loadOverview() async {
     return _ticketsFrom(await api.loadOverview());
