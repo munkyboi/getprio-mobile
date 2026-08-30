@@ -15,6 +15,7 @@ import 'directory/directory_repository.dart';
 import 'queue/auth_queue_api.dart';
 import 'queue/join_repository.dart';
 import 'queue/join_ui.dart';
+import 'queue/payment_flow.dart';
 import 'queue/queue_models.dart';
 import 'queue/queue_repository.dart';
 import 'push/push_coordinator.dart';
@@ -47,6 +48,7 @@ class GetPrioApp extends StatelessWidget {
       authRepository: authRepository,
     );
     final joinRepository = JoinRepository(RestJoinApi(apiClient));
+    final paymentApi = RestPaymentApi(apiClient);
     final oauthFlow = OAuthFlow(
       baseUrl: baseUrl,
       authRepository: authRepository,
@@ -76,6 +78,7 @@ class GetPrioApp extends StatelessWidget {
       home: AuthGate(
         authRepository: authRepository,
         joinRepository: joinRepository,
+        paymentApi: paymentApi,
         ticketRepository: ticketRepository,
         queueRepository: QueueRepository(RestQueueApi(apiClient)),
         directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
@@ -117,6 +120,7 @@ class AuthGate extends StatefulWidget {
     super.key,
     required this.authRepository,
     required this.joinRepository,
+    required this.paymentApi,
     required this.ticketRepository,
     required this.queueRepository,
     required this.directoryRepository,
@@ -129,6 +133,7 @@ class AuthGate extends StatefulWidget {
 
   final AuthRepository authRepository;
   final JoinRepository joinRepository;
+  final PaymentApi paymentApi;
   final QueueTicketRepository ticketRepository;
   final QueueRepository queueRepository;
   final DirectoryRepository directoryRepository;
@@ -159,6 +164,7 @@ class _AuthGateState extends State<AuthGate> {
       return CustomerShell(
         user: _session!.user,
         joinRepository: widget.joinRepository,
+        paymentApi: widget.paymentApi,
         ticketRepository: widget.ticketRepository,
         queueRepository: widget.queueRepository,
         directoryRepository: widget.directoryRepository,
@@ -185,6 +191,7 @@ class _AuthGateState extends State<AuthGate> {
           return CustomerShell(
             user: snapshot.data!.user,
             joinRepository: widget.joinRepository,
+            paymentApi: widget.paymentApi,
             ticketRepository: widget.ticketRepository,
             queueRepository: widget.queueRepository,
             directoryRepository: widget.directoryRepository,
@@ -683,6 +690,7 @@ class CustomerShell extends StatefulWidget {
     this.user,
     this.onSignOut,
     this.joinRepository,
+    this.paymentApi,
     this.ticketRepository,
     this.queueRepository,
     this.directoryRepository,
@@ -694,6 +702,7 @@ class CustomerShell extends StatefulWidget {
   final AuthUser? user;
   final VoidCallback? onSignOut;
   final JoinRepository? joinRepository;
+  final PaymentApi? paymentApi;
   final QueueTicketRepository? ticketRepository;
   final QueueRepository? queueRepository;
   final DirectoryRepository? directoryRepository;
@@ -758,6 +767,7 @@ class _CustomerShellState extends State<CustomerShell> {
             repository: widget.joinRepository,
             allowedHosts: widget.allowedHosts,
             customerName: widget.user?.customerName ?? 'Customer',
+            paymentApi: widget.paymentApi,
           ),
           TicketsPage(
             ticketRepository: widget.ticketRepository,

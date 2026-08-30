@@ -102,7 +102,11 @@ class JoinPreview {
       joinable: json['joinable'] as bool? ?? false,
       unavailableReason:
           json['unavailableReason'] as String? ?? json['reason'] as String?,
-      fee: json['fee'] is num ? json['fee'] as num : 0,
+      fee: json['amountCents'] is num
+          ? (json['amountCents'] as num)
+          : json['fee'] is num
+          ? json['fee'] as num
+          : 0,
       currency: json['currency'] as String? ?? 'PHP',
     );
   }
@@ -132,10 +136,14 @@ class PaymentRequired extends JoinResult {
   const PaymentRequired({
     required this.paymentAttemptId,
     required this.checkoutUrl,
+    this.tenantSlug,
+    this.locationSlug,
   });
 
   final String paymentAttemptId;
   final Uri checkoutUrl;
+  final String? tenantSlug;
+  final String? locationSlug;
 }
 
 class JoinRepository {
@@ -181,6 +189,8 @@ class JoinRepository {
       return PaymentRequired(
         paymentAttemptId: paymentAttemptId,
         checkoutUrl: uri,
+        tenantSlug: response['tenantSlug'] as String?,
+        locationSlug: response['locationSlug'] as String?,
       );
     }
 
@@ -228,10 +238,14 @@ class RestJoinApi implements JoinApi {
     required String joinAttemptId,
     required String customerName,
   }) {
-    return client.post('/api/mobile/queue-join', {
-      'id': locationQrId,
-      'joinAttemptId': joinAttemptId,
-      'customerName': customerName,
-    });
+    return client.post(
+      '/api/mobile/queue-join',
+      {
+        'id': locationQrId,
+        'joinAttemptId': joinAttemptId,
+        'customerName': customerName,
+      },
+      additionalHeaders: {'Idempotency-Key': joinAttemptId},
+    );
   }
 }

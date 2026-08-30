@@ -49,6 +49,9 @@ class RestDirectoryApi implements DirectoryApi {
 
   @override
   Future<Map<String, dynamic>> loadVendor(String tenantSlug) {
-    return client.get('/api/public/vendors/$tenantSlug');
+    return client.get('/api/public/vendors/$tenantSlug').then((response) {
+      final vendor = response['vendor'];
+      return vendor is Map<String, dynamic> ? vendor : response;
+    });
   }
 }

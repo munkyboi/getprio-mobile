@@ -33,27 +33,43 @@ class AuthenticatedApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, String>? queryParameters,
+    Map<String, String>? additionalHeaders,
   }) async {
     final uri = Uri.parse('$_baseUrl$path')
         .replace(queryParameters: queryParameters);
-    return _send((token) => _client.get(uri, headers: _headers(token)));
+    return _send(
+      (token) => _client.get(
+        uri,
+        headers: _headers(token, additionalHeaders: additionalHeaders),
+      ),
+    );
   }
 
-  Future<Map<String, dynamic>> delete(String path) async {
+  Future<Map<String, dynamic>> delete(
+    String path, {
+    Map<String, String>? additionalHeaders,
+  }) async {
     return _send(
-      (token) =>
-          _client.delete(Uri.parse('$_baseUrl$path'), headers: _headers(token)),
+      (token) => _client.delete(
+        Uri.parse('$_baseUrl$path'),
+        headers: _headers(token, additionalHeaders: additionalHeaders),
+      ),
     );
   }
 
   Future<Map<String, dynamic>> post(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    Map<String, String>? additionalHeaders,
+  }) async {
     return _send(
       (token) => _client.post(
         Uri.parse('$_baseUrl$path'),
-        headers: _headers(token, contentType: true),
+        headers: _headers(
+          token,
+          contentType: true,
+          additionalHeaders: additionalHeaders,
+        ),
         body: jsonEncode(body),
       ),
     );
@@ -61,12 +77,17 @@ class AuthenticatedApiClient {
 
   Future<Map<String, dynamic>> put(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    Map<String, String>? additionalHeaders,
+  }) async {
     return _send(
       (token) => _client.put(
         Uri.parse('$_baseUrl$path'),
-        headers: _headers(token, contentType: true),
+        headers: _headers(
+          token,
+          contentType: true,
+          additionalHeaders: additionalHeaders,
+        ),
         body: jsonEncode(body),
       ),
     );
@@ -74,12 +95,17 @@ class AuthenticatedApiClient {
 
   Future<Map<String, dynamic>> patch(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    Map<String, String>? additionalHeaders,
+  }) async {
     return _send(
       (token) => _client.patch(
         Uri.parse('$_baseUrl$path'),
-        headers: _headers(token, contentType: true),
+        headers: _headers(
+          token,
+          contentType: true,
+          additionalHeaders: additionalHeaders,
+        ),
         body: jsonEncode(body),
       ),
     );
@@ -117,10 +143,15 @@ class AuthenticatedApiClient {
     return decoded ?? <String, dynamic>{};
   }
 
-  Map<String, String> _headers(String token, {bool contentType = false}) {
+  Map<String, String> _headers(
+    String token, {
+    bool contentType = false,
+    Map<String, String>? additionalHeaders,
+  }) {
     return {
       'Authorization': 'Bearer $token',
       if (contentType) 'Content-Type': 'application/json',
+      ...?additionalHeaders,
     };
   }
 

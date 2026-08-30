@@ -10,7 +10,7 @@ The app uses [`shadcn_flutter`](https://pub.dev/packages/shadcn_flutter) for its
 - Active and historical tickets
 - Account, notification, security, and MFA entry points
 
-The initial navigation shell is in `lib/main.dart`. Queue API integration, authentication, camera scanning, push notifications, and payment return handling will be implemented in later slices according to the contracts in `docs/specs/`.
+The navigation shell and customer queue foundation are in `lib/main.dart`. The app uses bearer authentication, QR resolution, authenticated queue joins, hosted-payment recovery, FCM registration, and REST refetches after queue push signals. Platform credentials and deployment-specific callback/host values remain environment setup documented in `docs/setup/`.
 
 ## Development
 
@@ -28,6 +28,6 @@ flutter run \
   --dart-define=GETPRIO_APPROVED_HOSTS=app.example.com
 ```
 
-Firebase/iOS universal-link setup is documented in [`docs/setup/mobile-runtime-configuration.md`](docs/setup/mobile-runtime-configuration.md).
+Firebase, FCM, OAuth callback, verified-host, and backend migration setup is documented in [`docs/setup/mobile-runtime-configuration.md`](docs/setup/mobile-runtime-configuration.md).
 
 Product decisions and implementation contracts are kept in [`CONTEXT.md`](CONTEXT.md) and [`docs/`](docs/).

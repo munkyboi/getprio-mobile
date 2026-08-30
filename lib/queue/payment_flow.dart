@@ -1,5 +1,7 @@
 import 'package:url_launcher/url_launcher.dart';
 
+import 'auth_queue_api.dart';
+
 class PaymentReturn {
   const PaymentReturn({required this.reference, this.providerStatus});
 
@@ -9,7 +11,9 @@ class PaymentReturn {
   factory PaymentReturn.parse(Uri uri, {required Set<String> allowedHosts}) {
     final hosts = allowedHosts.map((host) => host.toLowerCase()).toSet();
     final reference =
-        uri.queryParameters['reference'] ?? uri.queryParameters['paymentRef'];
+        uri.queryParameters['reference'] ??
+        uri.queryParameters['paymentRef'] ??
+        uri.queryParameters['payment'];
     if (uri.scheme != 'https' ||
         !hosts.contains(uri.host.toLowerCase()) ||
         reference == null ||
@@ -21,7 +25,9 @@ class PaymentReturn {
     }
     return PaymentReturn(
       reference: reference,
-      providerStatus: uri.queryParameters['status'],
+      providerStatus:
+          uri.queryParameters['status'] ??
+          uri.queryParameters['payment_status'],
     );
   }
 }
@@ -43,4 +49,30 @@ class ExternalPaymentBrowser implements PaymentBrowser {
   @override
   Future<bool> open(Uri checkoutUrl) =>
       launchUrl(checkoutUrl, mode: LaunchMode.externalApplication);
+}
+
+abstract interface class PaymentApi {
+  Future<Map<String, dynamic>> sync({
+    required String paymentAttemptId,
+    required String tenantSlug,
+    String? locationSlug,
+  });
+}
+
+class RestPaymentApi implements PaymentApi {
+  RestPaymentApi(this.client);
+
+  final AuthenticatedApiClient client;
+
+  @override
+  Future<Map<String, dynamic>> sync({
+    required String paymentAttemptId,
+    required String tenantSlug,
+    String? locationSlug,
+  }) {
+    return client.post('/api/mobile/queue-join/$paymentAttemptId/sync', {
+      'tenantSlug': tenantSlug,
+      ...?locationSlug == null ? null : {'locationSlug': locationSlug},
+    });
+  }
 }

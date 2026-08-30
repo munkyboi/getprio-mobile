@@ -3,6 +3,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'join_repository.dart';
 import 'payment_flow.dart';
+import 'queue_models.dart';
 
 class JoinPage extends StatefulWidget {
   const JoinPage({
@@ -11,12 +12,14 @@ class JoinPage extends StatefulWidget {
     required this.allowedHosts,
     required this.customerName,
     this.paymentBrowser,
+    this.paymentApi,
   });
 
   final JoinRepository? repository;
   final Set<String> allowedHosts;
   final String customerName;
   final PaymentBrowser? paymentBrowser;
+  final PaymentApi? paymentApi;
 
   @override
   State<JoinPage> createState() => _JoinPageState();
@@ -76,7 +79,7 @@ class _JoinPageState extends State<JoinPage> {
                       const SizedBox(height: 8),
                       Text(
                         preview.paymentRequired
-                            ? 'Fee: ${preview.currency} ${preview.fee}'
+                            ? 'Fee: ${preview.currency} ${(preview.fee / 100).toStringAsFixed(2)}'
                             : 'Free queue',
                       ),
                       const SizedBox(height: 4),
@@ -107,6 +110,11 @@ class _JoinPageState extends State<JoinPage> {
                     ),
                     const SizedBox(height: 8),
                     OutlineButton(
+                      onPressed: _checkPayment,
+                      child: const Text('Check payment status'),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlineButton(
                       onPressed: () => setState(_reset),
                       child: const Text('Cancel and scan again'),
                     ),
@@ -133,7 +141,7 @@ class _JoinPageState extends State<JoinPage> {
               if (payment != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Checkout is ready. Payment-link launch and verified return handling will be connected in the payment slice.',
+                  'Complete checkout, then check payment status. A ticket is created only after the server confirms payment.',
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -216,11 +224,18 @@ class _JoinPageState extends State<JoinPage> {
       switch (result) {
         case JoinedTicket(:final ticket):
           setState(() => _joinedTicket = JoinedTicket(ticket));
-        case PaymentRequired(:final paymentAttemptId, :final checkoutUrl):
+        case PaymentRequired(
+          :final paymentAttemptId,
+          :final checkoutUrl,
+          :final tenantSlug,
+          :final locationSlug,
+        ):
           setState(
             () => _payment = PaymentRequired(
               paymentAttemptId: paymentAttemptId,
               checkoutUrl: checkoutUrl,
+              tenantSlug: tenantSlug,
+              locationSlug: locationSlug,
             ),
           );
       }
@@ -238,6 +253,47 @@ class _JoinPageState extends State<JoinPage> {
         .open(payment.checkoutUrl);
     if (!opened && mounted) {
       setState(() => _error = 'Secure checkout could not be opened.');
+    }
+  }
+
+  Future<void> _checkPayment() async {
+    final payment = _payment;
+    final api = widget.paymentApi;
+    if (payment == null || api == null || payment.tenantSlug == null) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Payment status checking is not configured for this build.',
+        );
+      }
+      return;
+    }
+    setState(() {
+      _error = null;
+      _isBusy = true;
+    });
+    try {
+      final response = await api.sync(
+        paymentAttemptId: payment.paymentAttemptId,
+        tenantSlug: payment.tenantSlug!,
+        locationSlug: payment.locationSlug,
+      );
+      final ticket = response['ticket'];
+      if (ticket is Map<String, dynamic> && mounted) {
+        setState(() {
+          _joinedTicket = JoinedTicket(QueueTicket.fromJson(ticket));
+          _payment = null;
+        });
+      } else if (mounted) {
+        setState(
+          () => _error =
+              'Payment is not confirmed yet. Complete checkout and try again.',
+        );
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = _messageFor(error));
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
     }
   }
 
