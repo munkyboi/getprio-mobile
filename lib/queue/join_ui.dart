@@ -2,6 +2,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'join_repository.dart';
+import 'payment_flow.dart';
 
 class JoinPage extends StatefulWidget {
   const JoinPage({
@@ -9,11 +10,13 @@ class JoinPage extends StatefulWidget {
     required this.repository,
     required this.allowedHosts,
     required this.customerName,
+    this.paymentBrowser,
   });
 
   final JoinRepository? repository;
   final Set<String> allowedHosts;
   final String customerName;
+  final PaymentBrowser? paymentBrowser;
 
   @override
   State<JoinPage> createState() => _JoinPageState();
@@ -94,9 +97,20 @@ class _JoinPageState extends State<JoinPage> {
                   child: const Text('Scan another QR code'),
                 )
               else if (payment != null)
-                OutlineButton(
-                  onPressed: () => setState(_reset),
-                  child: const Text('Cancel and scan again'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    PrimaryButton(
+                      onPressed: _openPayment,
+                      leading: const Icon(LucideIcons.externalLink),
+                      child: const Text('Open secure checkout'),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlineButton(
+                      onPressed: () => setState(_reset),
+                      child: const Text('Cancel and scan again'),
+                    ),
+                  ],
                 )
               else if (preview != null)
                 PrimaryButton(
@@ -214,6 +228,16 @@ class _JoinPageState extends State<JoinPage> {
       if (mounted) setState(() => _error = _messageFor(error));
     } finally {
       if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _openPayment() async {
+    final payment = _payment;
+    if (payment == null) return;
+    final opened = await (widget.paymentBrowser ?? ExternalPaymentBrowser())
+        .open(payment.checkoutUrl);
+    if (!opened && mounted) {
+      setState(() => _error = 'Secure checkout could not be opened.');
     }
   }
 

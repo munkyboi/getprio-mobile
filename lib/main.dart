@@ -7,6 +7,7 @@ import 'auth/auth_models.dart';
 import 'auth/oauth_flow.dart';
 import 'auth/auth_repository.dart';
 import 'account/ticket_repository.dart';
+import 'account/account_settings_repository.dart';
 import 'directory/directory_repository.dart';
 import 'queue/auth_queue_api.dart';
 import 'queue/join_repository.dart';
@@ -72,6 +73,9 @@ class GetPrioApp extends StatelessWidget {
         ticketRepository: ticketRepository,
         queueRepository: QueueRepository(RestQueueApi(apiClient)),
         directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
+        settingsRepository: AccountSettingsRepository(
+          RestAccountSettingsApi(apiClient),
+        ),
         allowedHosts: _allowedHosts(),
         pushCoordinator: pushCoordinator,
         oauthFlow: oauthFlow,
@@ -109,6 +113,7 @@ class AuthGate extends StatefulWidget {
     required this.ticketRepository,
     required this.queueRepository,
     required this.directoryRepository,
+    required this.settingsRepository,
     required this.allowedHosts,
     this.pushCoordinator,
     this.oauthFlow,
@@ -119,6 +124,7 @@ class AuthGate extends StatefulWidget {
   final QueueTicketRepository ticketRepository;
   final QueueRepository queueRepository;
   final DirectoryRepository directoryRepository;
+  final AccountSettingsRepository settingsRepository;
   final Set<String> allowedHosts;
   final PushCoordinator? pushCoordinator;
   final OAuthFlow? oauthFlow;
@@ -147,6 +153,7 @@ class _AuthGateState extends State<AuthGate> {
         ticketRepository: widget.ticketRepository,
         queueRepository: widget.queueRepository,
         directoryRepository: widget.directoryRepository,
+        settingsRepository: widget.settingsRepository,
         allowedHosts: widget.allowedHosts,
         onSignOut: () async {
           await widget.pushCoordinator?.logout();
@@ -171,6 +178,7 @@ class _AuthGateState extends State<AuthGate> {
             ticketRepository: widget.ticketRepository,
             queueRepository: widget.queueRepository,
             directoryRepository: widget.directoryRepository,
+            settingsRepository: widget.settingsRepository,
             allowedHosts: widget.allowedHosts,
             onSignOut: () async {
               await widget.pushCoordinator?.logout();
@@ -667,6 +675,7 @@ class CustomerShell extends StatefulWidget {
     this.ticketRepository,
     this.queueRepository,
     this.directoryRepository,
+    this.settingsRepository,
     this.allowedHosts = const {},
   });
 
@@ -676,6 +685,7 @@ class CustomerShell extends StatefulWidget {
   final QueueTicketRepository? ticketRepository;
   final QueueRepository? queueRepository;
   final DirectoryRepository? directoryRepository;
+  final AccountSettingsRepository? settingsRepository;
   final Set<String> allowedHosts;
 
   @override
@@ -740,7 +750,11 @@ class _CustomerShellState extends State<CustomerShell> {
             ticketRepository: widget.ticketRepository,
             queueRepository: widget.queueRepository,
           ),
-          AccountPage(onSignOut: widget.onSignOut),
+          AccountPage(
+            user: widget.user,
+            onSignOut: widget.onSignOut,
+            settingsRepository: widget.settingsRepository,
+          ),
         ],
       ),
     );
@@ -1260,10 +1274,38 @@ class _TicketsPageState extends State<TicketsPage> {
   }
 }
 
-class AccountPage extends StatelessWidget {
-  const AccountPage({super.key, this.onSignOut});
+class AccountPage extends StatefulWidget {
+  const AccountPage({
+    super.key,
+    this.user,
+    this.onSignOut,
+    this.settingsRepository,
+  });
 
+  final AuthUser? user;
   final VoidCallback? onSignOut;
+  final AccountSettingsRepository? settingsRepository;
+
+  @override
+  State<AccountPage> createState() => _AccountPageState();
+}
+
+class _AccountPageState extends State<AccountPage> {
+  late Future<NotificationSettings?> _settings;
+  bool? _queueAlerts;
+
+  @override
+  void initState() {
+    super.initState();
+    _settings = _loadSettings();
+  }
+
+  Future<NotificationSettings?> _loadSettings() {
+    final repository = widget.settingsRepository;
+    return repository == null
+        ? Future.value()
+        : repository.loadNotificationSettings();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1283,19 +1325,47 @@ class AccountPage extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Carlo Abella').h3(),
+                  Text(widget.user?.customerName ?? 'Customer').h3(),
                   const SizedBox(height: 4),
-                  const Text('carlo@example.com'),
+                  Text(widget.user?.email ?? ''),
                 ],
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        OutlineButton(
-          leading: const Icon(LucideIcons.bell),
-          onPressed: () {},
-          child: const Text('Notification settings'),
+        FutureBuilder<NotificationSettings?>(
+          future: _settings,
+          builder: (context, snapshot) {
+            final settings = snapshot.data;
+            if (settings == null) {
+              return const Card(
+                child: Text('Notification settings unavailable.'),
+              );
+            }
+            return Card(
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.bell),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Queue alerts').h3(),
+                        SizedBox(height: 4),
+                        Text('Receive notifications about your queue tickets.'),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _queueAlerts ?? settings.queueAlerts,
+                    onChanged: _updateQueueAlerts,
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         const SizedBox(height: 12),
         OutlineButton(
@@ -1306,10 +1376,25 @@ class AccountPage extends StatelessWidget {
         const SizedBox(height: 12),
         OutlineButton(
           leading: const Icon(LucideIcons.logOut),
-          onPressed: onSignOut,
+          onPressed: widget.onSignOut,
           child: const Text('Log out'),
         ),
       ],
     );
+  }
+
+  Future<void> _updateQueueAlerts(bool enabled) async {
+    final repository = widget.settingsRepository;
+    if (repository == null) return;
+    final previous = _queueAlerts;
+    setState(() => _queueAlerts = enabled);
+    try {
+      final settings = await repository.updateNotificationSettings(
+        queueAlerts: enabled,
+      );
+      if (mounted) setState(() => _queueAlerts = settings.queueAlerts);
+    } catch (_) {
+      if (mounted) setState(() => _queueAlerts = previous);
+    }
   }
 }
