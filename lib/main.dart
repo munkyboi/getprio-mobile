@@ -3,6 +3,9 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'auth/auth_models.dart';
 import 'auth/auth_repository.dart';
+import 'queue/auth_queue_api.dart';
+import 'queue/join_repository.dart';
+import 'queue/join_ui.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +21,15 @@ class GetPrioApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
+    final joinRepository = JoinRepository(
+      RestJoinApi(
+        AuthenticatedApiClient(
+          baseUrl: baseUrl,
+          authRepository: authRepository,
+        ),
+      ),
+    );
     return ShadcnApp(
       title: 'GetPrio',
       debugShowCheckedModeBanner: false,
@@ -25,7 +37,11 @@ class GetPrioApp extends StatelessWidget {
         colorScheme: LegacyColorSchemes.lightZinc(),
         radius: 0.8,
       ),
-      home: AuthGate(authRepository: authRepository),
+      home: AuthGate(
+        authRepository: authRepository,
+        joinRepository: joinRepository,
+        allowedHosts: _allowedHosts(),
+      ),
     );
   }
 
@@ -36,12 +52,32 @@ class GetPrioApp extends StatelessWidget {
       tokenStore: SecureTokenStore(),
     );
   }
+
+  static Set<String> _allowedHosts() {
+    const configuredHosts = String.fromEnvironment('GETPRIO_APPROVED_HOSTS');
+    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
+    final hosts = configuredHosts
+        .split(',')
+        .map((host) => host.trim().toLowerCase())
+        .where((host) => host.isNotEmpty)
+        .toSet();
+    final baseHost = Uri.tryParse(baseUrl)?.host;
+    if (baseHost != null && baseHost.isNotEmpty) hosts.add(baseHost);
+    return hosts;
+  }
 }
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key, required this.authRepository});
+  const AuthGate({
+    super.key,
+    required this.authRepository,
+    required this.joinRepository,
+    required this.allowedHosts,
+  });
 
   final AuthRepository authRepository;
+  final JoinRepository joinRepository;
+  final Set<String> allowedHosts;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -62,6 +98,8 @@ class _AuthGateState extends State<AuthGate> {
     if (_session != null) {
       return CustomerShell(
         user: _session!.user,
+        joinRepository: widget.joinRepository,
+        allowedHosts: widget.allowedHosts,
         onSignOut: () async {
           await widget.authRepository.logout();
           if (mounted) setState(() => _session = null);
@@ -79,6 +117,8 @@ class _AuthGateState extends State<AuthGate> {
           _session = snapshot.data;
           return CustomerShell(
             user: snapshot.data!.user,
+            joinRepository: widget.joinRepository,
+            allowedHosts: widget.allowedHosts,
             onSignOut: () async {
               await widget.authRepository.logout();
               if (mounted) setState(() => _session = null);
@@ -276,10 +316,18 @@ class _SignInPageState extends State<SignInPage> {
 }
 
 class CustomerShell extends StatefulWidget {
-  const CustomerShell({super.key, this.user, this.onSignOut});
+  const CustomerShell({
+    super.key,
+    this.user,
+    this.onSignOut,
+    this.joinRepository,
+    this.allowedHosts = const {},
+  });
 
   final AuthUser? user;
   final VoidCallback? onSignOut;
+  final JoinRepository? joinRepository;
+  final Set<String> allowedHosts;
 
   @override
   State<CustomerShell> createState() => _CustomerShellState();
@@ -330,7 +378,11 @@ class _CustomerShellState extends State<CustomerShell> {
         children: [
           HomePage(user: widget.user),
           const ExplorePage(),
-          const JoinPage(),
+          JoinPage(
+            repository: widget.joinRepository,
+            allowedHosts: widget.allowedHosts,
+            customerName: widget.user?.customerName ?? 'Customer',
+          ),
           const TicketsPage(),
           AccountPage(onSignOut: widget.onSignOut),
         ],
@@ -465,42 +517,6 @@ class ExplorePage extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class JoinPage extends StatelessWidget {
-  const JoinPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(LucideIcons.scanQrCode, size: 72),
-            const SizedBox(height: 20),
-            const Text('Join a queue').h2(),
-            const SizedBox(height: 8),
-            const Text(
-              'Scan the QR code displayed by a vendor. GetPrio will identify the location and show the available queue.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: PrimaryButton(
-                key: const Key('join-scan-button'),
-                onPressed: () {},
-                leading: const Icon(LucideIcons.scanQrCode),
-                child: const Text('Scan QR code'),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
