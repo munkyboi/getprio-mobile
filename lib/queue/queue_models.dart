@@ -51,6 +51,8 @@ class QueueTicket {
     this.joinedAt,
     this.vendorName,
     this.locationName,
+    this.tenantSlug,
+    this.locationSlug,
     this.statusReason,
     this.carryOverExpiresAt,
   });
@@ -65,6 +67,8 @@ class QueueTicket {
   final DateTime? joinedAt;
   final String? vendorName;
   final String? locationName;
+  final String? tenantSlug;
+  final String? locationSlug;
   final String? statusReason;
   final DateTime? carryOverExpiresAt;
 
@@ -90,6 +94,9 @@ class QueueTicket {
       joinedAt: _asDate(json['joinedAt']),
       vendorName: json['vendorName'] as String?,
       locationName: json['locationName'] as String?,
+      tenantSlug:
+          json['tenantSlug'] as String? ?? json['vendorSlug'] as String?,
+      locationSlug: json['locationSlug'] as String?,
       statusReason: json['statusReason'] as String?,
       carryOverExpiresAt: _asDate(json['carryOverExpiresAt']),
     );

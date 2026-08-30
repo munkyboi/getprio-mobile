@@ -3,9 +3,13 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'auth/auth_models.dart';
 import 'auth/auth_repository.dart';
+import 'account/ticket_repository.dart';
+import 'directory/directory_repository.dart';
 import 'queue/auth_queue_api.dart';
 import 'queue/join_repository.dart';
 import 'queue/join_ui.dart';
+import 'queue/queue_models.dart';
+import 'queue/queue_repository.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,14 +26,11 @@ class GetPrioApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
-    final joinRepository = JoinRepository(
-      RestJoinApi(
-        AuthenticatedApiClient(
-          baseUrl: baseUrl,
-          authRepository: authRepository,
-        ),
-      ),
+    final apiClient = AuthenticatedApiClient(
+      baseUrl: baseUrl,
+      authRepository: authRepository,
     );
+    final joinRepository = JoinRepository(RestJoinApi(apiClient));
     return ShadcnApp(
       title: 'GetPrio',
       debugShowCheckedModeBanner: false,
@@ -40,6 +41,9 @@ class GetPrioApp extends StatelessWidget {
       home: AuthGate(
         authRepository: authRepository,
         joinRepository: joinRepository,
+        ticketRepository: QueueTicketRepository(RestAccountQueueApi(apiClient)),
+        queueRepository: QueueRepository(RestQueueApi(apiClient)),
+        directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
         allowedHosts: _allowedHosts(),
       ),
     );
@@ -72,11 +76,17 @@ class AuthGate extends StatefulWidget {
     super.key,
     required this.authRepository,
     required this.joinRepository,
+    required this.ticketRepository,
+    required this.queueRepository,
+    required this.directoryRepository,
     required this.allowedHosts,
   });
 
   final AuthRepository authRepository;
   final JoinRepository joinRepository;
+  final QueueTicketRepository ticketRepository;
+  final QueueRepository queueRepository;
+  final DirectoryRepository directoryRepository;
   final Set<String> allowedHosts;
 
   @override
@@ -99,6 +109,9 @@ class _AuthGateState extends State<AuthGate> {
       return CustomerShell(
         user: _session!.user,
         joinRepository: widget.joinRepository,
+        ticketRepository: widget.ticketRepository,
+        queueRepository: widget.queueRepository,
+        directoryRepository: widget.directoryRepository,
         allowedHosts: widget.allowedHosts,
         onSignOut: () async {
           await widget.authRepository.logout();
@@ -118,6 +131,9 @@ class _AuthGateState extends State<AuthGate> {
           return CustomerShell(
             user: snapshot.data!.user,
             joinRepository: widget.joinRepository,
+            ticketRepository: widget.ticketRepository,
+            queueRepository: widget.queueRepository,
+            directoryRepository: widget.directoryRepository,
             allowedHosts: widget.allowedHosts,
             onSignOut: () async {
               await widget.authRepository.logout();
@@ -321,12 +337,18 @@ class CustomerShell extends StatefulWidget {
     this.user,
     this.onSignOut,
     this.joinRepository,
+    this.ticketRepository,
+    this.queueRepository,
+    this.directoryRepository,
     this.allowedHosts = const {},
   });
 
   final AuthUser? user;
   final VoidCallback? onSignOut;
   final JoinRepository? joinRepository;
+  final QueueTicketRepository? ticketRepository;
+  final QueueRepository? queueRepository;
+  final DirectoryRepository? directoryRepository;
   final Set<String> allowedHosts;
 
   @override
@@ -377,13 +399,16 @@ class _CustomerShellState extends State<CustomerShell> {
         index: _selectedIndex,
         children: [
           HomePage(user: widget.user),
-          const ExplorePage(),
+          ExplorePage(repository: widget.directoryRepository),
           JoinPage(
             repository: widget.joinRepository,
             allowedHosts: widget.allowedHosts,
             customerName: widget.user?.customerName ?? 'Customer',
           ),
-          const TicketsPage(),
+          TicketsPage(
+            ticketRepository: widget.ticketRepository,
+            queueRepository: widget.queueRepository,
+          ),
           AccountPage(onSignOut: widget.onSignOut),
         ],
       ),
@@ -479,7 +504,9 @@ class _StatCard extends StatelessWidget {
 }
 
 class ExplorePage extends StatelessWidget {
-  const ExplorePage({super.key});
+  const ExplorePage({super.key, this.repository});
+
+  final DirectoryRepository? repository;
 
   @override
   Widget build(BuildContext context) {
@@ -496,57 +523,231 @@ class ExplorePage extends StatelessWidget {
           features: const [InputFeature.leading(Icon(LucideIcons.search))],
         ),
         const SizedBox(height: 20),
-        Card(
-          child: Row(
-            children: [
-              const Icon(LucideIcons.store),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Vendor directory').h3(),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Vendor details and queue availability will appear here.',
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        if (repository == null)
+          Card(
+            child: Text('Vendor directory is not configured for this build.'),
+          )
+        else
+          FutureBuilder<List<VendorSummary>>(
+            future: repository!.loadVendors(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: Text('Loading vendors...'));
+              }
+              if (snapshot.hasError) {
+                return const DestructiveBadge(
+                  child: Text('We could not load vendors. Try again later.'),
+                );
+              }
+              if (snapshot.data?.isEmpty ?? true) {
+                return const Card(
+                  child: Text('No queue-capable vendors found.'),
+                );
+              }
+              return Column(
+                children: snapshot.data!
+                    .map((vendor) => _VendorCard(vendor: vendor))
+                    .toList(),
+              );
+            },
           ),
-        ),
       ],
     );
   }
 }
 
-class TicketsPage extends StatelessWidget {
-  const TicketsPage({super.key});
+class _VendorCard extends StatelessWidget {
+  const _VendorCard({required this.vendor});
+
+  final VendorSummary vendor;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      key: const Key('tickets-page'),
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text('My tickets').h2(),
-        const SizedBox(height: 4),
-        const Text('Active and historical queue tickets.'),
-        const SizedBox(height: 20),
-        Card(
-          child: Column(
-            children: [
-              const Icon(LucideIcons.ticket, size: 40),
-              const SizedBox(height: 12),
-              const Text('No tickets yet').h3(),
-              const SizedBox(height: 4),
-              const Text('Your queue tickets will appear here.'),
-            ],
+    return Card(
+      child: Row(
+        children: [
+          const Icon(LucideIcons.store),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(vendor.name).h3(),
+                if (vendor.category != null) ...[
+                  const SizedBox(height: 4),
+                  Text(vendor.category!),
+                ],
+                const SizedBox(height: 8),
+                Text('${vendor.locations.length} queue-capable location(s)'),
+              ],
+            ),
           ),
-        ),
-      ],
+          const Icon(LucideIcons.chevronRight),
+        ],
+      ),
     );
+  }
+}
+
+class TicketsPage extends StatefulWidget {
+  const TicketsPage({super.key, this.ticketRepository, this.queueRepository});
+
+  final QueueTicketRepository? ticketRepository;
+  final QueueRepository? queueRepository;
+
+  @override
+  State<TicketsPage> createState() => _TicketsPageState();
+}
+
+class _TicketsPageState extends State<TicketsPage> {
+  late Future<List<QueueTicket>> _tickets;
+  String? _confirmingTicketId;
+  bool _isCancelling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tickets = _loadTickets();
+  }
+
+  Future<List<QueueTicket>> _loadTickets() async {
+    final repository = widget.ticketRepository;
+    if (repository == null) return const [];
+    final active = await repository.loadOverview();
+    final history = await repository.loadHistory();
+    return [...active, ...history];
+  }
+
+  void _reload() {
+    setState(() {
+      _confirmingTicketId = null;
+      _tickets = _loadTickets();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<QueueTicket>>(
+      future: _tickets,
+      builder: (context, snapshot) {
+        return ListView(
+          key: const Key('tickets-page'),
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text('My tickets').h2(),
+            const SizedBox(height: 4),
+            const Text('Active and historical queue tickets.'),
+            const SizedBox(height: 20),
+            if (snapshot.connectionState == ConnectionState.waiting)
+              const Card(child: Text('Loading tickets...'))
+            else if (snapshot.hasError) ...[
+              const DestructiveBadge(
+                child: Text('We could not load your tickets.'),
+              ),
+              const SizedBox(height: 12),
+              OutlineButton(onPressed: _reload, child: const Text('Try again')),
+            ] else if (snapshot.data?.isEmpty ?? true)
+              Card(
+                child: Column(
+                  children: [
+                    Icon(LucideIcons.ticket, size: 40),
+                    SizedBox(height: 12),
+                    Text('No tickets yet').h3(),
+                    SizedBox(height: 4),
+                    Text('Your queue tickets will appear here.'),
+                  ],
+                ),
+              )
+            else
+              ...snapshot.data!.map(_ticketCard),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _ticketCard(QueueTicket ticket) {
+    final canCancel =
+        ticket.status == TicketStatus.waiting &&
+        ticket.tenantSlug != null &&
+        widget.queueRepository != null;
+    final isConfirming = _confirmingTicketId == ticket.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(ticket.vendorName ?? 'Queue ticket').h3(),
+                PrimaryBadge(child: Text(ticket.status.label.toUpperCase())),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Ticket ${ticket.ticketNumber ?? ticket.lookupCode}'),
+            if (ticket.locationName != null) Text(ticket.locationName!),
+            if (ticket.position != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Position ${ticket.position} · ${ticket.estimatedWaitMinutes ?? 0} min estimated',
+              ),
+            ],
+            if (canCancel && !isConfirming) ...[
+              const SizedBox(height: 12),
+              DestructiveButton(
+                onPressed: () =>
+                    setState(() => _confirmingTicketId = ticket.id),
+                child: const Text('Cancel ticket'),
+              ),
+            ],
+            if (isConfirming) ...[
+              const SizedBox(height: 12),
+              const Text('Cancel this waiting ticket? This cannot be undone.'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlineButton(
+                      onPressed: _isCancelling
+                          ? null
+                          : () => setState(() => _confirmingTicketId = null),
+                      child: const Text('Keep ticket'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DestructiveButton(
+                      onPressed: _isCancelling ? null : () => _cancel(ticket),
+                      child: Text(_isCancelling ? 'Cancelling...' : 'Confirm'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancel(QueueTicket ticket) async {
+    final repository = widget.queueRepository;
+    final tenantSlug = ticket.tenantSlug;
+    if (repository == null || tenantSlug == null) return;
+    setState(() => _isCancelling = true);
+    try {
+      await repository.cancelTicket(tenantSlug: tenantSlug, ticket: ticket);
+      if (mounted) _reload();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isCancelling = false;
+          _confirmingTicketId = null;
+        });
+      }
+    }
   }
 }
 
