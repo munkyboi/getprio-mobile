@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_secure_storage: ^11.0.0
+  http: ^1.6.0
   shadcn_flutter: ^0.0.54
 
 dev_dependencies:

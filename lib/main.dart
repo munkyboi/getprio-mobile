@@ -1,14 +1,20 @@
 import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import 'auth/auth_models.dart';
+import 'auth/auth_repository.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  runApp(const GetPrioApp());
+  runApp(GetPrioApp());
 }
 
 class GetPrioApp extends StatelessWidget {
-  const GetPrioApp({super.key});
+  GetPrioApp({super.key, AuthRepository? authRepository})
+    : authRepository = authRepository ?? _defaultAuthRepository();
+
+  final AuthRepository authRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -19,13 +25,261 @@ class GetPrioApp extends StatelessWidget {
         colorScheme: LegacyColorSchemes.lightZinc(),
         radius: 0.8,
       ),
-      home: const CustomerShell(),
+      home: AuthGate(authRepository: authRepository),
+    );
+  }
+
+  static AuthRepository _defaultAuthRepository() {
+    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
+    return AuthRepository(
+      api: RestAuthApi(baseUrl: baseUrl),
+      tokenStore: SecureTokenStore(),
     );
   }
 }
 
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key, required this.authRepository});
+
+  final AuthRepository authRepository;
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late Future<AuthSession?> _restore;
+  AuthSession? _session;
+
+  @override
+  void initState() {
+    super.initState();
+    _restore = widget.authRepository.restoreSession();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_session != null) {
+      return CustomerShell(
+        user: _session!.user,
+        onSignOut: () async {
+          await widget.authRepository.logout();
+          if (mounted) setState(() => _session = null);
+        },
+      );
+    }
+
+    return FutureBuilder<AuthSession?>(
+      future: _restore,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Text('Loading GetPrio...'));
+        }
+        if (snapshot.hasData) {
+          _session = snapshot.data;
+          return CustomerShell(
+            user: snapshot.data!.user,
+            onSignOut: () async {
+              await widget.authRepository.logout();
+              if (mounted) setState(() => _session = null);
+            },
+          );
+        }
+        return SignInPage(
+          authRepository: widget.authRepository,
+          onAuthenticated: (session) => setState(() => _session = session),
+        );
+      },
+    );
+  }
+}
+
+class SignInPage extends StatefulWidget {
+  const SignInPage({
+    super.key,
+    required this.authRepository,
+    required this.onAuthenticated,
+  });
+
+  final AuthRepository authRepository;
+  final ValueChanged<AuthSession> onAuthenticated;
+
+  @override
+  State<SignInPage> createState() => _SignInPageState();
+}
+
+class _SignInPageState extends State<SignInPage> {
+  final _identifierController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _mfaController = TextEditingController();
+  final _recoveryController = TextEditingController();
+  MfaChallenge? _challenge;
+  String? _error;
+  bool _isBusy = false;
+  bool _useRecoveryCode = false;
+
+  @override
+  void dispose() {
+    _identifierController.dispose();
+    _passwordController.dispose();
+    _mfaController.dispose();
+    _recoveryController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final challenge = _challenge;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(LucideIcons.ticket, size: 56),
+              const SizedBox(height: 20),
+              const Text('Welcome to GetPrio').h1(),
+              const SizedBox(height: 8),
+              Text(
+                challenge == null
+                    ? 'Sign in to manage your queue tickets.'
+                    : 'Verify your identity to finish signing in.',
+              ),
+              const SizedBox(height: 24),
+              if (challenge == null) ...[
+                TextField(
+                  key: const Key('sign-in-identifier'),
+                  controller: _identifierController,
+                  hintText: 'Email or username',
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('sign-in-password'),
+                  controller: _passwordController,
+                  hintText: 'Password',
+                  obscureText: true,
+                ),
+                const SizedBox(height: 20),
+                PrimaryButton(
+                  key: const Key('sign-in-button'),
+                  onPressed: _isBusy ? null : _signIn,
+                  child: Text(_isBusy ? 'Signing in...' : 'Sign in'),
+                ),
+              ] else ...[
+                if (_useRecoveryCode)
+                  TextField(
+                    key: const Key('mfa-recovery-code'),
+                    controller: _recoveryController,
+                    hintText: 'Recovery code',
+                  )
+                else
+                  TextField(
+                    key: const Key('mfa-code'),
+                    controller: _mfaController,
+                    hintText: '6-digit authenticator code',
+                    keyboardType: TextInputType.number,
+                  ),
+                const SizedBox(height: 12),
+                PrimaryButton(
+                  key: const Key('verify-mfa-button'),
+                  onPressed: _isBusy ? null : () => _verifyMfa(challenge),
+                  child: Text(_isBusy ? 'Verifying...' : 'Verify and continue'),
+                ),
+                const SizedBox(height: 8),
+                OutlineButton(
+                  onPressed: _isBusy
+                      ? null
+                      : () => setState(
+                          () => _useRecoveryCode = !_useRecoveryCode,
+                        ),
+                  child: Text(
+                    _useRecoveryCode
+                        ? 'Use authenticator code'
+                        : 'Use a recovery code',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlineButton(
+                  onPressed: _isBusy
+                      ? null
+                      : () => setState(() => _challenge = null),
+                  child: const Text('Back to sign in'),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                DestructiveBadge(child: Text(_error!)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _signIn() async {
+    setState(() {
+      _error = null;
+      _isBusy = true;
+    });
+    try {
+      final result = await widget.authRepository.signIn(
+        identifier: _identifierController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      switch (result) {
+        case AuthenticatedSession(:final session):
+          widget.onAuthenticated(session);
+        case final MfaChallenge challenge:
+          setState(() => _challenge = challenge);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = _authError(error));
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _verifyMfa(MfaChallenge challenge) async {
+    setState(() {
+      _error = null;
+      _isBusy = true;
+    });
+    try {
+      final result = await widget.authRepository.verifyMfa(
+        challengeToken: challenge.challengeToken,
+        code: _useRecoveryCode ? null : _mfaController.text.trim(),
+        recoveryCode: _useRecoveryCode ? _recoveryController.text.trim() : null,
+      );
+      if (!mounted) return;
+      if (result case AuthenticatedSession(:final session)) {
+        widget.onAuthenticated(session);
+      } else {
+        setState(() => _error = 'Another verification step is required.');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = _authError(error));
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  String _authError(Object error) {
+    if (error is ApiException && error.message.isNotEmpty) return error.message;
+    if (error is FormatException) return error.message;
+    return 'We could not sign you in. Check your connection and try again.';
+  }
+}
+
 class CustomerShell extends StatefulWidget {
-  const CustomerShell({super.key});
+  const CustomerShell({super.key, this.user, this.onSignOut});
+
+  final AuthUser? user;
+  final VoidCallback? onSignOut;
 
   @override
   State<CustomerShell> createState() => _CustomerShellState();
@@ -73,12 +327,12 @@ class _CustomerShellState extends State<CustomerShell> {
       ],
       child: IndexedStack(
         index: _selectedIndex,
-        children: const [
-          HomePage(),
-          ExplorePage(),
-          JoinPage(),
-          TicketsPage(),
-          AccountPage(),
+        children: [
+          HomePage(user: widget.user),
+          const ExplorePage(),
+          const JoinPage(),
+          const TicketsPage(),
+          AccountPage(onSignOut: widget.onSignOut),
         ],
       ),
     );
@@ -94,7 +348,9 @@ class _CustomerShellState extends State<CustomerShell> {
 }
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.user});
+
+  final AuthUser? user;
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +358,7 @@ class HomePage extends StatelessWidget {
       key: const Key('home-page'),
       padding: const EdgeInsets.all(20),
       children: [
-        const Text('Good morning, Carlo').h2(),
+        Text('Good morning, ${user?.customerName ?? 'there'}').h2(),
         const SizedBox(height: 4),
         const Text('Stay up to date with your queue tickets.'),
         const SizedBox(height: 20),
@@ -279,7 +535,9 @@ class TicketsPage extends StatelessWidget {
 }
 
 class AccountPage extends StatelessWidget {
-  const AccountPage({super.key});
+  const AccountPage({super.key, this.onSignOut});
+
+  final VoidCallback? onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -318,6 +576,12 @@ class AccountPage extends StatelessWidget {
           leading: const Icon(LucideIcons.shieldCheck),
           onPressed: () {},
           child: const Text('Password, security, and MFA'),
+        ),
+        const SizedBox(height: 12),
+        OutlineButton(
+          leading: const Icon(LucideIcons.logOut),
+          onPressed: onSignOut,
+          child: const Text('Log out'),
         ),
       ],
     );
