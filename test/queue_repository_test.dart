@@ -149,6 +149,19 @@ class FakeAuthApiForTransport implements AuthApi {
   int refreshCalls = 0;
 
   @override
+  Future<Map<String, dynamic>> registerCustomer({
+    required String name,
+    required String username,
+    required String email,
+    String? phone,
+    required String password,
+  }) async => authenticatedJson('access-1', 'refresh-1');
+
+  @override
+  Future<Map<String, dynamic>> requestPasswordReset(String email) async =>
+      <String, dynamic>{};
+
+  @override
   Future<Map<String, dynamic>> login({
     required String identifier,
     required String password,

@@ -67,6 +67,36 @@ void main() {
     expect(await tokens.readRefreshToken(), 'refresh-2');
     expect(api.lastRefreshToken, 'refresh-1');
   });
+
+  test(
+    'customer registration creates and stores an authenticated session',
+    () async {
+      final api =
+          FakeAuthApi(
+              loginResponse: authenticatedJson(
+                token: 'unused',
+                refreshToken: 'unused',
+              ),
+            )
+            ..registrationResponse = authenticatedJson(
+              token: 'access-registration',
+              refreshToken: 'refresh-registration',
+            );
+      final tokens = MemoryTokenStore();
+      final repository = AuthRepository(api: api, tokenStore: tokens);
+
+      final result = await repository.registerCustomer(
+        name: 'Profile name',
+        username: 'customer',
+        email: 'customer@example.com',
+        password: 'password',
+      );
+
+      expect(result.session.user.email, 'customer@example.com');
+      expect(repository.accessToken, 'access-registration');
+      expect(await tokens.readRefreshToken(), 'refresh-registration');
+    },
+  );
 }
 
 Map<String, dynamic> authenticatedJson({
@@ -91,8 +121,22 @@ class FakeAuthApi implements AuthApi {
 
   final Map<String, dynamic>? loginResponse;
   final Map<String, dynamic>? refreshResponse;
+  Map<String, dynamic>? registrationResponse;
   String? lastIdentifier;
   String? lastRefreshToken;
+
+  @override
+  Future<Map<String, dynamic>> registerCustomer({
+    required String name,
+    required String username,
+    required String email,
+    String? phone,
+    required String password,
+  }) async => registrationResponse!;
+
+  @override
+  Future<Map<String, dynamic>> requestPasswordReset(String email) async =>
+      <String, dynamic>{};
 
   @override
   Future<Map<String, dynamic>> login({

@@ -6,6 +6,16 @@ import 'package:http/http.dart' as http;
 import 'auth_models.dart';
 
 abstract interface class AuthApi {
+  Future<Map<String, dynamic>> registerCustomer({
+    required String name,
+    required String username,
+    required String email,
+    String? phone,
+    required String password,
+  });
+
+  Future<Map<String, dynamic>> requestPasswordReset(String email);
+
   Future<Map<String, dynamic>> login({
     required String identifier,
     required String password,
@@ -84,6 +94,40 @@ class AuthRepository {
     );
     await _persistIfAuthenticated(result);
     return result;
+  }
+
+  Future<LoginResult> completeLoginResponse(
+    Map<String, dynamic> response,
+  ) async {
+    final result = _parseLoginResult(response);
+    await _persistIfAuthenticated(result);
+    return result;
+  }
+
+  Future<AuthenticatedSession> registerCustomer({
+    required String name,
+    required String username,
+    required String email,
+    String? phone,
+    required String password,
+  }) async {
+    final session = AuthenticatedSession(
+      AuthSession.fromJson(
+        await api.registerCustomer(
+          name: name,
+          username: username,
+          email: email,
+          phone: phone,
+          password: password,
+        ),
+      ),
+    );
+    await _persistSession(session.session);
+    return session;
+  }
+
+  Future<void> requestPasswordReset(String email) async {
+    await api.requestPasswordReset(email);
   }
 
   Future<LoginResult> verifyMfa({
@@ -176,6 +220,28 @@ class RestAuthApi implements AuthApi {
 
   final String _baseUrl;
   final http.Client _client;
+
+  @override
+  Future<Map<String, dynamic>> registerCustomer({
+    required String name,
+    required String username,
+    required String email,
+    String? phone,
+    required String password,
+  }) {
+    return _post('/api/auth/register/customer', {
+      'name': name,
+      'username': username,
+      'email': email,
+      if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+      'password': password,
+    }, compatibilityHeader: true);
+  }
+
+  @override
+  Future<Map<String, dynamic>> requestPasswordReset(String email) {
+    return _post('/api/auth/password-reset/request', {'email': email});
+  }
 
   @override
   Future<Map<String, dynamic>> login({

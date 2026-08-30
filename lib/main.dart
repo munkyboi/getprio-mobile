@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'auth/auth_models.dart';
+import 'auth/oauth_flow.dart';
 import 'auth/auth_repository.dart';
 import 'account/ticket_repository.dart';
 import 'directory/directory_repository.dart';
@@ -39,6 +40,11 @@ class GetPrioApp extends StatelessWidget {
       authRepository: authRepository,
     );
     final joinRepository = JoinRepository(RestJoinApi(apiClient));
+    final oauthFlow = OAuthFlow(
+      baseUrl: baseUrl,
+      authRepository: authRepository,
+      api: RestOAuthApi(baseUrl: baseUrl),
+    );
     final ticketRepository = QueueTicketRepository(
       RestAccountQueueApi(apiClient),
     );
@@ -68,6 +74,7 @@ class GetPrioApp extends StatelessWidget {
         directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
         allowedHosts: _allowedHosts(),
         pushCoordinator: pushCoordinator,
+        oauthFlow: oauthFlow,
       ),
     );
   }
@@ -104,6 +111,7 @@ class AuthGate extends StatefulWidget {
     required this.directoryRepository,
     required this.allowedHosts,
     this.pushCoordinator,
+    this.oauthFlow,
   });
 
   final AuthRepository authRepository;
@@ -113,6 +121,7 @@ class AuthGate extends StatefulWidget {
   final DirectoryRepository directoryRepository;
   final Set<String> allowedHosts;
   final PushCoordinator? pushCoordinator;
+  final OAuthFlow? oauthFlow;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -172,6 +181,7 @@ class _AuthGateState extends State<AuthGate> {
         }
         return SignInPage(
           authRepository: widget.authRepository,
+          oauthFlow: widget.oauthFlow,
           onAuthenticated: (session) {
             setState(() => _session = session);
             unawaited(_startPush());
@@ -196,10 +206,12 @@ class SignInPage extends StatefulWidget {
   const SignInPage({
     super.key,
     required this.authRepository,
+    this.oauthFlow,
     required this.onAuthenticated,
   });
 
   final AuthRepository authRepository;
+  final OAuthFlow? oauthFlow;
   final ValueChanged<AuthSession> onAuthenticated;
 
   @override
@@ -266,6 +278,42 @@ class _SignInPageState extends State<SignInPage> {
                   onPressed: _isBusy ? null : _signIn,
                   child: Text(_isBusy ? 'Signing in...' : 'Sign in'),
                 ),
+                const SizedBox(height: 8),
+                OutlineButton(
+                  onPressed: _isBusy ? null : _openRegister,
+                  child: const Text('Create customer account'),
+                ),
+                const SizedBox(height: 8),
+                OutlineButton(
+                  onPressed: _isBusy ? null : _openPasswordRecovery,
+                  child: const Text('Forgot password?'),
+                ),
+                if (widget.oauthFlow?.enabled == true) ...[
+                  const SizedBox(height: 16),
+                  const Text('Or continue with', textAlign: TextAlign.center),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlineButton(
+                          onPressed: _isBusy
+                              ? null
+                              : () => _signInWithOAuth('google'),
+                          child: const Text('Google'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlineButton(
+                          onPressed: _isBusy
+                              ? null
+                              : () => _signInWithOAuth('facebook'),
+                          child: const Text('Facebook'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ] else ...[
                 if (_useRecoveryCode)
                   TextField(
@@ -366,10 +414,247 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
+  Future<void> _signInWithOAuth(String provider) async {
+    final flow = widget.oauthFlow;
+    if (flow == null) return;
+    setState(() {
+      _error = null;
+      _isBusy = true;
+    });
+    try {
+      final result = await flow.signIn(provider);
+      if (!mounted) return;
+      switch (result) {
+        case AuthenticatedSession(:final session):
+          widget.onAuthenticated(session);
+        case final MfaChallenge challenge:
+          setState(() => _challenge = challenge);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = _authError(error));
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  void _openRegister() {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        pageBuilder: (context, animation, secondaryAnimation) => RegisterPage(
+          authRepository: widget.authRepository,
+          onAuthenticated: widget.onAuthenticated,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
+  }
+
+  void _openPasswordRecovery() {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            PasswordRecoveryPage(authRepository: widget.authRepository),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
+    );
+  }
+
   String _authError(Object error) {
     if (error is ApiException && error.message.isNotEmpty) return error.message;
     if (error is FormatException) return error.message;
     return 'We could not sign you in. Check your connection and try again.';
+  }
+}
+
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({
+    super.key,
+    required this.authRepository,
+    required this.onAuthenticated,
+  });
+
+  final AuthRepository authRepository;
+  final ValueChanged<AuthSession> onAuthenticated;
+
+  @override
+  State<RegisterPage> createState() => _RegisterPageState();
+}
+
+class _RegisterPageState extends State<RegisterPage> {
+  final _name = TextEditingController();
+  final _username = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _username.dispose();
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      headers: [
+        AppBar(
+          title: const Text('Create account'),
+          leading: [
+            GhostButton(
+              onPressed: () => Navigator.of(context).pop(),
+              density: ButtonDensity.icon,
+              child: const Icon(LucideIcons.arrowLeft),
+            ),
+          ],
+        ),
+      ],
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Customer registration').h1(),
+            const SizedBox(height: 8),
+            const Text(
+              'Use a display name when you want staff to call you by a preferred name.',
+            ),
+            const SizedBox(height: 20),
+            TextField(controller: _name, hintText: 'Profile name'),
+            const SizedBox(height: 12),
+            TextField(controller: _username, hintText: 'Username'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _email,
+              hintText: 'Email',
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _password,
+              hintText: 'Password',
+              obscureText: true,
+            ),
+            const SizedBox(height: 20),
+            PrimaryButton(
+              onPressed: _busy ? null : _register,
+              child: Text(_busy ? 'Creating...' : 'Create account'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              DestructiveBadge(child: Text(_error!)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _register() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.authRepository.registerCustomer(
+        name: _name.text.trim(),
+        username: _username.text.trim(),
+        email: _email.text.trim(),
+        password: _password.text,
+      );
+      if (mounted) {
+        widget.onAuthenticated(result.session);
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
+
+class PasswordRecoveryPage extends StatefulWidget {
+  const PasswordRecoveryPage({super.key, required this.authRepository});
+
+  final AuthRepository authRepository;
+
+  @override
+  State<PasswordRecoveryPage> createState() => _PasswordRecoveryPageState();
+}
+
+class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
+  final _email = TextEditingController();
+  bool _busy = false;
+  bool _sent = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      headers: [
+        AppBar(
+          title: const Text('Password recovery'),
+          leading: [
+            GhostButton(
+              onPressed: () => Navigator.of(context).pop(),
+              density: ButtonDensity.icon,
+              child: const Icon(LucideIcons.arrowLeft),
+            ),
+          ],
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Reset your password').h1(),
+            const SizedBox(height: 8),
+            Text(
+              _sent
+                  ? 'If an account exists for this email, recovery instructions are on the way.'
+                  : 'Enter your email and we will send recovery instructions.',
+            ),
+            const SizedBox(height: 20),
+            if (!_sent) ...[
+              TextField(
+                controller: _email,
+                hintText: 'Email',
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 20),
+              PrimaryButton(
+                onPressed: _busy ? null : _request,
+                child: Text(_busy ? 'Sending...' : 'Send instructions'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _request() async {
+    setState(() => _busy = true);
+    try {
+      await widget.authRepository.requestPasswordReset(_email.text.trim());
+      if (mounted) setState(() => _sent = true);
+    } catch (_) {
+      if (mounted) setState(() => _sent = true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }
 
@@ -440,7 +725,11 @@ class _CustomerShellState extends State<CustomerShell> {
       child: IndexedStack(
         index: _selectedIndex,
         children: [
-          HomePage(user: widget.user),
+          HomePage(
+            user: widget.user,
+            ticketRepository: widget.ticketRepository,
+            onOpenJoin: () => setState(() => _selectedIndex = 2),
+          ),
           ExplorePage(repository: widget.directoryRepository),
           JoinPage(
             repository: widget.joinRepository,
@@ -467,9 +756,16 @@ class _CustomerShellState extends State<CustomerShell> {
 }
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key, this.user});
+  const HomePage({
+    super.key,
+    this.user,
+    this.ticketRepository,
+    this.onOpenJoin,
+  });
 
   final AuthUser? user;
+  final QueueTicketRepository? ticketRepository;
+  final VoidCallback? onOpenJoin;
 
   @override
   Widget build(BuildContext context) {
@@ -481,33 +777,9 @@ class HomePage extends StatelessWidget {
         const SizedBox(height: 4),
         const Text('Stay up to date with your queue tickets.'),
         const SizedBox(height: 20),
-        Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Active ticket'),
-                  PrimaryBadge(child: const Text('WAITING')),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Text('No active tickets').h3(),
-              const SizedBox(height: 4),
-              const Text('Scan a vendor QR code when you are ready to join.'),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: PrimaryButton(
-                  key: const Key('scan-to-join-button'),
-                  onPressed: () {},
-                  leading: const Icon(LucideIcons.scanQrCode),
-                  child: const Text('Scan to join'),
-                ),
-              ),
-            ],
-          ),
+        _ActiveTicketCard(
+          ticketRepository: ticketRepository,
+          onOpenJoin: onOpenJoin,
         ),
         const SizedBox(height: 20),
         const Text('Your stats').h3(),
@@ -524,6 +796,88 @@ class HomePage extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _ActiveTicketCard extends StatelessWidget {
+  const _ActiveTicketCard({this.ticketRepository, this.onOpenJoin});
+
+  final QueueTicketRepository? ticketRepository;
+  final VoidCallback? onOpenJoin;
+
+  @override
+  Widget build(BuildContext context) {
+    if (ticketRepository == null) return _emptyCard();
+    return FutureBuilder<List<QueueTicket>>(
+      future: ticketRepository!.loadOverview(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Card(child: Text('Loading active tickets...'));
+        }
+        final active =
+            snapshot.data?.where((ticket) => ticket.isActive).toList() ?? [];
+        return active.isEmpty ? _emptyCard() : _ticketCard(active.first);
+      },
+    );
+  }
+
+  Widget _emptyCard() {
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Active ticket').h3(),
+          const SizedBox(height: 16),
+          const Text('No active tickets').h3(),
+          const SizedBox(height: 4),
+          const Text('Scan a vendor QR code when you are ready to join.'),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: PrimaryButton(
+              key: const Key('scan-to-join-button'),
+              onPressed: onOpenJoin,
+              leading: const Icon(LucideIcons.scanQrCode),
+              child: const Text('Scan to join'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ticketCard(QueueTicket ticket) {
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Active ticket').h3(),
+              PrimaryBadge(child: Text(ticket.status.label.toUpperCase())),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(ticket.vendorName ?? 'Queue ticket'),
+          if (ticket.locationName != null) Text(ticket.locationName!),
+          if (ticket.position != null) ...[
+            const SizedBox(height: 12),
+            Text('Position ${ticket.position}'),
+            if (ticket.estimatedWaitMinutes != null)
+              Text('${ticket.estimatedWaitMinutes} minutes estimated'),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlineButton(
+              onPressed: onOpenJoin,
+              child: const Text('Join another queue'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -552,6 +906,7 @@ class ExplorePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final directoryRepository = repository;
     return ListView(
       key: const Key('explore-page'),
       padding: const EdgeInsets.all(20),
@@ -565,13 +920,13 @@ class ExplorePage extends StatelessWidget {
           features: const [InputFeature.leading(Icon(LucideIcons.search))],
         ),
         const SizedBox(height: 20),
-        if (repository == null)
+        if (directoryRepository == null)
           Card(
             child: Text('Vendor directory is not configured for this build.'),
           )
         else
           FutureBuilder<List<VendorSummary>>(
-            future: repository!.loadVendors(),
+            future: directoryRepository.loadVendors(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: Text('Loading vendors...'));
@@ -588,7 +943,12 @@ class ExplorePage extends StatelessWidget {
               }
               return Column(
                 children: snapshot.data!
-                    .map((vendor) => _VendorCard(vendor: vendor))
+                    .map(
+                      (vendor) => _VendorCard(
+                        vendor: vendor,
+                        repository: directoryRepository,
+                      ),
+                    )
                     .toList(),
               );
             },
@@ -599,13 +959,28 @@ class ExplorePage extends StatelessWidget {
 }
 
 class _VendorCard extends StatelessWidget {
-  const _VendorCard({required this.vendor});
+  const _VendorCard({required this.vendor, required this.repository});
 
   final VendorSummary vendor;
+  final DirectoryRepository repository;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return CardButton(
+      onPressed: () {
+        Navigator.of(context).push(
+          PageRouteBuilder<void>(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                VendorDetailPage(vendor: vendor, repository: repository),
+            transitionsBuilder: (
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            ) => FadeTransition(opacity: animation, child: child),
+          ),
+        );
+      },
       child: Row(
         children: [
           const Icon(LucideIcons.store),
@@ -626,6 +1001,91 @@ class _VendorCard extends StatelessWidget {
           ),
           const Icon(LucideIcons.chevronRight),
         ],
+      ),
+    );
+  }
+}
+
+class VendorDetailPage extends StatelessWidget {
+  const VendorDetailPage({
+    super.key,
+    required this.vendor,
+    required this.repository,
+  });
+
+  final VendorSummary vendor;
+  final DirectoryRepository repository;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      headers: [
+        AppBar(
+          title: Text(vendor.name),
+          leading: [
+            GhostButton(
+              onPressed: () => Navigator.of(context).pop(),
+              density: ButtonDensity.icon,
+              child: const Icon(LucideIcons.arrowLeft),
+            ),
+          ],
+        ),
+      ],
+      child: FutureBuilder<VendorSummary>(
+        future: repository.loadVendor(vendor.slug),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: Text('Loading vendor details...'));
+          }
+          if (snapshot.hasError) {
+            return const Center(
+              child: DestructiveBadge(
+                child: Text('Vendor details are unavailable.'),
+              ),
+            );
+          }
+          final details = snapshot.data ?? vendor;
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Text(details.name).h1(),
+              if (details.category != null) ...[
+                const SizedBox(height: 4),
+                Text(details.category!),
+              ],
+              const SizedBox(height: 20),
+              const Text('Queue-capable locations').h3(),
+              const SizedBox(height: 12),
+              if (details.locations.isEmpty)
+                const Card(
+                  child: Text('No queue-capable locations are listed.'),
+                )
+              else
+                ...details.locations.map(
+                  (location) => Card(
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.mapPin),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(location.name)),
+                        PrimaryBadge(
+                          child: Text(
+                            location.queueAvailable
+                                ? 'QUEUE OPEN'
+                                : 'UNAVAILABLE',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              const Text(
+                'To join a queue, use the Join tab and scan the QR code displayed at the location.',
+              ),
+            ],
+          );
+        },
       ),
     );
   }
