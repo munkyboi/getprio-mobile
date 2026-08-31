@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/main.dart';
@@ -14,9 +15,11 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     final app = tester.widget<ShadcnApp>(find.byType(ShadcnApp));
     expect(app.themeMode, ThemeMode.light);
+    expect(find.byType(SvgPicture), findsOneWidget);
   });
 
   testWidgets('shows the customer home dashboard', (tester) async {

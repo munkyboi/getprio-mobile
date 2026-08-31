@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart'
     show FirebaseMessaging;
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'auth/auth_models.dart';
@@ -275,7 +276,13 @@ class _SignInPageState extends State<SignInPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(LucideIcons.ticket, size: 56),
+              SvgPicture.asset(
+                'assets/branding/logo.svg',
+                height: 56,
+                width: 80,
+                fit: BoxFit.contain,
+                semanticsLabel: 'GetPrio logo',
+              ),
               const SizedBox(height: 20),
               const Text('Welcome to GetPrio').h1(),
               const SizedBox(height: 8),
