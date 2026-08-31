@@ -69,14 +69,16 @@ class GetPrioApp extends StatelessWidget {
             onSignal: (_) async => ticketRepository.requestRefresh(),
           )
         : null;
+    final lightTheme = ThemeData(
+      colorScheme: LegacyColorSchemes.lightZinc(),
+      radius: 0.8,
+    );
     return ShadcnApp(
       title: 'GetPrio',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.light,
-      theme: ThemeData(
-        colorScheme: LegacyColorSchemes.lightZinc(),
-        radius: 0.8,
-      ),
+      background: lightTheme.colorScheme.background,
+      theme: lightTheme,
       home: AuthGate(
         authRepository: authRepository,
         joinRepository: joinRepository,
