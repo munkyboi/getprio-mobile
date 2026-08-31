@@ -232,6 +232,49 @@ class _AuthGateState extends State<AuthGate> {
   }
 }
 
+class _LabeledTextField extends StatelessWidget {
+  const _LabeledTextField({
+    required this.label,
+    required this.placeholder,
+    required this.controller,
+    this.inputKey,
+    this.keyboardType,
+    this.obscureText = false,
+  });
+
+  final String label;
+  final String placeholder;
+  final TextEditingController controller;
+  final Key? inputKey;
+  final TextInputType? keyboardType;
+  final bool obscureText;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          label,
+          style: theme.typography.small.copyWith(
+            color: theme.colorScheme.foreground,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          key: inputKey,
+          controller: controller,
+          placeholder: Text(placeholder),
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+        ),
+      ],
+    );
+  }
+}
+
 class SignInPage extends StatefulWidget {
   const SignInPage({
     super.key,
@@ -295,17 +338,19 @@ class _SignInPageState extends State<SignInPage> {
               ),
               const SizedBox(height: 24),
               if (challenge == null) ...[
-                TextField(
-                  key: const Key('sign-in-identifier'),
+                _LabeledTextField(
+                  inputKey: const Key('sign-in-identifier'),
                   controller: _identifierController,
-                  hintText: 'Email or username',
+                  label: 'Email or username',
+                  placeholder: 'you@example.com or username',
                   keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  key: const Key('sign-in-password'),
+                _LabeledTextField(
+                  inputKey: const Key('sign-in-password'),
                   controller: _passwordController,
-                  hintText: 'Password',
+                  label: 'Password',
+                  placeholder: 'Enter your password',
                   obscureText: true,
                 ),
                 const SizedBox(height: 20),
@@ -352,16 +397,18 @@ class _SignInPageState extends State<SignInPage> {
                 ],
               ] else ...[
                 if (_useRecoveryCode)
-                  TextField(
-                    key: const Key('mfa-recovery-code'),
+                  _LabeledTextField(
+                    inputKey: const Key('mfa-recovery-code'),
                     controller: _recoveryController,
-                    hintText: 'Recovery code',
+                    label: 'Recovery code',
+                    placeholder: 'Enter a recovery code',
                   )
                 else
-                  TextField(
-                    key: const Key('mfa-code'),
+                  _LabeledTextField(
+                    inputKey: const Key('mfa-code'),
                     controller: _mfaController,
-                    hintText: '6-digit authenticator code',
+                    label: 'Authenticator code',
+                    placeholder: 'Enter your 6-digit code',
                     keyboardType: TextInputType.number,
                   ),
                 const SizedBox(height: 12),
@@ -564,19 +611,29 @@ class _RegisterPageState extends State<RegisterPage> {
               'Use a display name when you want staff to call you by a preferred name.',
             ),
             const SizedBox(height: 20),
-            TextField(controller: _name, hintText: 'Profile name'),
+            _LabeledTextField(
+              controller: _name,
+              label: 'Display name',
+              placeholder: 'e.g. Carlo Abella',
+            ),
             const SizedBox(height: 12),
-            TextField(controller: _username, hintText: 'Username'),
+            _LabeledTextField(
+              controller: _username,
+              label: 'Username',
+              placeholder: 'Choose a username',
+            ),
             const SizedBox(height: 12),
-            TextField(
+            _LabeledTextField(
               controller: _email,
-              hintText: 'Email',
+              label: 'Email address',
+              placeholder: 'you@example.com',
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 12),
-            TextField(
+            _LabeledTextField(
               controller: _password,
-              hintText: 'Password',
+              label: 'Password',
+              placeholder: 'Create a password',
               obscureText: true,
             ),
             const SizedBox(height: 20),
@@ -667,9 +724,10 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
             ),
             const SizedBox(height: 20),
             if (!_sent) ...[
-              TextField(
+              _LabeledTextField(
                 controller: _email,
-                hintText: 'Email',
+                label: 'Email address',
+                placeholder: 'you@example.com',
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 20),
@@ -1503,15 +1561,17 @@ class _SecurityPageState extends State<SecurityPage> {
         children: [
           const Text('Change password').h2(),
           const SizedBox(height: 12),
-          TextField(
+          _LabeledTextField(
             controller: _currentPassword,
-            hintText: 'Current password',
+            label: 'Current password',
+            placeholder: 'Enter your current password',
             obscureText: true,
           ),
           const SizedBox(height: 12),
-          TextField(
+          _LabeledTextField(
             controller: _newPassword,
-            hintText: 'New password',
+            label: 'New password',
+            placeholder: 'Enter your new password',
             obscureText: true,
           ),
           const SizedBox(height: 12),
@@ -1543,9 +1603,10 @@ class _SecurityPageState extends State<SecurityPage> {
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
+            _LabeledTextField(
               controller: _mfaCode,
-              hintText: '6-digit authenticator code',
+              label: 'Authenticator code',
+              placeholder: 'Enter your 6-digit code',
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),

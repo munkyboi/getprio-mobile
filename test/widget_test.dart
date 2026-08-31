@@ -20,6 +20,48 @@ void main() {
     final app = tester.widget<ShadcnApp>(find.byType(ShadcnApp));
     expect(app.themeMode, ThemeMode.light);
     expect(find.byType(SvgPicture), findsOneWidget);
+    expect(find.text('Email or username'), findsOneWidget);
+    expect(find.text('you@example.com or username'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('Enter your password'), findsOneWidget);
+  });
+
+  testWidgets('labels customer registration fields', (tester) async {
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: RegisterPage(
+          authRepository: AuthRepository(
+            api: UnusedAuthApi(),
+            tokenStore: MemoryTokenStore(),
+          ),
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Display name'), findsOneWidget);
+    expect(find.text('e.g. Carlo Abella'), findsOneWidget);
+    expect(find.text('Username'), findsOneWidget);
+    expect(find.text('Email address'), findsOneWidget);
+    expect(find.text('Create a password'), findsOneWidget);
+  });
+
+  testWidgets('labels password recovery field', (tester) async {
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: PasswordRecoveryPage(
+          authRepository: AuthRepository(
+            api: UnusedAuthApi(),
+            tokenStore: MemoryTokenStore(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Email address'), findsOneWidget);
+    expect(find.text('you@example.com'), findsOneWidget);
   });
 
   testWidgets('shows the customer home dashboard', (tester) async {
