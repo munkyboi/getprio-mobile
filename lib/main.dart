@@ -934,13 +934,18 @@ class HomePage extends StatelessWidget {
         const Text('Your stats').h3(),
         const SizedBox(height: 12),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _StatCard(label: 'Tickets joined', value: '0'),
+              child: _StatMetric(label: 'Tickets joined', value: '0'),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(
+              height: 48,
+              child: VerticalDivider(width: 1, thickness: 1),
+            ),
+            const SizedBox(width: 20),
             Expanded(
-              child: _StatCard(label: 'Tickets served', value: '0'),
+              child: _StatMetric(label: 'Tickets served', value: '0'),
             ),
           ],
         ),
@@ -1039,19 +1044,17 @@ class _ActiveTicketCard extends StatelessWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
+class _StatMetric extends StatelessWidget {
+  const _StatMetric({required this.label, required this.value});
 
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [Text(value).h2(), const SizedBox(height: 4), Text(label)],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [Text(value).h2(), const SizedBox(height: 4), Text(label)],
     );
   }
 }

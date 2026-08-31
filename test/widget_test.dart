@@ -73,6 +73,7 @@ void main() {
     expect(find.text('Your queue activity at a glance'), findsNothing);
     expect(find.text('Scan to join'), findsOneWidget);
     expect(find.byKey(const Key('home-page')), findsOneWidget);
+    expect(find.byType(Card), findsOneWidget);
     expect(find.byType(NavigationItem), findsNWidgets(4));
     expect(find.text('Join'), findsNothing);
   });
