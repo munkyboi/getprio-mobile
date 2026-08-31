@@ -77,20 +77,22 @@ class GetPrioApp extends StatelessWidget {
       themeMode: ThemeMode.light,
       background: lightTheme.colorScheme.background,
       theme: lightTheme,
-      home: AuthGate(
-        authRepository: authRepository,
-        joinRepository: joinRepository,
-        paymentApi: paymentApi,
-        ticketRepository: ticketRepository,
-        queueRepository: QueueRepository(RestQueueApi(apiClient)),
-        directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
-        settingsRepository: AccountSettingsRepository(
-          RestAccountSettingsApi(apiClient),
+      home: GetPrioTheme.wrap(
+        AuthGate(
+          authRepository: authRepository,
+          joinRepository: joinRepository,
+          paymentApi: paymentApi,
+          ticketRepository: ticketRepository,
+          queueRepository: QueueRepository(RestQueueApi(apiClient)),
+          directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
+          settingsRepository: AccountSettingsRepository(
+            RestAccountSettingsApi(apiClient),
+          ),
+          securityRepository: SecurityRepository(RestSecurityApi(apiClient)),
+          allowedHosts: _allowedHosts(),
+          pushCoordinator: pushCoordinator,
+          oauthFlow: oauthFlow,
         ),
-        securityRepository: SecurityRepository(RestSecurityApi(apiClient)),
-        allowedHosts: _allowedHosts(),
-        pushCoordinator: pushCoordinator,
-        oauthFlow: oauthFlow,
       ),
     );
   }
@@ -983,7 +985,7 @@ class _ActiveTicketCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Active ticket').h3(),
-              PrimaryBadge(child: Text(ticket.status.label.toUpperCase())),
+              _TicketStatusBadge(status: ticket.status),
             ],
           ),
           const SizedBox(height: 12),
@@ -1023,6 +1025,28 @@ class _StatCard extends StatelessWidget {
         children: [Text(value).h2(), const SizedBox(height: 4), Text(label)],
       ),
     );
+  }
+}
+
+class _TicketStatusBadge extends StatelessWidget {
+  const _TicketStatusBadge({required this.status});
+
+  final TicketStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = status.label.toUpperCase();
+    return switch (status) {
+      TicketStatus.waiting => SecondaryBadge(child: Text(label)),
+      TicketStatus.pendingCarryOver => SecondaryBadge(child: Text(label)),
+      TicketStatus.called => PrimaryBadge(child: Text(label)),
+      TicketStatus.served => SecondaryBadge(child: Text(label)),
+      TicketStatus.skipped => DestructiveBadge(child: Text(label)),
+      TicketStatus.cancelled => DestructiveBadge(child: Text(label)),
+      TicketStatus.unserved => DestructiveBadge(child: Text(label)),
+      TicketStatus.expired => DestructiveBadge(child: Text(label)),
+      TicketStatus.unknown => OutlineBadge(child: Text(label)),
+    };
   }
 }
 
@@ -1195,13 +1219,11 @@ class VendorDetailPage extends StatelessWidget {
                         const Icon(LucideIcons.mapPin),
                         const SizedBox(width: 12),
                         Expanded(child: Text(location.name)),
-                        PrimaryBadge(
-                          child: Text(
-                            location.queueAvailable
-                                ? 'QUEUE OPEN'
-                                : 'UNAVAILABLE',
-                          ),
-                        ),
+                        location.queueAvailable
+                            ? const SecondaryBadge(child: Text('QUEUE OPEN'))
+                            : const DestructiveBadge(
+                                child: Text('UNAVAILABLE'),
+                              ),
                       ],
                     ),
                   ),
@@ -1318,7 +1340,7 @@ class _TicketsPageState extends State<TicketsPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(ticket.vendorName ?? 'Queue ticket').h3(),
-                PrimaryBadge(child: Text(ticket.status.label.toUpperCase())),
+                _TicketStatusBadge(status: ticket.status),
               ],
             ),
             const SizedBox(height: 8),
