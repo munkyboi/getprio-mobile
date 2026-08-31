@@ -47,14 +47,26 @@ class _JoinPageState extends State<JoinPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(
-                joinedTicket != null
-                    ? LucideIcons.circleCheck
-                    : payment != null
-                    ? LucideIcons.creditCard
-                    : LucideIcons.scanQrCode,
-                size: 72,
-              ),
+              if (joinedTicket == null && payment == null && preview == null)
+                const SizedBox(
+                  height: 150,
+                  child: Image(
+                    image: AssetImage(
+                      'assets/illustrations/hero-queue-scene-transparent.png',
+                    ),
+                    fit: BoxFit.contain,
+                    semanticLabel: 'Illustration of joining a vendor queue',
+                  ),
+                )
+              else
+                Icon(
+                  joinedTicket != null
+                      ? LucideIcons.circleCheck
+                      : payment != null
+                      ? LucideIcons.creditCard
+                      : LucideIcons.scanQrCode,
+                  size: 72,
+                ),
               const SizedBox(height: 20),
               Text(
                 joinedTicket != null

@@ -67,6 +67,9 @@ flutter:
   assets:
     - assets/branding/logo.svg
     - assets/branding/logo-dark.svg
+    - assets/illustrations/customer-onboarding.png
+    - assets/illustrations/hero-queue-scene-transparent.png
+    - assets/illustrations/dashboard-empty.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

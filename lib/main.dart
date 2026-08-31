@@ -20,6 +20,7 @@ import 'queue/payment_flow.dart';
 import 'queue/queue_models.dart';
 import 'queue/queue_repository.dart';
 import 'push/push_coordinator.dart';
+import 'app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,10 +70,7 @@ class GetPrioApp extends StatelessWidget {
             onSignal: (_) async => ticketRepository.requestRefresh(),
           )
         : null;
-    final lightTheme = ThemeData(
-      colorScheme: LegacyColorSchemes.lightZinc(),
-      radius: 0.8,
-    );
+    final lightTheme = GetPrioTheme.light();
     return ShadcnApp(
       title: 'GetPrio',
       debugShowCheckedModeBanner: false,
@@ -327,6 +325,16 @@ class _SignInPageState extends State<SignInPage> {
                 width: 80,
                 fit: BoxFit.contain,
                 semanticsLabel: 'GetPrio logo',
+              ),
+              const SizedBox(
+                height: 132,
+                child: Image(
+                  image: AssetImage(
+                    'assets/illustrations/hero-queue-scene-transparent.png',
+                  ),
+                  fit: BoxFit.contain,
+                  semanticLabel: 'Illustration of a customer joining a queue',
+                ),
               ),
               const SizedBox(height: 20),
               const Text('Welcome to GetPrio').h1(),
@@ -609,6 +617,17 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(height: 8),
             const Text(
               'Use a display name when you want staff to call you by a preferred name.',
+            ),
+            const SizedBox(height: 12),
+            const SizedBox(
+              height: 150,
+              child: Image(
+                image: AssetImage(
+                  'assets/illustrations/customer-onboarding.png',
+                ),
+                fit: BoxFit.contain,
+                semanticLabel: 'Illustration of a customer using GetPrio',
+              ),
             ),
             const SizedBox(height: 20),
             _LabeledTextField(
@@ -937,6 +956,14 @@ class _ActiveTicketCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Active ticket').h3(),
+          const SizedBox(
+            height: 130,
+            child: Image(
+              image: AssetImage('assets/illustrations/dashboard-empty.png'),
+              fit: BoxFit.contain,
+              semanticLabel: 'Illustration of an empty queue dashboard',
+            ),
+          ),
           const SizedBox(height: 16),
           const Text('No active tickets').h3(),
           const SizedBox(height: 4),
