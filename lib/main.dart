@@ -805,30 +805,16 @@ class CustomerShell extends StatefulWidget {
 }
 
 class _CustomerShellState extends State<CustomerShell> {
-  static const _titles = ['Home', 'Explore', 'Join', 'My Tickets', 'Account'];
-  static const _subtitles = [
-    'Your queue activity at a glance',
-    'Find a vendor and view queue availability',
-    'Scan a vendor QR code to join',
-    'Manage your active and past tickets',
-    'Profile, security, and notifications',
-  ];
-
   int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      headers: [
-        AppBar(
-          title: Text(_titles[_selectedIndex]),
-          subtitle: Text(_subtitles[_selectedIndex]),
-        ),
-        const Divider(),
-      ],
       footers: [
-        const Divider(),
         NavigationBar(
+          backgroundColor: GetPrioTheme.paper,
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          spacing: 2,
           selectedKey: ValueKey(_selectedIndex),
           onSelected: (key) {
             if (key is ValueKey<int>) {
@@ -844,32 +830,36 @@ class _CustomerShellState extends State<CustomerShell> {
           ],
         ),
       ],
-      child: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          HomePage(
-            user: widget.user,
-            ticketRepository: widget.ticketRepository,
-            onOpenJoin: () => setState(() => _selectedIndex = 2),
-          ),
-          ExplorePage(repository: widget.directoryRepository),
-          JoinPage(
-            repository: widget.joinRepository,
-            allowedHosts: widget.allowedHosts,
-            customerName: widget.user?.customerName ?? 'Customer',
-            paymentApi: widget.paymentApi,
-          ),
-          TicketsPage(
-            ticketRepository: widget.ticketRepository,
-            queueRepository: widget.queueRepository,
-          ),
-          AccountPage(
-            user: widget.user,
-            onSignOut: widget.onSignOut,
-            settingsRepository: widget.settingsRepository,
-            securityRepository: widget.securityRepository,
-          ),
-        ],
+      child: SafeArea(
+        top: true,
+        bottom: false,
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            HomePage(
+              user: widget.user,
+              ticketRepository: widget.ticketRepository,
+              onOpenJoin: () => setState(() => _selectedIndex = 2),
+            ),
+            ExplorePage(repository: widget.directoryRepository),
+            JoinPage(
+              repository: widget.joinRepository,
+              allowedHosts: widget.allowedHosts,
+              customerName: widget.user?.customerName ?? 'Customer',
+              paymentApi: widget.paymentApi,
+            ),
+            TicketsPage(
+              ticketRepository: widget.ticketRepository,
+              queueRepository: widget.queueRepository,
+            ),
+            AccountPage(
+              user: widget.user,
+              onSignOut: widget.onSignOut,
+              settingsRepository: widget.settingsRepository,
+              securityRepository: widget.securityRepository,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -878,6 +868,7 @@ class _CustomerShellState extends State<CustomerShell> {
     return NavigationItem(
       key: ValueKey(index),
       label: Text(label),
+      selectedStyle: const ButtonStyle.primary(density: ButtonDensity.icon),
       child: Icon(icon),
     );
   }
@@ -899,7 +890,7 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       key: const Key('home-page'),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
       children: [
         Text('Good morning, ${user?.customerName ?? 'there'}').h2(),
         const SizedBox(height: 4),

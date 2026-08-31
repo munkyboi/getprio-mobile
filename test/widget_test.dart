@@ -70,6 +70,7 @@ void main() {
     );
 
     expect(find.text('Good morning, Carlo'), findsOneWidget);
+    expect(find.text('Your queue activity at a glance'), findsNothing);
     expect(find.text('Scan to join'), findsOneWidget);
     expect(find.byKey(const Key('home-page')), findsOneWidget);
   });
