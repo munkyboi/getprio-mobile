@@ -71,6 +71,7 @@ class GetPrioApp extends StatelessWidget {
     return ShadcnApp(
       title: 'GetPrio',
       debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.light,
       theme: ThemeData(
         colorScheme: LegacyColorSchemes.lightZinc(),
         radius: 0.8,
@@ -488,6 +489,9 @@ class _SignInPageState extends State<SignInPage> {
   }
 
   String _authError(Object error) {
+    if (error is ApiException && error.code == 'API_BASE_URL_MISSING') {
+      return 'API URL is missing. Launch with --dart-define=GETPRIO_API_BASE_URL=<your-api-origin>.';
+    }
     if (error is ApiException && error.message.isNotEmpty) return error.message;
     if (error is FormatException) return error.message;
     return 'We could not sign you in. Check your connection and try again.';

@@ -1,9 +1,24 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
+import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/main.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  testWidgets('uses the light theme by default', (tester) async {
+    await tester.pumpWidget(
+      GetPrioApp(
+        authRepository: AuthRepository(
+          api: UnusedAuthApi(),
+          tokenStore: MemoryTokenStore(),
+        ),
+      ),
+    );
+
+    final app = tester.widget<ShadcnApp>(find.byType(ShadcnApp));
+    expect(app.themeMode, ThemeMode.light);
+  });
+
   testWidgets('shows the customer home dashboard', (tester) async {
     await tester.pumpWidget(
       ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
@@ -34,4 +49,10 @@ class AuthUserForTest {
     profileName: 'Profile name',
     displayName: 'Carlo',
   );
+}
+
+class UnusedAuthApi implements AuthApi {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('This test does not call the auth API.');
 }
