@@ -73,6 +73,20 @@ void main() {
     expect(find.text('Your queue activity at a glance'), findsNothing);
     expect(find.text('Scan to join'), findsOneWidget);
     expect(find.byKey(const Key('home-page')), findsOneWidget);
+    expect(find.byType(NavigationItem), findsNWidgets(4));
+    expect(find.text('Join'), findsNothing);
+  });
+
+  testWidgets('opens queue joining from the Home scan action', (tester) async {
+    await tester.pumpWidget(
+      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+    );
+
+    await tester.tap(find.byKey(const Key('scan-to-join-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Scan to join'), findsOneWidget);
+    expect(find.text('Scan QR code'), findsOneWidget);
   });
 
   testWidgets('switches between customer areas', (tester) async {

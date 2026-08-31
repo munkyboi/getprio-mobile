@@ -826,9 +826,8 @@ class _CustomerShellState extends State<CustomerShell> {
           children: [
             _navItem('Home', LucideIcons.house, 0),
             _navItem('Explore', LucideIcons.compass, 1),
-            _navItem('Join', LucideIcons.scanQrCode, 2),
-            _navItem('Tickets', LucideIcons.ticket, 3),
-            _navItem('Account', LucideIcons.circleUserRound, 4),
+            _navItem('Tickets', LucideIcons.ticket, 2),
+            _navItem('Account', LucideIcons.circleUserRound, 3),
           ],
         ),
       ],
@@ -841,15 +840,9 @@ class _CustomerShellState extends State<CustomerShell> {
             HomePage(
               user: widget.user,
               ticketRepository: widget.ticketRepository,
-              onOpenJoin: () => setState(() => _selectedIndex = 2),
+              onOpenJoin: _openJoin,
             ),
             ExplorePage(repository: widget.directoryRepository),
-            JoinPage(
-              repository: widget.joinRepository,
-              allowedHosts: widget.allowedHosts,
-              customerName: widget.user?.customerName ?? 'Customer',
-              paymentApi: widget.paymentApi,
-            ),
             TicketsPage(
               ticketRepository: widget.ticketRepository,
               queueRepository: widget.queueRepository,
@@ -862,6 +855,41 @@ class _CustomerShellState extends State<CustomerShell> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _openJoin() async {
+    await Navigator.of(context).push<void>(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => Scaffold(
+          headers: [
+            AppBar(
+              title: const Text('Scan to join'),
+              leading: [
+                GhostButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  density: ButtonDensity.icon,
+                  child: const Icon(LucideIcons.arrowLeft),
+                ),
+              ],
+            ),
+          ],
+          child: JoinPage(
+            repository: widget.joinRepository,
+            allowedHosts: widget.allowedHosts,
+            customerName: widget.user?.customerName ?? 'Customer',
+            paymentApi: widget.paymentApi,
+          ),
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(1, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
       ),
     );
   }
@@ -1230,7 +1258,7 @@ class VendorDetailPage extends StatelessWidget {
                 ),
               const SizedBox(height: 16),
               const Text(
-                'To join a queue, use the Join tab and scan the QR code displayed at the location.',
+                'To join a queue, return to Home and scan the QR code displayed at the location.',
               ),
             ],
           );
