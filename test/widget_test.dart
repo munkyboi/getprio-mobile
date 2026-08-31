@@ -1,8 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:getprio_mobile/account/ticket_repository.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/auth/auth_repository.dart';
+import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
@@ -101,6 +104,148 @@ void main() {
     expect(find.text('Explore vendors'), findsOneWidget);
     expect(find.byKey(const Key('explore-page')), findsOneWidget);
   });
+
+  testWidgets('filters the vendor directory by search and category', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: ExplorePage(repository: DirectoryRepository(FakeDirectoryApi())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('All'), findsOneWidget);
+    expect(find.text('Open now'), findsOneWidget);
+    expect(find.byKey(const ValueKey('vendor-filter-Clinic')), findsOneWidget);
+    expect(find.text('City Clinic'), findsOneWidget);
+    expect(find.text('Quick Bank'), findsOneWidget);
+    expect(find.text('Closed Lab'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('vendor-filter-Open now')));
+    await tester.pump();
+
+    expect(find.text('City Clinic'), findsOneWidget);
+    expect(find.text('Quick Bank'), findsOneWidget);
+    expect(find.text('Closed Lab'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('vendor-filter-Bank')));
+    await tester.pump();
+
+    expect(find.text('City Clinic'), findsNothing);
+    expect(find.text('Quick Bank'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('vendor-filter-All')));
+    await tester.pump();
+
+    await tester.enterText(
+      find.byKey(const Key('vendor-search-field')),
+      'clinic',
+    );
+    await tester.pump();
+
+    expect(find.text('City Clinic'), findsOneWidget);
+    expect(find.text('Quick Bank'), findsNothing);
+  });
+
+  testWidgets('separates active tickets from lightweight history', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketsPage(
+          ticketRepository: QueueTicketRepository(FakeAccountQueueApi()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Active'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('active-ticket-active-1')),
+      findsOneWidget,
+    );
+    expect(find.text('Queue progress'), findsOneWidget);
+    expect(find.byType(Card), findsOneWidget);
+
+    await tester.fling(
+      find.byKey(const Key('tickets-page')),
+      const Offset(0, -600),
+      1000,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('History'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('history-ticket-history-1')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('refreshes the Home ticket when the repository signals', (
+    tester,
+  ) async {
+    final api = FakeAccountQueueApi();
+    final repository = QueueTicketRepository(api);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: HomePage(
+          user: AuthUserForTest.user,
+          ticketRepository: repository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.overviewCalls, 1);
+
+    repository.requestRefresh();
+    await tester.pumpAndSettle();
+
+    expect(api.overviewCalls, 2);
+    expect(find.text('#101'), findsOneWidget);
+  });
+
+  testWidgets('confirms cancellation in a destructive dialog', (tester) async {
+    final queueApi = FakeQueueApi();
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketsPage(
+          ticketRepository: QueueTicketRepository(FakeAccountQueueApi()),
+          queueRepository: QueueRepository(queueApi),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Cancel ticket'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel ticket'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('cancel-ticket-dialog')), findsOneWidget);
+    expect(find.text('Cancel this ticket?'), findsOneWidget);
+
+    await tester.tap(find.text('Keep ticket'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('cancel-ticket-dialog')), findsNothing);
+    expect(queueApi.cancelCalled, isFalse);
+  });
+
+  testWidgets('uses grouped Account rows with one profile card', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ShadcnApp(home: const AccountPage(user: AuthUserForTest.user)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('Security'), findsOneWidget);
+    expect(find.text('Queue alerts unavailable'), findsOneWidget);
+    expect(find.byType(Card), findsOneWidget);
+  });
 }
 
 class AuthUserForTest {
@@ -116,4 +261,115 @@ class UnusedAuthApi implements AuthApi {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('This test does not call the auth API.');
+}
+
+class FakeDirectoryApi implements DirectoryApi {
+  @override
+  Future<Map<String, dynamic>> loadVendor(String tenantSlug) async => {
+    'slug': tenantSlug,
+    'name': 'City Clinic',
+    'queueAvailable': true,
+  };
+
+  @override
+  Future<Map<String, dynamic>> loadVendors({
+    String? search,
+    int limit = 20,
+  }) async => {
+    'vendors': [
+      {
+        'slug': 'city-clinic',
+        'name': 'City Clinic',
+        'category': 'Clinic',
+        'queueAvailable': true,
+        'locations': [
+          {'id': 'clinic-1', 'name': 'Main Clinic', 'queueAvailable': true},
+        ],
+      },
+      {
+        'slug': 'quick-bank',
+        'name': 'Quick Bank',
+        'category': 'Bank',
+        'queueAvailable': true,
+        'locations': [
+          {'id': 'bank-1', 'name': 'Downtown', 'queueAvailable': true},
+        ],
+      },
+      {
+        'slug': 'closed-lab',
+        'name': 'Closed Lab',
+        'category': 'Lab',
+        'queueAvailable': true,
+        'locations': [
+          {'id': 'lab-1', 'name': 'Testing Center', 'queueAvailable': false},
+        ],
+      },
+    ],
+  };
+}
+
+class FakeAccountQueueApi implements AccountQueueApi {
+  int overviewCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> loadOverview() async {
+    overviewCalls++;
+    return {
+      'tickets': [
+        {
+          'id': 'active-1',
+          'lookupCode': 'ACTIVE1',
+          'ticketNumber': 101,
+          'customerName': 'Carlo',
+          'status': 'waiting',
+          'position': 3,
+          'estimatedWaitMinutes': 12,
+          'vendorName': 'City Clinic',
+          'locationName': 'Main Clinic',
+          'tenantSlug': 'city-clinic',
+          'joinedAt': '2026-09-01T01:30:00.000Z',
+        },
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> loadHistory({
+    required int page,
+    required int limit,
+  }) async => {
+    'items': [
+      {
+        'id': 'history-1',
+        'lookupCode': 'HISTORY1',
+        'ticketNumber': 88,
+        'customerName': 'Carlo',
+        'status': 'served',
+        'vendorName': 'Quick Bank',
+        'locationName': 'Downtown',
+        'joinedAt': '2026-08-31T01:30:00.000Z',
+      },
+    ],
+  };
+}
+
+class FakeQueueApi implements QueueApi {
+  bool cancelCalled = false;
+
+  @override
+  Future<Map<String, dynamic>> cancelTicket({
+    required String tenantSlug,
+    required String lookupCode,
+    String? locationSlug,
+  }) async {
+    cancelCalled = true;
+    return const {};
+  }
+
+  @override
+  Future<Map<String, dynamic>> loadQueueSnapshot({
+    required String tenantSlug,
+    String? locationSlug,
+    String? lookupCode,
+  }) async => const {};
 }

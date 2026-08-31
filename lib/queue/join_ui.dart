@@ -1,6 +1,7 @@
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../app_theme.dart';
 import 'join_repository.dart';
 import 'payment_flow.dart';
 import 'queue_models.dart';
@@ -48,9 +49,13 @@ class _JoinPageState extends State<JoinPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (joinedTicket == null && payment == null && preview == null)
-                const SizedBox(
-                  height: 150,
-                  child: Image(
+                Container(
+                  height: 180,
+                  decoration: BoxDecoration(
+                    color: GetPrioTheme.paperAccent,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Image(
                     image: AssetImage(
                       'assets/illustrations/hero-queue-scene-transparent.png',
                     ),
@@ -59,13 +64,28 @@ class _JoinPageState extends State<JoinPage> {
                   ),
                 )
               else
-                Icon(
-                  joinedTicket != null
-                      ? LucideIcons.circleCheck
-                      : payment != null
-                      ? LucideIcons.creditCard
-                      : LucideIcons.scanQrCode,
-                  size: 72,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: joinedTicket != null
+                          ? GetPrioTheme.teal
+                          : GetPrioTheme.paperAccent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      joinedTicket != null
+                          ? LucideIcons.circleCheck
+                          : payment != null
+                          ? LucideIcons.creditCard
+                          : LucideIcons.scanQrCode,
+                      color: joinedTicket != null
+                          ? const Color(0xFFFFFFFF)
+                          : GetPrioTheme.ink,
+                      size: 40,
+                    ),
+                  ),
                 ),
               const SizedBox(height: 20),
               Text(
@@ -89,6 +109,11 @@ class _JoinPageState extends State<JoinPage> {
                     children: [
                       const Text('Queue details').h3(),
                       const SizedBox(height: 8),
+                      if (preview.joinable)
+                        const SecondaryBadge(child: Text('QUEUE OPEN'))
+                      else
+                        const DestructiveBadge(child: Text('UNAVAILABLE')),
+                      const SizedBox(height: 12),
                       Text(
                         preview.paymentRequired
                             ? 'Fee: ${preview.currency} ${(preview.fee / 100).toStringAsFixed(2)}'
@@ -144,11 +169,21 @@ class _JoinPageState extends State<JoinPage> {
                   ),
                 )
               else
-                PrimaryButton(
-                  key: const Key('join-scan-button'),
-                  onPressed: _scan,
-                  leading: const Icon(LucideIcons.scanQrCode),
-                  child: const Text('Scan QR code'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    PrimaryButton(
+                      key: const Key('join-scan-button'),
+                      onPressed: _scan,
+                      leading: const Icon(LucideIcons.scanQrCode),
+                      child: const Text('Scan QR code'),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Camera access is used only while scanning a vendor QR code.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               if (payment != null) ...[
                 const SizedBox(height: 12),

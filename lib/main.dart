@@ -821,6 +821,9 @@ class _CustomerShellState extends State<CustomerShell> {
           onSelected: (key) {
             if (key is ValueKey<int>) {
               setState(() => _selectedIndex = key.value);
+              if (key.value == 2) {
+                widget.ticketRepository?.requestRefresh();
+              }
             }
           },
           children: [
@@ -892,6 +895,7 @@ class _CustomerShellState extends State<CustomerShell> {
             ),
       ),
     );
+    widget.ticketRepository?.requestRefresh();
   }
 
   NavigationItem _navItem(String label, IconData icon, int index) {
@@ -930,6 +934,8 @@ class HomePage extends StatelessWidget {
           ticketRepository: ticketRepository,
           onOpenJoin: onOpenJoin,
         ),
+        const SizedBox(height: 28),
+        const Divider(),
         const SizedBox(height: 20),
         const Text('Your stats').h3(),
         const SizedBox(height: 12),
@@ -962,17 +968,42 @@ class _ActiveTicketCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (ticketRepository == null) return _emptyCard();
-    return FutureBuilder<List<QueueTicket>>(
-      future: ticketRepository!.loadOverview(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Card(child: Text('Loading active tickets...'));
-        }
-        final active =
-            snapshot.data?.where((ticket) => ticket.isActive).toList() ?? [];
-        return active.isEmpty ? _emptyCard() : _ticketCard(active.first);
-      },
+    final repository = ticketRepository;
+    if (repository == null) return _emptyCard();
+    return ValueListenableBuilder<int>(
+      valueListenable: repository.refreshVersion,
+      builder: (context, refreshVersion, child) =>
+          FutureBuilder<List<QueueTicket>>(
+            future: repository.loadOverview(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Card(child: Text('Loading active tickets...'));
+              }
+              if (snapshot.hasError) {
+                return Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('Active ticket').h3(),
+                      const SizedBox(height: 12),
+                      const Text('We could not refresh your active ticket.'),
+                      const SizedBox(height: 12),
+                      OutlineButton(
+                        onPressed: repository.requestRefresh,
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final active =
+                  snapshot.data?.where((ticket) => ticket.isActive).toList() ??
+                  [];
+              return active.isEmpty
+                  ? _emptyCard()
+                  : _ticketCard(context, active.first);
+            },
+          ),
     );
   }
 
@@ -1009,7 +1040,7 @@ class _ActiveTicketCard extends StatelessWidget {
     );
   }
 
-  Widget _ticketCard(QueueTicket ticket) {
+  Widget _ticketCard(BuildContext context, QueueTicket ticket) {
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1022,15 +1053,43 @@ class _ActiveTicketCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(ticket.vendorName ?? 'Queue ticket'),
-          if (ticket.locationName != null) Text(ticket.locationName!),
-          if (ticket.position != null) ...[
-            const SizedBox(height: 12),
-            Text('Position ${ticket.position}'),
-            if (ticket.estimatedWaitMinutes != null)
-              Text('${ticket.estimatedWaitMinutes} minutes estimated'),
+          Text(ticket.vendorName ?? 'Queue ticket').h4(),
+          const SizedBox(height: 8),
+          Text(
+            '#${ticket.ticketNumber ?? ticket.lookupCode}',
+            style: Theme.of(context).typography.h2.copyWith(fontSize: 30),
+          ),
+          if (ticket.locationName != null) ...[
+            const SizedBox(height: 4),
+            Text(ticket.locationName!),
           ],
-          const SizedBox(height: 16),
+          if (ticket.position != null) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _TicketMetric(
+                    label: 'Position',
+                    value: '${ticket.position}',
+                  ),
+                ),
+                const SizedBox(
+                  height: 44,
+                  child: VerticalDivider(width: 1, thickness: 1),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: _TicketMetric(
+                    label: 'Estimated wait',
+                    value: '${ticket.estimatedWaitMinutes ?? 0} min',
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 20),
+          _TicketProgress(ticket: ticket),
+          const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: OutlineButton(
@@ -1054,7 +1113,14 @@ class _StatMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [Text(value).h2(), const SizedBox(height: 4), Text(label)],
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).typography.h2.copyWith(fontSize: 30),
+        ),
+        const SizedBox(height: 4),
+        Text(label),
+      ],
     );
   }
 }
@@ -1081,14 +1147,43 @@ class _TicketStatusBadge extends StatelessWidget {
   }
 }
 
-class ExplorePage extends StatelessWidget {
+class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key, this.repository});
 
   final DirectoryRepository? repository;
 
   @override
+  State<ExplorePage> createState() => _ExplorePageState();
+}
+
+class _ExplorePageState extends State<ExplorePage> {
+  Future<List<VendorSummary>>? _vendors;
+  String _query = '';
+  String _filter = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    _vendors = widget.repository?.loadVendors();
+  }
+
+  @override
+  void didUpdateWidget(covariant ExplorePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository) {
+      _vendors = widget.repository?.loadVendors();
+    }
+  }
+
+  void _reloadVendors() {
+    setState(() {
+      _vendors = widget.repository?.loadVendors();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final directoryRepository = repository;
+    final directoryRepository = widget.repository;
     return ListView(
       key: const Key('explore-page'),
       padding: const EdgeInsets.all(20),
@@ -1098,8 +1193,10 @@ class ExplorePage extends StatelessWidget {
         const Text('Browse vendors with queueing available.'),
         const SizedBox(height: 20),
         TextField(
+          key: const Key('vendor-search-field'),
           placeholder: const Text('Search vendors'),
           features: const [InputFeature.leading(Icon(LucideIcons.search))],
+          onChanged: (value) => setState(() => _query = value.trim()),
         ),
         const SizedBox(height: 20),
         if (directoryRepository == null)
@@ -1108,35 +1205,112 @@ class ExplorePage extends StatelessWidget {
           )
         else
           FutureBuilder<List<VendorSummary>>(
-            future: directoryRepository.loadVendors(),
+            future: _vendors,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: Text('Loading vendors...'));
               }
               if (snapshot.hasError) {
-                return const DestructiveBadge(
-                  child: Text('We could not load vendors. Try again later.'),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const DestructiveBadge(
+                      child: Text('We could not load vendors.'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlineButton(
+                      key: const Key('retry-vendor-directory'),
+                      onPressed: _reloadVendors,
+                      child: const Text('Try again'),
+                    ),
+                  ],
                 );
               }
-              if (snapshot.data?.isEmpty ?? true) {
+              final vendors = snapshot.data ?? const <VendorSummary>[];
+              if (vendors.isEmpty) {
                 return const Card(
                   child: Text('No queue-capable vendors found.'),
                 );
               }
+
+              final categories =
+                  vendors
+                      .map((vendor) => vendor.category?.trim())
+                      .whereType<String>()
+                      .where((category) => category.isNotEmpty)
+                      .toSet()
+                      .toList()
+                    ..sort();
+              final filters = ['All', 'Open now', ...categories];
+              final visible = vendors.where(_matchesFilters).toList();
+
               return Column(
-                children: snapshot.data!
-                    .map(
-                      (vendor) => _VendorCard(
-                        vendor: vendor,
-                        repository: directoryRepository,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: filters
+                          .map(
+                            (filter) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Chip(
+                                key: ValueKey('vendor-filter-$filter'),
+                                style: filter == _filter
+                                    ? const ButtonStyle.primary(
+                                        density: ButtonDensity.compact,
+                                      )
+                                    : const ButtonStyle.outline(
+                                        density: ButtonDensity.compact,
+                                      ),
+                                onPressed: () =>
+                                    setState(() => _filter = filter),
+                                child: Text(filter),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (visible.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Text(
+                        'No vendors match your search and filters.',
+                        textAlign: TextAlign.center,
                       ),
                     )
-                    .toList(),
+                  else
+                    ...visible.map(
+                      (vendor) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _VendorCard(
+                          vendor: vendor,
+                          repository: directoryRepository,
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           ),
       ],
     );
+  }
+
+  bool _matchesFilters(VendorSummary vendor) {
+    final query = _query.toLowerCase();
+    final matchesQuery =
+        query.isEmpty ||
+        vendor.name.toLowerCase().contains(query) ||
+        (vendor.category?.toLowerCase().contains(query) ?? false);
+    if (!matchesQuery) return false;
+    if (_filter == 'All') return true;
+    if (_filter == 'Open now') {
+      return vendor.locations.any((location) => location.queueAvailable);
+    }
+    return vendor.category == _filter;
   }
 }
 
@@ -1165,7 +1339,14 @@ class _VendorCard extends StatelessWidget {
       },
       child: Row(
         children: [
-          const Icon(LucideIcons.store),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: GetPrioTheme.paperAccent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(LucideIcons.store),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1177,11 +1358,24 @@ class _VendorCard extends StatelessWidget {
                   Text(vendor.category!),
                 ],
                 const SizedBox(height: 8),
-                Text('${vendor.locations.length} queue-capable location(s)'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${vendor.locations.length} queue-capable location(s)',
+                      ),
+                    ),
+                    if (vendor.locations.any(
+                      (location) => location.queueAvailable,
+                    ))
+                      const SecondaryBadge(child: Text('OPEN')),
+                  ],
+                ),
               ],
             ),
           ),
-          const Icon(LucideIcons.chevronRight),
+          const SizedBox(width: 8),
+          const Icon(LucideIcons.chevronRight, size: 18),
         ],
       ),
     );
@@ -1203,7 +1397,7 @@ class VendorDetailPage extends StatelessWidget {
     return Scaffold(
       headers: [
         AppBar(
-          title: Text(vendor.name),
+          title: const Text('Vendor details'),
           leading: [
             GhostButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -1227,38 +1421,71 @@ class VendorDetailPage extends StatelessWidget {
             );
           }
           final details = snapshot.data ?? vendor;
+          final openLocations = details.locations
+              .where((location) => location.queueAvailable)
+              .length;
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
+              Container(
+                height: 180,
+                decoration: BoxDecoration(
+                  color: GetPrioTheme.paperAccent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Image(
+                  image: AssetImage(
+                    'assets/illustrations/hero-queue-scene-transparent.png',
+                  ),
+                  fit: BoxFit.contain,
+                  semanticLabel: 'Illustration of a customer at a queue',
+                ),
+              ),
+              const SizedBox(height: 24),
               Text(details.name).h1(),
               if (details.category != null) ...[
                 const SizedBox(height: 4),
                 Text(details.category!),
               ],
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _VendorHighlight(
+                      value: '${details.locations.length}',
+                      label: 'Locations',
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 48,
+                    child: VerticalDivider(width: 1, thickness: 1),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: _VendorHighlight(
+                      value: '$openLocations',
+                      label: 'Queues open',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
               const Text('Queue-capable locations').h3(),
               const SizedBox(height: 12),
               if (details.locations.isEmpty)
                 const Card(
                   child: Text('No queue-capable locations are listed.'),
                 )
-              else
-                ...details.locations.map(
-                  (location) => Card(
-                    child: Row(
-                      children: [
-                        const Icon(LucideIcons.mapPin),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text(location.name)),
-                        location.queueAvailable
-                            ? const SecondaryBadge(child: Text('QUEUE OPEN'))
-                            : const DestructiveBadge(
-                                child: Text('UNAVAILABLE'),
-                              ),
-                      ],
-                    ),
-                  ),
-                ),
+              else ...[
+                for (
+                  var index = 0;
+                  index < details.locations.length;
+                  index++
+                ) ...[
+                  _VendorLocationRow(location: details.locations[index]),
+                  if (index < details.locations.length - 1) const Divider(),
+                ],
+              ],
               const SizedBox(height: 16),
               const Text(
                 'To join a queue, return to Home and scan the QR code displayed at the location.',
@@ -1266,6 +1493,48 @@ class VendorDetailPage extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _VendorHighlight extends StatelessWidget {
+  const _VendorHighlight({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value, style: Theme.of(context).typography.h2),
+        const SizedBox(height: 4),
+        Text(label),
+      ],
+    );
+  }
+}
+
+class _VendorLocationRow extends StatelessWidget {
+  const _VendorLocationRow({required this.location});
+
+  final VendorLocation location;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          const Icon(LucideIcons.mapPin),
+          const SizedBox(width: 12),
+          Expanded(child: Text(location.name)),
+          location.queueAvailable
+              ? const SecondaryBadge(child: Text('QUEUE OPEN'))
+              : const DestructiveBadge(child: Text('UNAVAILABLE')),
+        ],
       ),
     );
   }
@@ -1283,8 +1552,7 @@ class TicketsPage extends StatefulWidget {
 
 class _TicketsPageState extends State<TicketsPage> {
   late Future<List<QueueTicket>> _tickets;
-  String? _confirmingTicketId;
-  bool _isCancelling = false;
+  String? _cancellingTicketId;
 
   @override
   void initState() {
@@ -1309,7 +1577,7 @@ class _TicketsPageState extends State<TicketsPage> {
 
   void _reload() {
     setState(() {
-      _confirmingTicketId = null;
+      _cancellingTicketId = null;
       _tickets = _loadTickets();
     });
   }
@@ -1319,6 +1587,9 @@ class _TicketsPageState extends State<TicketsPage> {
     return FutureBuilder<List<QueueTicket>>(
       future: _tickets,
       builder: (context, snapshot) {
+        final tickets = snapshot.data ?? const <QueueTicket>[];
+        final active = tickets.where((ticket) => ticket.isActive).toList();
+        final history = tickets.where((ticket) => !ticket.isActive).toList();
         return ListView(
           key: const Key('tickets-page'),
           padding: const EdgeInsets.all(20),
@@ -1347,23 +1618,38 @@ class _TicketsPageState extends State<TicketsPage> {
                   ],
                 ),
               )
-            else
-              ...snapshot.data!.map(_ticketCard),
+            else ...[
+              if (active.isNotEmpty) ...[
+                const Text('Active').h3(),
+                const SizedBox(height: 12),
+                ...active.map(_activeTicketCard),
+              ],
+              if (history.isNotEmpty) ...[
+                if (active.isNotEmpty) const SizedBox(height: 28),
+                const Text('History').h3(),
+                const SizedBox(height: 8),
+                for (var index = 0; index < history.length; index++) ...[
+                  _historyTicketRow(history[index]),
+                  if (index < history.length - 1) const Divider(),
+                ],
+              ],
+            ],
           ],
         );
       },
     );
   }
 
-  Widget _ticketCard(QueueTicket ticket) {
+  Widget _activeTicketCard(QueueTicket ticket) {
     final canCancel =
         ticket.status == TicketStatus.waiting &&
         ticket.tenantSlug != null &&
         widget.queueRepository != null;
-    final isConfirming = _confirmingTicketId == ticket.id;
+    final isCancelling = _cancellingTicketId == ticket.id;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Card(
+        key: ValueKey('active-ticket-${ticket.id}'),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1374,45 +1660,48 @@ class _TicketsPageState extends State<TicketsPage> {
                 _TicketStatusBadge(status: ticket.status),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('Ticket ${ticket.ticketNumber ?? ticket.lookupCode}'),
-            if (ticket.locationName != null) Text(ticket.locationName!),
+            const SizedBox(height: 12),
+            Text(
+              '#${ticket.ticketNumber ?? ticket.lookupCode}',
+              style: Theme.of(context).typography.h2.copyWith(fontSize: 30),
+            ),
+            if (ticket.locationName != null) ...[
+              const SizedBox(height: 4),
+              Text(ticket.locationName!),
+            ],
             if (ticket.position != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Position ${ticket.position} · ${ticket.estimatedWaitMinutes ?? 0} min estimated',
-              ),
-            ],
-            if (canCancel && !isConfirming) ...[
-              const SizedBox(height: 12),
-              DestructiveButton(
-                onPressed: () =>
-                    setState(() => _confirmingTicketId = ticket.id),
-                child: const Text('Cancel ticket'),
-              ),
-            ],
-            if (isConfirming) ...[
-              const SizedBox(height: 12),
-              const Text('Cancel this waiting ticket? This cannot be undone.'),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
-                    child: OutlineButton(
-                      onPressed: _isCancelling
-                          ? null
-                          : () => setState(() => _confirmingTicketId = null),
-                      child: const Text('Keep ticket'),
+                    child: _TicketMetric(
+                      label: 'Position',
+                      value: '${ticket.position}',
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(
+                    height: 44,
+                    child: VerticalDivider(width: 1, thickness: 1),
+                  ),
+                  const SizedBox(width: 20),
                   Expanded(
-                    child: DestructiveButton(
-                      onPressed: _isCancelling ? null : () => _cancel(ticket),
-                      child: Text(_isCancelling ? 'Cancelling...' : 'Confirm'),
+                    child: _TicketMetric(
+                      label: 'Estimated wait',
+                      value: '${ticket.estimatedWaitMinutes ?? 0} min',
                     ),
                   ),
                 ],
+              ),
+            ],
+            const SizedBox(height: 20),
+            _TicketProgress(ticket: ticket),
+            if (canCancel) ...[
+              const SizedBox(height: 20),
+              DestructiveButton(
+                onPressed: isCancelling
+                    ? null
+                    : () => _confirmCancellation(ticket),
+                child: Text(isCancelling ? 'Cancelling...' : 'Cancel ticket'),
               ),
             ],
           ],
@@ -1421,22 +1710,220 @@ class _TicketsPageState extends State<TicketsPage> {
     );
   }
 
+  Widget _historyTicketRow(QueueTicket ticket) {
+    return Padding(
+      key: ValueKey('history-ticket-${ticket.id}'),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: GetPrioTheme.paperAccent,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(LucideIcons.ticket, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(ticket.vendorName ?? 'Queue ticket').h4(),
+                const SizedBox(height: 4),
+                Text('Ticket #${ticket.ticketNumber ?? ticket.lookupCode}'),
+                if (ticket.locationName != null) Text(ticket.locationName!),
+                if (ticket.joinedAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text(_formatTicketDate(ticket.joinedAt!)),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _TicketStatusBadge(status: ticket.status),
+        ],
+      ),
+    );
+  }
+
+  String _formatTicketDate(DateTime date) {
+    final local = date.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
+  }
+
+  Future<void> _confirmCancellation(QueueTicket ticket) async {
+    final confirmed = await showOverlay<bool>(
+      context,
+      DialogConfiguration(),
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('cancel-ticket-dialog'),
+        leading: const Icon(LucideIcons.triangleAlert),
+        title: const Text('Cancel this ticket?'),
+        content: const Text(
+          'You will leave the queue and this action cannot be undone.',
+        ),
+        actions: [
+          OutlineButton(
+            onPressed: () => closeOverlay(dialogContext, false),
+            child: const Text('Keep ticket'),
+          ),
+          DestructiveButton(
+            onPressed: () => closeOverlay(dialogContext, true),
+            child: const Text('Cancel ticket'),
+          ),
+        ],
+      ),
+    ).future;
+    if (confirmed == true && mounted) await _cancel(ticket);
+  }
+
   Future<void> _cancel(QueueTicket ticket) async {
     final repository = widget.queueRepository;
     final tenantSlug = ticket.tenantSlug;
     if (repository == null || tenantSlug == null) return;
-    setState(() => _isCancelling = true);
+    setState(() => _cancellingTicketId = ticket.id);
     try {
       await repository.cancelTicket(tenantSlug: tenantSlug, ticket: ticket);
-      if (mounted) _reload();
+      if (mounted) {
+        final ticketRepository = widget.ticketRepository;
+        if (ticketRepository == null) {
+          _reload();
+        } else {
+          ticketRepository.requestRefresh();
+        }
+      }
     } catch (_) {
       if (mounted) {
-        setState(() {
-          _isCancelling = false;
-          _confirmingTicketId = null;
-        });
+        setState(() => _cancellingTicketId = null);
       }
     }
+  }
+}
+
+class _TicketMetric extends StatelessWidget {
+  const _TicketMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [Text(value).h3(), const SizedBox(height: 2), Text(label)],
+    );
+  }
+}
+
+class _TicketProgress extends StatelessWidget {
+  const _TicketProgress({required this.ticket});
+
+  final QueueTicket ticket;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Queue progress').h4(),
+        const SizedBox(height: 12),
+        _TimelineStep(
+          label: 'Joined queue',
+          caption: ticket.joinedAt == null
+              ? 'Ticket confirmed'
+              : _timeLabel(ticket.joinedAt!),
+          color: GetPrioTheme.success,
+        ),
+        _TimelineStep(
+          label: ticket.status.label,
+          caption: _statusCaption(ticket),
+          color: _statusColor(ticket.status),
+          isLast: true,
+        ),
+      ],
+    );
+  }
+
+  String _statusCaption(QueueTicket ticket) {
+    if (ticket.status == TicketStatus.waiting && ticket.position != null) {
+      return 'Position ${ticket.position} in line';
+    }
+    return switch (ticket.status) {
+      TicketStatus.called => 'Please proceed to the service area',
+      TicketStatus.pendingCarryOver => 'Waiting for queue confirmation',
+      _ => 'Current ticket status',
+    };
+  }
+
+  Color _statusColor(TicketStatus status) {
+    return switch (status) {
+      TicketStatus.called => GetPrioTheme.orange,
+      TicketStatus.pendingCarryOver => GetPrioTheme.warning,
+      TicketStatus.waiting => GetPrioTheme.teal,
+      TicketStatus.served => GetPrioTheme.success,
+      TicketStatus.skipped ||
+      TicketStatus.cancelled ||
+      TicketStatus.unserved ||
+      TicketStatus.expired => GetPrioTheme.destructive,
+      TicketStatus.unknown => GetPrioTheme.disabled,
+    };
+  }
+
+  String _timeLabel(DateTime date) {
+    final local = date.toLocal();
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${local.hour}:$minute';
+  }
+}
+
+class _TimelineStep extends StatelessWidget {
+  const _TimelineStep({
+    required this.label,
+    required this.caption,
+    required this.color,
+    this.isLast = false,
+  });
+
+  final String label;
+  final String caption;
+  final Color color;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 20,
+          child: Column(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              if (!isLast)
+                Container(width: 2, height: 34, color: GetPrioTheme.line),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [Text(label), const SizedBox(height: 2), Text(caption)],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1488,56 +1975,61 @@ class _AccountPageState extends State<AccountPage> {
         Card(
           child: Row(
             children: [
-              const Icon(LucideIcons.circleUserRound, size: 40),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: GetPrioTheme.paperAccent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(LucideIcons.circleUserRound, size: 28),
+              ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.user?.customerName ?? 'Customer').h3(),
-                  const SizedBox(height: 4),
-                  Text(widget.user?.email ?? ''),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.user?.customerName ?? 'Customer').h3(),
+                    const SizedBox(height: 4),
+                    Text(widget.user?.email ?? ''),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 28),
+        const Text('Notifications').h3(),
+        const SizedBox(height: 8),
         FutureBuilder<NotificationSettings?>(
           future: _settings,
           builder: (context, snapshot) {
             final settings = snapshot.data;
             if (settings == null) {
-              return const Card(
-                child: Text('Notification settings unavailable.'),
+              return const _SettingsRow(
+                icon: LucideIcons.bellOff,
+                title: 'Queue alerts unavailable',
+                subtitle: 'Notification settings could not be loaded.',
               );
             }
-            return Card(
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.bell),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Queue alerts').h3(),
-                        SizedBox(height: 4),
-                        Text('Receive notifications about your queue tickets.'),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: _queueAlerts ?? settings.queueAlerts,
-                    onChanged: _updateQueueAlerts,
-                  ),
-                ],
+            return _SettingsRow(
+              icon: LucideIcons.bell,
+              title: 'Queue alerts',
+              subtitle: 'Receive notifications about your queue tickets.',
+              trailing: Switch(
+                value: _queueAlerts ?? settings.queueAlerts,
+                onChanged: _updateQueueAlerts,
               ),
             );
           },
         ),
-        const SizedBox(height: 12),
-        OutlineButton(
-          leading: const Icon(LucideIcons.shieldCheck),
+        const Divider(),
+        const SizedBox(height: 20),
+        const Text('Security').h3(),
+        const SizedBox(height: 8),
+        _AccountAction(
+          icon: LucideIcons.shieldCheck,
+          title: 'Password, security, and MFA',
+          subtitle: 'Manage your password and sign-in protection.',
           onPressed: () => Navigator.of(context).push(
             PageRouteBuilder<void>(
               pageBuilder: (context, animation, secondaryAnimation) =>
@@ -1553,13 +2045,14 @@ class _AccountPageState extends State<AccountPage> {
               ) => FadeTransition(opacity: animation, child: child),
             ),
           ),
-          child: const Text('Password, security, and MFA'),
         ),
-        const SizedBox(height: 12),
-        OutlineButton(
-          leading: const Icon(LucideIcons.logOut),
+        const Divider(),
+        _AccountAction(
+          icon: LucideIcons.logOut,
+          title: 'Log out',
+          subtitle: 'Sign out of this device.',
           onPressed: widget.onSignOut,
-          child: const Text('Log out'),
+          destructive: true,
         ),
       ],
     );
@@ -1578,6 +2071,82 @@ class _AccountPageState extends State<AccountPage> {
     } catch (_) {
       if (mounted) setState(() => _queueAlerts = previous);
     }
+  }
+}
+
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Icon(icon),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title).h4(),
+                const SizedBox(height: 4),
+                Text(subtitle),
+              ],
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+        ],
+      ),
+    );
+  }
+}
+
+class _AccountAction extends StatelessWidget {
+  const _AccountAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onPressed;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destructive ? GetPrioTheme.destructive : GetPrioTheme.ink;
+    return SizedBox(
+      width: double.infinity,
+      child: GhostButton(
+        alignment: Alignment.centerLeft,
+        leading: Icon(icon, color: color),
+        trailing: Icon(LucideIcons.chevronRight, color: color, size: 18),
+        onPressed: onPressed,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: color)),
+            const SizedBox(height: 2),
+            Text(subtitle),
+          ],
+        ),
+      ),
+    );
   }
 }
 
