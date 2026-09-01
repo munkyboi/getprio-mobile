@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
+import 'package:getprio_mobile/app_theme.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/queue/join_ui.dart';
 import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -85,7 +87,12 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(375, 667));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
-      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+      ShadcnApp(
+        home: const MediaQuery(
+          data: MediaQueryData(size: Size(375, 667)),
+          child: CustomerShell(user: AuthUserForTest.user),
+        ),
+      ),
     );
 
     expect(find.text('Home'), findsOneWidget);
@@ -95,6 +102,27 @@ void main() {
     expect(find.text('Account'), findsOneWidget);
     expect(find.byType(NavigationItem), findsNWidgets(4));
     expect(find.byType(NavigationButton), findsOneWidget);
+
+    final homeLabel = tester.widget<Text>(find.text('Home'));
+    final exploreLabel = tester.widget<Text>(find.text('Explore'));
+    final joinLabel = tester.widget<Text>(find.text('Join Queue'));
+    expect(homeLabel.style?.fontWeight, exploreLabel.style?.fontWeight);
+    expect(homeLabel.style?.fontSize, exploreLabel.style?.fontSize);
+    expect(joinLabel.style?.fontSize, homeLabel.style?.fontSize);
+    expect(joinLabel.style?.color, GetPrioTheme.orange);
+
+    final joinCircle = find.byKey(const Key('join-queue-menu-circle'));
+    final joinLabelKey = find.byKey(const Key('join-queue-menu-label'));
+    expect(joinCircle, findsOneWidget);
+    expect(joinLabelKey, findsOneWidget);
+    expect(
+      tester.getBottomLeft(joinCircle).dy,
+      lessThan(tester.getTopLeft(joinLabelKey).dy),
+    );
+    final joinIcon = tester.widget<Icon>(
+      find.descendant(of: joinCircle, matching: find.byType(Icon)),
+    );
+    expect(joinIcon.size, greaterThanOrEqualTo(32));
     expect(
       tester.getTopLeft(find.byKey(const Key('join-queue-menu-action'))).dy,
       lessThan(
@@ -103,10 +131,35 @@ void main() {
     );
 
     await tester.tap(find.byKey(const Key('join-queue-menu-action')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
 
-    expect(find.text('Scan to join'), findsOneWidget);
-    expect(find.text('Scan QR code'), findsOneWidget);
+    expect(find.byType(QrScannerPage), findsOneWidget);
+  });
+
+  testWidgets('centers phone action button content', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(375, 667));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: const MediaQuery(
+          data: MediaQueryData(size: Size(375, 667)),
+          child: CustomerShell(user: AuthUserForTest.user),
+        ),
+      ),
+    );
+
+    final action = find.byKey(const Key('scan-to-join-button'));
+    final button = tester.widget<PrimaryButton>(
+      find.descendant(of: action, matching: find.byType(PrimaryButton)),
+    );
+    expect(button.alignment, Alignment.center);
+    expect(
+      tester.getCenter(find.text('Scan to join')).dx,
+      closeTo(tester.getCenter(action).dx, 0.5),
+    );
   });
 
   testWidgets('opens queue joining from the Home scan action', (tester) async {

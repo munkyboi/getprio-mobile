@@ -12,6 +12,7 @@ class JoinPage extends StatefulWidget {
     required this.repository,
     required this.allowedHosts,
     required this.customerName,
+    this.scanOnOpen = false,
     this.paymentBrowser,
     this.paymentApi,
   });
@@ -19,6 +20,7 @@ class JoinPage extends StatefulWidget {
   final JoinRepository? repository;
   final Set<String> allowedHosts;
   final String customerName;
+  final bool scanOnOpen;
   final PaymentBrowser? paymentBrowser;
   final PaymentApi? paymentApi;
 
@@ -33,6 +35,16 @@ class _JoinPageState extends State<JoinPage> {
   PaymentRequired? _payment;
   String? _error;
   bool _isBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.scanOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scan();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +144,7 @@ class _JoinPageState extends State<JoinPage> {
               ],
               const SizedBox(height: 24),
               if (joinedTicket != null)
-                OutlineButton(
+                GetPrioActionButton.outline(
                   onPressed: () => setState(_reset),
                   child: const Text('Scan another QR code'),
                 )
@@ -140,25 +152,25 @@ class _JoinPageState extends State<JoinPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    PrimaryButton(
+                    GetPrioActionButton.primary(
                       onPressed: _openPayment,
                       leading: const Icon(LucideIcons.externalLink),
                       child: const Text('Open secure checkout'),
                     ),
                     const SizedBox(height: 8),
-                    OutlineButton(
+                    GetPrioActionButton.outline(
                       onPressed: _checkPayment,
                       child: const Text('Check payment status'),
                     ),
                     const SizedBox(height: 8),
-                    OutlineButton(
+                    GetPrioActionButton.outline(
                       onPressed: () => setState(_reset),
                       child: const Text('Cancel and scan again'),
                     ),
                   ],
                 )
               else if (preview != null)
-                PrimaryButton(
+                GetPrioActionButton.primary(
                   onPressed: preview.joinable && !_isBusy ? _join : null,
                   child: Text(
                     _isBusy
@@ -172,7 +184,7 @@ class _JoinPageState extends State<JoinPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    PrimaryButton(
+                    GetPrioActionButton.primary(
                       key: const Key('join-scan-button'),
                       onPressed: _scan,
                       leading: const Icon(LucideIcons.scanQrCode),
@@ -421,7 +433,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
                     children: [
                       DestructiveBadge(child: Text(_error!)),
                       const SizedBox(height: 12),
-                      PrimaryButton(
+                      GetPrioActionButton.primary(
                         onPressed: _retry,
                         child: const Text('Try again'),
                       ),

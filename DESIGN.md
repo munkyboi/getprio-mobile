@@ -124,6 +124,8 @@ Use orange for action, teal for calm positive progress, and destructive red only
 
 Prefer whitespace and warm dividers over additional containers.
 
+On phone layouts, center action-button labels. Leading or trailing icons remain in their edge slots and must not shift the label away from the button's horizontal center. Larger tablet layouts may retain contextual alignment where it improves scanning.
+
 ## Navigation and information architecture
 
 Use a stable five-item bottom navigation:
@@ -134,9 +136,9 @@ Use a stable five-item bottom navigation:
 4. Tickets
 5. Account
 
-`Join Queue` is the raised center action rather than a persistent content destination. Show a QR icon above the label inside a large circular GetPrio Orange button, offset above the bar with white icon and label text. Activating it opens the dedicated QR joining screen with a clear back action and a short slide transition. Keep the Home “Scan to join” action as a second entry point when no ticket is active.
+`Join Queue` is the raised center action rather than a persistent content destination. Show only a large white QR icon inside the circular GetPrio Orange button. Place the `Join Queue` label outside and below the circle, using the same size and weight as the other navigation labels and GetPrio Orange for its color. Offset the circle above the bar. Activating it opens the camera scanner immediately with a clear back action and a short transition. Keep the Home “Scan to join” action as a second entry point when no ticket is active.
 
-Distribute all five items across the full bar width with space between them. The active content destination uses GetPrio Orange on its icon and label without a filled background. Inactive destinations use warm ink or muted ink. Keep navigation reachable while customers monitor queue activity.
+Distribute all five items across the full bar width with space between them. The active content destination uses GetPrio Orange on its icon and label without a filled background. Inactive destinations use warm ink or muted ink. Selection changes color only: do not change a navigation label's font size or weight between active and inactive states. Keep navigation reachable while customers monitor queue activity.
 
 ## Screen specifications
 

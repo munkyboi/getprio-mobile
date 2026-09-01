@@ -365,18 +365,18 @@ class _SignInPageState extends State<SignInPage> {
                   obscureText: true,
                 ),
                 const SizedBox(height: 20),
-                PrimaryButton(
+                GetPrioActionButton.primary(
                   key: const Key('sign-in-button'),
                   onPressed: _isBusy ? null : _signIn,
                   child: Text(_isBusy ? 'Signing in...' : 'Sign in'),
                 ),
                 const SizedBox(height: 8),
-                OutlineButton(
+                GetPrioActionButton.outline(
                   onPressed: _isBusy ? null : _openRegister,
                   child: const Text('Create customer account'),
                 ),
                 const SizedBox(height: 8),
-                OutlineButton(
+                GetPrioActionButton.outline(
                   onPressed: _isBusy ? null : _openPasswordRecovery,
                   child: const Text('Forgot password?'),
                 ),
@@ -387,7 +387,7 @@ class _SignInPageState extends State<SignInPage> {
                   Row(
                     children: [
                       Expanded(
-                        child: OutlineButton(
+                        child: GetPrioActionButton.outline(
                           onPressed: _isBusy
                               ? null
                               : () => _signInWithOAuth('google'),
@@ -396,7 +396,7 @@ class _SignInPageState extends State<SignInPage> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: OutlineButton(
+                        child: GetPrioActionButton.outline(
                           onPressed: _isBusy
                               ? null
                               : () => _signInWithOAuth('facebook'),
@@ -423,13 +423,13 @@ class _SignInPageState extends State<SignInPage> {
                     keyboardType: TextInputType.number,
                   ),
                 const SizedBox(height: 12),
-                PrimaryButton(
+                GetPrioActionButton.primary(
                   key: const Key('verify-mfa-button'),
                   onPressed: _isBusy ? null : () => _verifyMfa(challenge),
                   child: Text(_isBusy ? 'Verifying...' : 'Verify and continue'),
                 ),
                 const SizedBox(height: 8),
-                OutlineButton(
+                GetPrioActionButton.outline(
                   onPressed: _isBusy
                       ? null
                       : () => setState(
@@ -442,7 +442,7 @@ class _SignInPageState extends State<SignInPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                OutlineButton(
+                GetPrioActionButton.outline(
                   onPressed: _isBusy
                       ? null
                       : () => setState(() => _challenge = null),
@@ -659,7 +659,7 @@ class _RegisterPageState extends State<RegisterPage> {
               obscureText: true,
             ),
             const SizedBox(height: 20),
-            PrimaryButton(
+            GetPrioActionButton.primary(
               onPressed: _busy ? null : _register,
               child: Text(_busy ? 'Creating...' : 'Create account'),
             ),
@@ -753,7 +753,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 20),
-              PrimaryButton(
+              GetPrioActionButton.primary(
                 onPressed: _busy ? null : _request,
                 child: Text(_busy ? 'Sending...' : 'Send instructions'),
               ),
@@ -817,7 +817,7 @@ class _CustomerShellState extends State<CustomerShell> {
         CustomerNavigationBar(
           selectedDestination: _selectedDestination,
           onDestinationSelected: _selectDestination,
-          onJoinQueue: _openJoin,
+          onJoinQueue: () => _openJoin(scanImmediately: true),
         ),
       ],
       child: SafeArea(
@@ -829,7 +829,7 @@ class _CustomerShellState extends State<CustomerShell> {
             HomePage(
               user: widget.user,
               ticketRepository: widget.ticketRepository,
-              onOpenJoin: _openJoin,
+              onOpenJoin: () => _openJoin(),
             ),
             ExplorePage(repository: widget.directoryRepository),
             TicketsPage(
@@ -848,7 +848,7 @@ class _CustomerShellState extends State<CustomerShell> {
     );
   }
 
-  Future<void> _openJoin() async {
+  Future<void> _openJoin({bool scanImmediately = false}) async {
     await Navigator.of(context).push<void>(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => Scaffold(
@@ -868,6 +868,7 @@ class _CustomerShellState extends State<CustomerShell> {
             repository: widget.joinRepository,
             allowedHosts: widget.allowedHosts,
             customerName: widget.user?.customerName ?? 'Customer',
+            scanOnOpen: scanImmediately,
             paymentApi: widget.paymentApi,
           ),
         ),
@@ -953,7 +954,7 @@ class _ActiveTicketCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repository = ticketRepository;
-    if (repository == null) return _emptyCard();
+    if (repository == null) return _emptyCard(context);
     return ValueListenableBuilder<int>(
       valueListenable: repository.refreshVersion,
       builder: (context, refreshVersion, child) =>
@@ -972,7 +973,7 @@ class _ActiveTicketCard extends StatelessWidget {
                       const SizedBox(height: 12),
                       const Text('We could not refresh your active ticket.'),
                       const SizedBox(height: 12),
-                      OutlineButton(
+                      GetPrioActionButton.outline(
                         onPressed: repository.requestRefresh,
                         child: const Text('Try again'),
                       ),
@@ -984,14 +985,14 @@ class _ActiveTicketCard extends StatelessWidget {
                   snapshot.data?.where((ticket) => ticket.isActive).toList() ??
                   [];
               return active.isEmpty
-                  ? _emptyCard()
+                  ? _emptyCard(context)
                   : _ticketCard(context, active.first);
             },
           ),
     );
   }
 
-  Widget _emptyCard() {
+  Widget _emptyCard(BuildContext context) {
     return Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1012,7 +1013,7 @@ class _ActiveTicketCard extends StatelessWidget {
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            child: PrimaryButton(
+            child: GetPrioActionButton.primary(
               key: const Key('scan-to-join-button'),
               onPressed: onOpenJoin,
               leading: const Icon(LucideIcons.scanQrCode),
@@ -1076,7 +1077,7 @@ class _ActiveTicketCard extends StatelessWidget {
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            child: OutlineButton(
+            child: GetPrioActionButton.outline(
               onPressed: onOpenJoin,
               child: const Text('Join another queue'),
             ),
@@ -1202,7 +1203,7 @@ class _ExplorePageState extends State<ExplorePage> {
                       child: Text('We could not load vendors.'),
                     ),
                     const SizedBox(height: 12),
-                    OutlineButton(
+                    GetPrioActionButton.outline(
                       key: const Key('retry-vendor-directory'),
                       onPressed: _reloadVendors,
                       child: const Text('Try again'),
@@ -1589,7 +1590,10 @@ class _TicketsPageState extends State<TicketsPage> {
                 child: Text('We could not load your tickets.'),
               ),
               const SizedBox(height: 12),
-              OutlineButton(onPressed: _reload, child: const Text('Try again')),
+              GetPrioActionButton.outline(
+                onPressed: _reload,
+                child: const Text('Try again'),
+              ),
             ] else if (snapshot.data?.isEmpty ?? true)
               Card(
                 child: Column(
@@ -1681,7 +1685,7 @@ class _TicketsPageState extends State<TicketsPage> {
             _TicketProgress(ticket: ticket),
             if (canCancel) ...[
               const SizedBox(height: 20),
-              DestructiveButton(
+              GetPrioActionButton.destructive(
                 onPressed: isCancelling
                     ? null
                     : () => _confirmCancellation(ticket),
@@ -1751,11 +1755,11 @@ class _TicketsPageState extends State<TicketsPage> {
           'You will leave the queue and this action cannot be undone.',
         ),
         actions: [
-          OutlineButton(
+          GetPrioActionButton.outline(
             onPressed: () => closeOverlay(dialogContext, false),
             child: const Text('Keep ticket'),
           ),
-          DestructiveButton(
+          GetPrioActionButton.destructive(
             onPressed: () => closeOverlay(dialogContext, true),
             child: const Text('Cancel ticket'),
           ),
@@ -2199,7 +2203,7 @@ class _SecurityPageState extends State<SecurityPage> {
             obscureText: true,
           ),
           const SizedBox(height: 12),
-          PrimaryButton(
+          GetPrioActionButton.primary(
             onPressed: _busy ? null : _changePassword,
             child: Text(_busy ? 'Saving...' : 'Change password'),
           ),
@@ -2211,7 +2215,7 @@ class _SecurityPageState extends State<SecurityPage> {
           ),
           const SizedBox(height: 12),
           if (_enrollment == null)
-            OutlineButton(
+            GetPrioActionButton.outline(
               onPressed: _busy ? null : _startMfa,
               child: const Text('Set up MFA'),
             )
@@ -2234,7 +2238,7 @@ class _SecurityPageState extends State<SecurityPage> {
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
-            PrimaryButton(
+            GetPrioActionButton.primary(
               onPressed: _busy ? null : _confirmMfa,
               child: Text(_busy ? 'Confirming...' : 'Confirm MFA setup'),
             ),
@@ -2253,7 +2257,7 @@ class _SecurityPageState extends State<SecurityPage> {
                   const SizedBox(height: 12),
                   SelectableText(_recoveryCodes!.join('\n')),
                   const SizedBox(height: 12),
-                  OutlineButton(
+                  GetPrioActionButton.outline(
                     onPressed: () => setState(() => _recoveryCodes = null),
                     child: const Text('I saved these codes'),
                   ),

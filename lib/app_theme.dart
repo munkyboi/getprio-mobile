@@ -23,6 +23,12 @@ class GetPrioTheme {
     offset: Offset(0, 4),
   );
 
+  static AlignmentGeometry? actionButtonAlignment(BuildContext context) {
+    return MediaQuery.sizeOf(context).shortestSide < 600
+        ? Alignment.center
+        : null;
+  }
+
   static Widget wrap(Widget child) {
     return ComponentTheme<CardTheme>(
       data: CardTheme(
@@ -111,6 +117,89 @@ class GetPrioTheme {
             body(typography.textMuted.copyWith(fontSize: 14, color: mutedInk)),
       ),
     );
+  }
+}
+
+enum GetPrioActionButtonStyle { primary, outline, destructive }
+
+class GetPrioActionButton extends StatelessWidget {
+  const GetPrioActionButton.primary({
+    super.key,
+    required this.onPressed,
+    required this.child,
+    this.leading,
+    this.trailing,
+  }) : style = GetPrioActionButtonStyle.primary;
+
+  const GetPrioActionButton.outline({
+    super.key,
+    required this.onPressed,
+    required this.child,
+    this.leading,
+    this.trailing,
+  }) : style = GetPrioActionButtonStyle.outline;
+
+  const GetPrioActionButton.destructive({
+    super.key,
+    required this.onPressed,
+    required this.child,
+    this.leading,
+    this.trailing,
+  }) : style = GetPrioActionButtonStyle.destructive;
+
+  final GetPrioActionButtonStyle style;
+  final VoidCallback? onPressed;
+  final Widget child;
+  final Widget? leading;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final alignment = GetPrioTheme.actionButtonAlignment(context);
+    final centersPhoneLabel = alignment != null;
+    final buttonChild = centersPhoneLabel
+        ? Stack(
+            alignment: Alignment.center,
+            children: [
+              Align(alignment: Alignment.center, child: child),
+              if (leading != null)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: leading,
+                ),
+              if (trailing != null)
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: trailing,
+                ),
+            ],
+          )
+        : child;
+    final buttonLeading = centersPhoneLabel ? null : leading;
+    final buttonTrailing = centersPhoneLabel ? null : trailing;
+    return switch (style) {
+      GetPrioActionButtonStyle.primary => PrimaryButton(
+        onPressed: onPressed,
+        alignment: alignment,
+        leading: buttonLeading,
+        trailing: buttonTrailing,
+        child: buttonChild,
+      ),
+      GetPrioActionButtonStyle.outline => OutlineButton(
+        onPressed: onPressed,
+        alignment: alignment,
+        leading: buttonLeading,
+        trailing: buttonTrailing,
+        child: buttonChild,
+      ),
+      GetPrioActionButtonStyle.destructive => DestructiveButton(
+        onPressed: onPressed,
+        alignment: alignment,
+        leading: buttonLeading,
+        trailing: buttonTrailing,
+        child: buttonChild,
+      ),
+    };
   }
 }
 
