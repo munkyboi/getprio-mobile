@@ -77,8 +77,36 @@ void main() {
     expect(find.text('Scan to join'), findsOneWidget);
     expect(find.byKey(const Key('home-page')), findsOneWidget);
     expect(find.byType(Card), findsOneWidget);
+  });
+
+  testWidgets('shows five menu items and opens QR joining from the center', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(375, 667));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+    );
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Explore'), findsOneWidget);
+    expect(find.text('Join Queue'), findsOneWidget);
+    expect(find.text('Tickets'), findsOneWidget);
+    expect(find.text('Account'), findsOneWidget);
     expect(find.byType(NavigationItem), findsNWidgets(4));
-    expect(find.text('Join'), findsNothing);
+    expect(find.byType(NavigationButton), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('join-queue-menu-action'))).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const Key('customer-main-menu'))).dy,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('join-queue-menu-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Scan to join'), findsOneWidget);
+    expect(find.text('Scan QR code'), findsOneWidget);
   });
 
   testWidgets('opens queue joining from the Home scan action', (tester) async {
@@ -86,6 +114,8 @@ void main() {
       ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
     );
 
+    await tester.ensureVisible(find.byKey(const Key('scan-to-join-button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('scan-to-join-button')));
     await tester.pumpAndSettle();
 

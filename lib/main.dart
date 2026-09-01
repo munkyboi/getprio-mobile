@@ -13,6 +13,7 @@ import 'account/ticket_repository.dart';
 import 'account/account_settings_repository.dart';
 import 'account/security_repository.dart';
 import 'directory/directory_repository.dart';
+import 'navigation/customer_navigation_bar.dart';
 import 'queue/auth_queue_api.dart';
 import 'queue/join_repository.dart';
 import 'queue/join_ui.dart';
@@ -807,38 +808,23 @@ class CustomerShell extends StatefulWidget {
 }
 
 class _CustomerShellState extends State<CustomerShell> {
-  int _selectedIndex = 0;
+  CustomerDestination _selectedDestination = CustomerDestination.home;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       footers: [
-        NavigationBar(
-          backgroundColor: GetPrioTheme.paper,
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-          spacing: 2,
-          selectedKey: ValueKey(_selectedIndex),
-          onSelected: (key) {
-            if (key is ValueKey<int>) {
-              setState(() => _selectedIndex = key.value);
-              if (key.value == 2) {
-                widget.ticketRepository?.requestRefresh();
-              }
-            }
-          },
-          children: [
-            _navItem('Home', LucideIcons.house, 0),
-            _navItem('Explore', LucideIcons.compass, 1),
-            _navItem('Tickets', LucideIcons.ticket, 2),
-            _navItem('Account', LucideIcons.circleUserRound, 3),
-          ],
+        CustomerNavigationBar(
+          selectedDestination: _selectedDestination,
+          onDestinationSelected: _selectDestination,
+          onJoinQueue: _openJoin,
         ),
       ],
       child: SafeArea(
         top: true,
         bottom: false,
         child: IndexedStack(
-          index: _selectedIndex,
+          index: _selectedDestination.index,
           children: [
             HomePage(
               user: widget.user,
@@ -898,13 +884,11 @@ class _CustomerShellState extends State<CustomerShell> {
     widget.ticketRepository?.requestRefresh();
   }
 
-  NavigationItem _navItem(String label, IconData icon, int index) {
-    return NavigationItem(
-      key: ValueKey(index),
-      label: Text(label),
-      selectedStyle: const ButtonStyle.primary(density: ButtonDensity.icon),
-      child: Icon(icon),
-    );
+  void _selectDestination(CustomerDestination destination) {
+    setState(() => _selectedDestination = destination);
+    if (destination == CustomerDestination.tickets) {
+      widget.ticketRepository?.requestRefresh();
+    }
   }
 }
 

@@ -9,6 +9,7 @@ class GetPrioTheme {
   static const mutedInk = Color(0xFF735F50);
   static const orange = Color(0xFFBB4D00);
   static const orangeStrong = Color(0xFF912F00);
+  static const onPrimary = Color(0xFFFFFFFF);
   static const teal = Color(0xFF0F766E);
   static const highlight = Color(0xFFFFD166);
   static const line = Color(0x265F422A);
@@ -16,6 +17,11 @@ class GetPrioTheme {
   static const warning = Color(0xFFB77932);
   static const destructive = Color(0xFFB42318);
   static const disabled = Color(0xFFA8A096);
+  static const primaryActionShadow = BoxShadow(
+    color: Color(0x33BB4D00),
+    blurRadius: 12,
+    offset: Offset(0, 4),
+  );
 
   static Widget wrap(Widget child) {
     return ComponentTheme<CardTheme>(
@@ -42,13 +48,7 @@ class GetPrioTheme {
           data: PrimaryButtonTheme(
             decoration: _buttonDecoration(
               radius: 16,
-              shadow: const [
-                BoxShadow(
-                  color: Color(0x33BB4D00),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
-              ],
+              shadow: const [primaryActionShadow],
             ),
           ),
           child: ComponentTheme<OutlineButtonTheme>(
@@ -70,15 +70,15 @@ class GetPrioTheme {
         popover: () => card,
         popoverForeground: () => ink,
         primary: () => orange,
-        primaryForeground: () => const Color(0xFFFFFFFF),
+        primaryForeground: () => onPrimary,
         secondary: () => teal,
-        secondaryForeground: () => const Color(0xFFFFFFFF),
+        secondaryForeground: () => onPrimary,
         muted: () => const Color(0xFFF6EDE3),
         mutedForeground: () => mutedInk,
         accent: () => highlight,
         accentForeground: () => ink,
         destructive: () => destructive,
-        destructiveForeground: () => const Color(0xFFFFFFFF),
+        destructiveForeground: () => onPrimary,
         border: () => line,
         input: () => line,
         ring: () => orange,

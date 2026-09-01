@@ -14,7 +14,7 @@ The customer app supports:
 
 - Customer sign-in with email/password and OAuth2.
 - Vendor discovery and queue-capable location browsing.
-- QR-based queue joining from the primary Home action.
+- QR-based queue joining from the raised center action or the empty Home state.
 - Active and historical ticket management.
 - Ticket cancellation while the ticket is waiting.
 - Queue activity push notifications.
@@ -126,16 +126,17 @@ Prefer whitespace and warm dividers over additional containers.
 
 ## Navigation and information architecture
 
-Use a stable four-item bottom navigation:
+Use a stable five-item bottom navigation:
 
 1. Home
 2. Explore
-3. Tickets
-4. Account
+3. Join Queue
+4. Tickets
+5. Account
 
-Joining is the primary action on Home, not a permanent tab. The Home “Scan to join” action opens the dedicated QR joining screen with a clear back action and a short slide transition.
+`Join Queue` is the raised center action rather than a persistent content destination. Show a QR icon above the label inside a large circular GetPrio Orange button, offset above the bar with white icon and label text. Activating it opens the dedicated QR joining screen with a clear back action and a short slide transition. Keep the Home “Scan to join” action as a second entry point when no ticket is active.
 
-The active destination uses GetPrio Orange with a visible icon and label. Inactive destinations use warm ink or muted ink. Keep navigation reachable while customers monitor queue activity.
+Distribute all five items across the full bar width with space between them. The active content destination uses GetPrio Orange on its icon and label without a filled background. Inactive destinations use warm ink or muted ink. Keep navigation reachable while customers monitor queue activity.
 
 ## Screen specifications
 
@@ -188,7 +189,7 @@ Purpose: make the physical QR code the shortest path into a queue.
 
 Flow:
 
-1. Open the scan screen from Home.
+1. Open the scan screen from the center `Join Queue` action or empty Home state.
 2. Scan a trusted HTTPS vendor QR URL using `source=qr&id=<uuid>`.
 3. Show the vendor/location and queue details for review.
 4. Join a free queue immediately, or open secure hosted payment when required.
