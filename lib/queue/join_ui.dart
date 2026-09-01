@@ -52,6 +52,14 @@ class _JoinPageState extends State<JoinPage> {
     final preview = _preview;
     final joinedTicket = _joinedTicket;
     final payment = _payment;
+    if (preview != null && joinedTicket == null && payment == null) {
+      return JoinPreviewContent(
+        preview: preview,
+        isBusy: _isBusy,
+        onJoin: _join,
+        errorMessage: _error,
+      );
+    }
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -61,7 +69,7 @@ class _JoinPageState extends State<JoinPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (joinedTicket == null && payment == null && preview == null)
+              if (joinedTicket == null && payment == null)
                 Container(
                   height: 180,
                   decoration: BoxDecoration(
@@ -106,43 +114,10 @@ class _JoinPageState extends State<JoinPage> {
                     ? 'You are in the queue'
                     : payment != null
                     ? 'Payment required'
-                    : preview == null
-                    ? 'Join a queue'
-                    : '${preview.vendorName} · ${preview.locationName}',
+                    : 'Join a queue',
               ).h2(),
               const SizedBox(height: 8),
-              Text(_description(preview, joinedTicket, payment)),
-              if (preview != null &&
-                  joinedTicket == null &&
-                  payment == null) ...[
-                const SizedBox(height: 20),
-                Card(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Queue details').h3(),
-                      const SizedBox(height: 8),
-                      if (preview.joinable)
-                        const SecondaryBadge(child: Text('QUEUE OPEN'))
-                      else
-                        const DestructiveBadge(child: Text('UNAVAILABLE')),
-                      const SizedBox(height: 12),
-                      Text(
-                        preview.paymentRequired
-                            ? 'Fee: ${preview.currency} ${(preview.fee / 100).toStringAsFixed(2)}'
-                            : 'Free queue',
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        preview.joinable
-                            ? 'Queueing is available now.'
-                            : preview.unavailableReason ??
-                                  'Queueing is unavailable.',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              Text(_description(joinedTicket, payment)),
               const SizedBox(height: 24),
               if (joinedTicket != null)
                 GetPrioActionButton.outline(
@@ -169,17 +144,6 @@ class _JoinPageState extends State<JoinPage> {
                       child: const Text('Cancel and scan again'),
                     ),
                   ],
-                )
-              else if (preview != null)
-                GetPrioActionButton.primary(
-                  onPressed: preview.joinable && !_isBusy ? _join : null,
-                  child: Text(
-                    _isBusy
-                        ? 'Joining...'
-                        : preview.paymentRequired
-                        ? 'Continue to payment'
-                        : 'Join queue',
-                  ),
                 )
               else
                 Column(
@@ -216,22 +180,13 @@ class _JoinPageState extends State<JoinPage> {
     );
   }
 
-  String _description(
-    JoinPreview? preview,
-    JoinedTicket? joinedTicket,
-    PaymentRequired? payment,
-  ) {
+  String _description(JoinedTicket? joinedTicket, PaymentRequired? payment) {
     if (joinedTicket != null) {
       final ticket = joinedTicket.ticket;
       return 'Ticket ${ticket.ticketNumber ?? ticket.lookupCode} is confirmed.';
     }
     if (payment != null) {
       return 'The queue requires payment before a ticket can be created.';
-    }
-    if (preview != null) {
-      return preview.joinable
-          ? 'Review the queue details before joining.'
-          : 'This queue cannot accept new tickets right now.';
     }
     return 'Scan the QR code displayed by a vendor. The app will identify the location and show the available queue.';
   }
@@ -302,7 +257,17 @@ class _JoinPageState extends State<JoinPage> {
           );
       }
     } catch (error) {
-      if (mounted) setState(() => _error = _messageFor(error));
+      if (mounted) {
+        final message = _messageFor(error);
+        setState(() {
+          if (error is JoinUnavailableException && _preview != null) {
+            _preview = _preview!.asUnavailable(message);
+            _error = null;
+          } else {
+            _error = message;
+          }
+        });
+      }
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
@@ -373,6 +338,248 @@ class _JoinPageState extends State<JoinPage> {
     }
     return 'We could not load this queue. Check your connection and try again.';
   }
+}
+
+class JoinPreviewContent extends StatelessWidget {
+  const JoinPreviewContent({
+    super.key,
+    required this.preview,
+    required this.isBusy,
+    required this.onJoin,
+    this.errorMessage,
+  });
+
+  final JoinPreview preview;
+  final bool isBusy;
+  final VoidCallback onJoin;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = preview.vendorProfile;
+    final location = _profileLocation(profile);
+    final vendorName = profile?.name ?? preview.vendorName;
+    final category = profile?.category;
+    final description = profile?.description;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _JoinVendorProfileMedia(profile: profile, vendorName: vendorName),
+              const SizedBox(height: 24),
+              Text(vendorName).h2(),
+              if (category != null) ...[
+                const SizedBox(height: 4),
+                Text(category, style: Theme.of(context).typography.textMuted),
+              ],
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(LucideIcons.mapPin, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(location?.name ?? preview.locationName),
+                        if (location?.address != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            location!.address!,
+                            style: Theme.of(context).typography.textMuted,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (description != null) ...[
+                const SizedBox(height: 16),
+                Text(description, maxLines: 3, overflow: TextOverflow.ellipsis),
+              ],
+              const SizedBox(height: 24),
+              Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Queue details').h3(),
+                    const SizedBox(height: 8),
+                    if (preview.joinable)
+                      const SecondaryBadge(child: Text('QUEUE OPEN'))
+                    else
+                      const OutlineBadge(child: Text('UNAVAILABLE')),
+                    const SizedBox(height: 12),
+                    Text(
+                      preview.paymentRequired
+                          ? 'Fee: ${preview.currency} ${(preview.fee / 100).toStringAsFixed(2)}'
+                          : 'Free queue',
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      preview.joinable
+                          ? 'Queueing is available now.'
+                          : preview.unavailableReason ??
+                                'Queueing is unavailable.',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              GetPrioActionButton.primary(
+                onPressed: preview.joinable && !isBusy ? onJoin : null,
+                child: Text(
+                  isBusy
+                      ? 'Joining...'
+                      : preview.paymentRequired
+                      ? 'Continue to payment'
+                      : 'Join queue',
+                ),
+              ),
+              if (errorMessage != null) ...[
+                const SizedBox(height: 16),
+                DestructiveBadge(child: Text(errorMessage!)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  JoinVendorLocation? _profileLocation(JoinVendorProfile? profile) {
+    if (profile == null || profile.locations.isEmpty) return null;
+    final locationSlug = preview.locationSlug;
+    if (locationSlug != null) {
+      for (final location in profile.locations) {
+        if (location.slug == locationSlug) return location;
+      }
+      return null;
+    }
+    for (final location in profile.locations) {
+      if (location.name == preview.locationName) return location;
+    }
+    return profile.locations.first;
+  }
+}
+
+class _JoinVendorProfileMedia extends StatelessWidget {
+  const _JoinVendorProfileMedia({
+    required this.profile,
+    required this.vendorName,
+  });
+
+  final JoinVendorProfile? profile;
+  final String vendorName;
+
+  @override
+  Widget build(BuildContext context) {
+    const logoSize = 96.0;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        key: const Key('join-vendor-cover'),
+        height: 210,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _cover(),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x33000000), Color(0x0D000000)],
+                ),
+              ),
+            ),
+            Center(
+              child: Container(
+                key: const Key('join-vendor-logo'),
+                width: logoSize,
+                height: logoSize,
+                padding: const EdgeInsets.all(5),
+                decoration: const BoxDecoration(
+                  color: GetPrioTheme.card,
+                  shape: BoxShape.circle,
+                  border: Border.fromBorderSide(
+                    BorderSide(color: Color(0xF2FFFFFF), width: 4),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x3D23180F),
+                      blurRadius: 24,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ClipOval(child: _logo()),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cover() {
+    final imageUrl = profile?.coverImageUrl;
+    if (imageUrl == null) {
+      return Container(
+        color: GetPrioTheme.paperAccent,
+        padding: const EdgeInsets.all(24),
+        child: const Image(
+          image: AssetImage(
+            'assets/illustrations/hero-queue-scene-transparent.png',
+          ),
+          fit: BoxFit.contain,
+          semanticLabel: 'Vendor profile cover',
+        ),
+      );
+    }
+    return Image.network(
+      imageUrl,
+      fit: _joinProfileBoxFit(profile?.coverImageFit, BoxFit.cover),
+      semanticLabel: '$vendorName profile cover',
+      errorBuilder: (context, error, stackTrace) => Container(
+        color: GetPrioTheme.paperAccent,
+        child: const Icon(LucideIcons.store, size: 48),
+      ),
+    );
+  }
+
+  Widget _logo() {
+    final logoUrl = profile?.logoUrl;
+    if (logoUrl == null) {
+      return const ColoredBox(
+        color: GetPrioTheme.card,
+        child: Icon(LucideIcons.store, size: 38),
+      );
+    }
+    return Image.network(
+      logoUrl,
+      fit: _joinProfileBoxFit(profile?.logoFit, BoxFit.cover),
+      semanticLabel: '$vendorName logo',
+      errorBuilder: (context, error, stackTrace) => const ColoredBox(
+        color: GetPrioTheme.card,
+        child: Icon(LucideIcons.store, size: 38),
+      ),
+    );
+  }
+}
+
+BoxFit _joinProfileBoxFit(JoinProfileImageFit? value, BoxFit fallback) {
+  return switch (value) {
+    JoinProfileImageFit.contain => BoxFit.contain,
+    JoinProfileImageFit.cover => BoxFit.cover,
+    _ => fallback,
+  };
 }
 
 class QrScannerPage extends StatefulWidget {

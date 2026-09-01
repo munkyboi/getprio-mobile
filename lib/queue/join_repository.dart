@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../auth/auth_repository.dart';
 import 'auth_queue_api.dart';
 import 'queue_models.dart';
 
@@ -79,29 +80,56 @@ class JoinPreview {
     required this.vendorName,
     required this.locationName,
     required this.joinable,
+    this.vendorSlug,
+    this.locationSlug,
     this.unavailableReason,
+    this.vendorProfile,
     this.fee = 0,
     this.currency = 'PHP',
   });
 
   final String locationQrId;
   final String vendorName;
+  final String? vendorSlug;
   final String locationName;
+  final String? locationSlug;
   final bool joinable;
   final String? unavailableReason;
+  final JoinVendorProfile? vendorProfile;
   final num fee;
   final String currency;
 
   bool get paymentRequired => fee > 0;
 
+  JoinPreview asUnavailable(String reason) {
+    return JoinPreview(
+      locationQrId: locationQrId,
+      vendorName: vendorName,
+      vendorSlug: vendorSlug,
+      locationName: locationName,
+      locationSlug: locationSlug,
+      joinable: false,
+      unavailableReason: reason,
+      vendorProfile: vendorProfile,
+      fee: fee,
+      currency: currency,
+    );
+  }
+
   factory JoinPreview.fromJson(Map<String, dynamic> json) {
+    final vendorProfile = json['vendorProfile'];
     return JoinPreview(
       locationQrId: json['locationQrId'] as String? ?? '',
       vendorName: json['vendorName'] as String? ?? 'Vendor',
+      vendorSlug: _joinText([json['vendorSlug'] as String?]),
       locationName: json['locationName'] as String? ?? 'Location',
+      locationSlug: _joinText([json['locationSlug'] as String?]),
       joinable: json['joinable'] as bool? ?? false,
       unavailableReason:
           json['unavailableReason'] as String? ?? json['reason'] as String?,
+      vendorProfile: vendorProfile is Map<String, dynamic>
+          ? JoinVendorProfile.fromJson(vendorProfile)
+          : null,
       fee: json['amountCents'] is num
           ? (json['amountCents'] as num)
           : json['fee'] is num
@@ -110,6 +138,137 @@ class JoinPreview {
       currency: json['currency'] as String? ?? 'PHP',
     );
   }
+}
+
+class JoinVendorLocation {
+  const JoinVendorLocation({required this.name, this.slug, this.address});
+
+  final String name;
+  final String? slug;
+  final String? address;
+
+  factory JoinVendorLocation.fromJson(Map<String, dynamic> json) {
+    return JoinVendorLocation(
+      name: _joinText([json['name'] as String?]) ?? 'Location',
+      slug: _joinText([json['slug'] as String?]),
+      address: _joinAddress([
+        json['addressLine1'] as String?,
+        json['addressLine2'] as String?,
+        json['city'] as String?,
+        json['province'] as String?,
+        json['postalCode']?.toString(),
+        json['country'] as String?,
+      ]),
+    );
+  }
+}
+
+enum JoinProfileImageFit { contain, cover }
+
+class JoinVendorProfile {
+  const JoinVendorProfile({
+    required this.slug,
+    required this.name,
+    this.category,
+    this.description,
+    this.logoUrl,
+    this.logoFit,
+    this.coverImageUrl,
+    this.coverImageFit,
+    this.locations = const [],
+  });
+
+  final String slug;
+  final String name;
+  final String? category;
+  final String? description;
+  final String? logoUrl;
+  final JoinProfileImageFit? logoFit;
+  final String? coverImageUrl;
+  final JoinProfileImageFit? coverImageFit;
+  final List<JoinVendorLocation> locations;
+
+  factory JoinVendorProfile.fromJson(Map<String, dynamic> json) {
+    final themeContainer = _joinMap(json['businessProfileTheme']);
+    final theme = _joinMap(themeContainer?['theme']) ?? themeContainer;
+    final rawLocations = json['locations'];
+    return JoinVendorProfile(
+      slug: json['slug'] as String? ?? '',
+      name: _joinText([json['name'] as String?]) ?? 'Vendor',
+      category: _joinText([json['category'] as String?]),
+      description: _joinPlainText(json['description'] as String?),
+      logoUrl: _joinText([
+        theme?['logoUrl'] as String?,
+        json['logoUrl'] as String?,
+        json['imageUrl'] as String?,
+      ]),
+      logoFit: _joinImageFit(theme?['logoFit']),
+      coverImageUrl: _joinText([
+        theme?['backgroundImageUrl'] as String?,
+        json['coverImageUrl'] as String?,
+      ]),
+      coverImageFit: _joinImageFit(theme?['backgroundImageFit']),
+      locations: rawLocations is List
+          ? rawLocations
+                .whereType<Map<String, dynamic>>()
+                .map(JoinVendorLocation.fromJson)
+                .toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+JoinProfileImageFit? _joinImageFit(Object? value) {
+  return switch (value?.toString().trim().toLowerCase()) {
+    'contain' => JoinProfileImageFit.contain,
+    'cover' => JoinProfileImageFit.cover,
+    _ => null,
+  };
+}
+
+Map<String, dynamic>? _joinMap(Object? value) =>
+    value is Map<String, dynamic> ? value : null;
+
+String? _joinText(Iterable<String?> values) {
+  for (final value in values) {
+    final normalized = value?.trim();
+    if (normalized != null && normalized.isNotEmpty) return normalized;
+  }
+  return null;
+}
+
+String? _joinAddress(Iterable<String?> values) {
+  final parts = values
+      .map((value) => value?.trim())
+      .whereType<String>()
+      .where((value) => value.isNotEmpty)
+      .toList(growable: false);
+  return parts.isEmpty ? null : parts.join(', ');
+}
+
+String? _joinPlainText(String? html) {
+  final source = html?.trim();
+  if (source == null || source.isEmpty) return null;
+  final withLineBreaks = source
+      .replaceAll(RegExp(r'<\s*br\s*/?\s*>', caseSensitive: false), '\n')
+      .replaceAll(
+        RegExp(r'</\s*(p|div|li|h[1-6])\s*>', caseSensitive: false),
+        '\n',
+      )
+      .replaceAll(RegExp(r'<[^>]+>'), '');
+  final decoded = withLineBreaks
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'");
+  final lines = decoded
+      .split(RegExp(r'[\r\n]+'))
+      .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
+      .where((line) => line.isNotEmpty)
+      .toList(growable: false);
+  return lines.isEmpty ? null : lines.join('\n');
 }
 
 abstract interface class JoinApi {
@@ -166,11 +325,19 @@ class JoinRepository {
       );
     }
 
-    final response = await api.join(
-      locationQrId: locationQrId,
-      joinAttemptId: _newAttemptId(),
-      customerName: customerName,
-    );
+    late final Map<String, dynamic> response;
+    try {
+      response = await api.join(
+        locationQrId: locationQrId,
+        joinAttemptId: _newAttemptId(),
+        customerName: customerName,
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 403 || _isQueueUnavailableApiCode(error.code)) {
+        throw JoinUnavailableException(error.message);
+      }
+      rethrow;
+    }
     final ticket = response['ticket'];
     if (ticket is Map<String, dynamic>) {
       return JoinedTicket(QueueTicket.fromJson(ticket));
@@ -219,17 +386,48 @@ class JoinUnavailableException implements Exception {
   String toString() => message;
 }
 
+const _queueUnavailableApiCodes = {
+  'QUEUE_JOIN_UNAVAILABLE',
+  'QUEUE_INTAKE_PAUSED',
+  'QUEUE_DAY_UNOPENED',
+  'QUEUE_DAY_OVERDUE',
+  'QUEUE_DAY_CLOSED',
+  'QUEUE_OUTSIDE_EFFECTIVE_HOURS',
+  'QUEUE_STATE_CHANGED',
+  'ALLOWANCE_QUEUE_TICKETS_EXHAUSTED',
+};
+
+bool _isQueueUnavailableApiCode(String? code) {
+  return code != null &&
+      (_queueUnavailableApiCodes.contains(code) ||
+          code.startsWith('SUBSCRIPTION_'));
+}
+
 class RestJoinApi implements JoinApi {
   RestJoinApi(this.client);
 
   final AuthenticatedApiClient client;
 
   @override
-  Future<Map<String, dynamic>> resolve(String locationQrId) {
-    return client.get(
+  Future<Map<String, dynamic>> resolve(String locationQrId) async {
+    final queue = await client.get(
       '/api/mobile/queue-join/resolve',
       queryParameters: {'id': locationQrId},
     );
+    final vendorSlug = queue['vendorSlug'];
+    if (vendorSlug is! String || vendorSlug.trim().isEmpty) return queue;
+
+    try {
+      final profileResponse = await client.get(
+        '/api/public/vendors/${vendorSlug.trim()}',
+      );
+      final vendor = profileResponse['vendor'];
+      return vendor is Map<String, dynamic>
+          ? {...queue, 'vendorProfile': vendor}
+          : queue;
+    } on Exception {
+      return queue;
+    }
   }
 
   @override
