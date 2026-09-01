@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -30,12 +32,16 @@ class JoinPage extends StatefulWidget {
 }
 
 class _JoinPageState extends State<JoinPage> {
+  final _drawerAnchorKey = GlobalKey();
   QrJoinPayload? _payload;
   JoinPreview? _preview;
   JoinedTicket? _joinedTicket;
   PaymentRequired? _payment;
   String? _error;
   bool _isBusy = false;
+  bool _checkoutSheetOpen = false;
+  DrawerOverlayCompleter<void>? _checkoutSheetCompleter;
+  BuildContext? _checkoutSheetContext;
 
   @override
   void initState() {
@@ -49,14 +55,21 @@ class _JoinPageState extends State<JoinPage> {
 
   @override
   Widget build(BuildContext context) {
+    return DrawerOverlay(
+      child: Builder(key: _drawerAnchorKey, builder: _buildContent),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final preview = _preview;
     final joinedTicket = _joinedTicket;
     final payment = _payment;
-    if (preview != null && joinedTicket == null && payment == null) {
+    if (preview != null && joinedTicket == null) {
       return JoinPreviewContent(
         preview: preview,
         isBusy: _isBusy,
-        onJoin: _join,
+        onJoin: payment == null ? _join : _showCheckoutSheet,
+        actionLabel: payment == null ? null : 'Resume checkout',
         errorMessage: _error,
       );
     }
@@ -69,7 +82,7 @@ class _JoinPageState extends State<JoinPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (joinedTicket == null && payment == null)
+              if (joinedTicket == null)
                 Container(
                   height: 180,
                   decoration: BoxDecoration(
@@ -90,60 +103,27 @@ class _JoinPageState extends State<JoinPage> {
                   child: Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: joinedTicket != null
-                          ? GetPrioTheme.teal
-                          : GetPrioTheme.paperAccent,
+                      color: GetPrioTheme.teal,
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Icon(
-                      joinedTicket != null
-                          ? LucideIcons.circleCheck
-                          : payment != null
-                          ? LucideIcons.creditCard
-                          : LucideIcons.scanQrCode,
-                      color: joinedTicket != null
-                          ? const Color(0xFFFFFFFF)
-                          : GetPrioTheme.ink,
+                    child: const Icon(
+                      LucideIcons.circleCheck,
+                      color: Color(0xFFFFFFFF),
                       size: 40,
                     ),
                   ),
                 ),
               const SizedBox(height: 20),
               Text(
-                joinedTicket != null
-                    ? 'You are in the queue'
-                    : payment != null
-                    ? 'Payment required'
-                    : 'Join a queue',
+                joinedTicket != null ? 'You are in the queue' : 'Join a queue',
               ).h2(),
               const SizedBox(height: 8),
-              Text(_description(joinedTicket, payment)),
+              Text(_description(joinedTicket)),
               const SizedBox(height: 24),
               if (joinedTicket != null)
                 GetPrioActionButton.outline(
                   onPressed: () => setState(_reset),
                   child: const Text('Scan another QR code'),
-                )
-              else if (payment != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    GetPrioActionButton.primary(
-                      onPressed: _openPayment,
-                      leading: const Icon(LucideIcons.externalLink),
-                      child: const Text('Open secure checkout'),
-                    ),
-                    const SizedBox(height: 8),
-                    GetPrioActionButton.outline(
-                      onPressed: _checkPayment,
-                      child: const Text('Check payment status'),
-                    ),
-                    const SizedBox(height: 8),
-                    GetPrioActionButton.outline(
-                      onPressed: () => setState(_reset),
-                      child: const Text('Cancel and scan again'),
-                    ),
-                  ],
                 )
               else
                 Column(
@@ -162,13 +142,6 @@ class _JoinPageState extends State<JoinPage> {
                     ),
                   ],
                 ),
-              if (payment != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Complete checkout, then check payment status. A ticket is created only after the server confirms payment.',
-                  textAlign: TextAlign.center,
-                ),
-              ],
               if (_error != null) ...[
                 const SizedBox(height: 16),
                 DestructiveBadge(child: Text(_error!)),
@@ -180,13 +153,10 @@ class _JoinPageState extends State<JoinPage> {
     );
   }
 
-  String _description(JoinedTicket? joinedTicket, PaymentRequired? payment) {
+  String _description(JoinedTicket? joinedTicket) {
     if (joinedTicket != null) {
       final ticket = joinedTicket.ticket;
       return 'Ticket ${ticket.ticketNumber ?? ticket.lookupCode} is confirmed.';
-    }
-    if (payment != null) {
-      return 'The queue requires payment before a ticket can be created.';
     }
     return 'Scan the QR code displayed by a vendor. The app will identify the location and show the available queue.';
   }
@@ -247,14 +217,14 @@ class _JoinPageState extends State<JoinPage> {
           :final tenantSlug,
           :final locationSlug,
         ):
-          setState(
-            () => _payment = PaymentRequired(
-              paymentAttemptId: paymentAttemptId,
-              checkoutUrl: checkoutUrl,
-              tenantSlug: tenantSlug,
-              locationSlug: locationSlug,
-            ),
+          final payment = PaymentRequired(
+            paymentAttemptId: paymentAttemptId,
+            checkoutUrl: checkoutUrl,
+            tenantSlug: tenantSlug,
+            locationSlug: locationSlug,
           );
+          setState(() => _payment = payment);
+          unawaited(_showCheckoutSheet());
       }
     } catch (error) {
       if (mounted) {
@@ -273,54 +243,75 @@ class _JoinPageState extends State<JoinPage> {
     }
   }
 
-  Future<void> _openPayment() async {
+  Future<void> _showCheckoutSheet() async {
     final payment = _payment;
-    if (payment == null) return;
-    final opened = await (widget.paymentBrowser ?? ExternalPaymentBrowser())
-        .open(payment.checkoutUrl);
-    if (!opened && mounted) {
-      setState(() => _error = 'Secure checkout could not be opened.');
+    final overlayContext = _drawerAnchorKey.currentContext;
+    if (payment == null ||
+        _checkoutSheetOpen ||
+        !mounted ||
+        overlayContext == null ||
+        !overlayContext.mounted) {
+      return;
+    }
+    _checkoutSheetOpen = true;
+    final preview = _preview;
+    try {
+      final completer = openDrawerOverlay<void>(
+        context: overlayContext,
+        position: OverlayPosition.bottom,
+        expands: false,
+        draggable: true,
+        useSafeArea: false,
+        borderRadius: CheckoutBottomSheet.borderRadius,
+        transformBackdrop: false,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        builder: (sheetContext) {
+          _checkoutSheetContext = sheetContext;
+          return CheckoutBottomSheet(
+            payment: payment,
+            fee: preview?.fee ?? 0,
+            currency: preview?.currency ?? 'PHP',
+            paymentBrowser: widget.paymentBrowser ?? ExternalPaymentBrowser(),
+            paymentApi: widget.paymentApi,
+            onPaid: (ticket) =>
+                _confirmPayment(payment.paymentAttemptId, ticket),
+            onCancel: () {
+              if (mounted) setState(_reset);
+            },
+          );
+        },
+      );
+      _checkoutSheetCompleter = completer;
+      await completer.future;
+    } finally {
+      _checkoutSheetContext = null;
+      _checkoutSheetCompleter = null;
+      _checkoutSheetOpen = false;
     }
   }
 
-  Future<void> _checkPayment() async {
-    final payment = _payment;
-    final api = widget.paymentApi;
-    if (payment == null || api == null || payment.tenantSlug == null) {
-      if (mounted) {
-        setState(
-          () => _error =
-              'Payment status checking is not configured for this build.',
-        );
-      }
-      return;
-    }
+  void _confirmPayment(String paymentAttemptId, QueueTicket ticket) {
+    if (!mounted || _payment?.paymentAttemptId != paymentAttemptId) return;
     setState(() {
+      _joinedTicket = JoinedTicket(ticket);
+      _payment = null;
       _error = null;
-      _isBusy = true;
     });
-    try {
-      final response = await api.sync(
-        paymentAttemptId: payment.paymentAttemptId,
-        tenantSlug: payment.tenantSlug!,
-        locationSlug: payment.locationSlug,
-      );
-      final ticket = response['ticket'];
-      if (ticket is Map<String, dynamic> && mounted) {
-        setState(() {
-          _joinedTicket = JoinedTicket(QueueTicket.fromJson(ticket));
-          _payment = null;
-        });
-      } else if (mounted) {
-        setState(
-          () => _error =
-              'Payment is not confirmed yet. Complete checkout and try again.',
-        );
-      }
-    } catch (error) {
-      if (mounted) setState(() => _error = _messageFor(error));
-    } finally {
-      if (mounted) setState(() => _isBusy = false);
+
+    final sheetContext = _checkoutSheetContext;
+    final completer = _checkoutSheetCompleter;
+    final animationStatus = completer?.animationController?.status;
+    final isAlreadyClosing =
+        animationStatus == AnimationStatus.reverse ||
+        animationStatus == AnimationStatus.dismissed;
+    if (sheetContext != null && sheetContext.mounted && !isAlreadyClosing) {
+      unawaited(closeSheet(sheetContext));
+    } else if (sheetContext == null &&
+        completer != null &&
+        !completer.isCompleted) {
+      completer.remove();
     }
   }
 
@@ -340,18 +331,244 @@ class _JoinPageState extends State<JoinPage> {
   }
 }
 
+class CheckoutBottomSheet extends StatefulWidget {
+  const CheckoutBottomSheet({
+    super.key,
+    required this.payment,
+    required this.fee,
+    required this.currency,
+    required this.paymentBrowser,
+    required this.paymentApi,
+    required this.onPaid,
+    required this.onCancel,
+  });
+
+  static const borderRadius = BorderRadius.vertical(top: Radius.circular(28));
+
+  final PaymentRequired payment;
+  final num fee;
+  final String currency;
+  final PaymentBrowser paymentBrowser;
+  final PaymentApi? paymentApi;
+  final ValueChanged<QueueTicket> onPaid;
+  final VoidCallback onCancel;
+
+  @override
+  State<CheckoutBottomSheet> createState() => _CheckoutBottomSheetState();
+}
+
+class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
+  bool _isBusy = false;
+  String? _error;
+
+  Future<void> _openCheckout() async {
+    setState(() {
+      _isBusy = true;
+      _error = null;
+    });
+    var opened = false;
+    try {
+      opened = await widget.paymentBrowser.open(widget.payment.checkoutUrl);
+    } catch (_) {
+      opened = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _isBusy = false;
+      if (!opened) {
+        _error = 'Secure checkout could not be opened.';
+      }
+    });
+  }
+
+  Future<void> _checkPayment() async {
+    final api = widget.paymentApi;
+    final payment = widget.payment;
+    final tenantSlug = payment.tenantSlug;
+    final onPaid = widget.onPaid;
+    if (api == null || tenantSlug == null) {
+      setState(
+        () => _error =
+            'Payment status checking is not configured for this build.',
+      );
+      return;
+    }
+    setState(() {
+      _isBusy = true;
+      _error = null;
+    });
+    try {
+      final response = await api.sync(
+        paymentAttemptId: payment.paymentAttemptId,
+        tenantSlug: tenantSlug,
+        locationSlug: payment.locationSlug,
+      );
+      final ticket = response['ticket'];
+      if (ticket is Map<String, dynamic>) {
+        onPaid(QueueTicket.fromJson(ticket));
+        return;
+      }
+      if (!mounted) return;
+      setState(
+        () => _error =
+            'Payment is not confirmed yet. Complete checkout and try again.',
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'We could not check this payment. Check your connection and try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _cancel() async {
+    final onCancel = widget.onCancel;
+    await closeSheet(context);
+    onCancel();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return BlockSemantics(
+      child: Semantics(
+        key: const Key('checkout-bottom-sheet'),
+        container: true,
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Secure checkout',
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: const BoxDecoration(
+            color: GetPrioTheme.card,
+            borderRadius: CheckoutBottomSheet.borderRadius,
+          ),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Secure checkout',
+                          style: theme.typography.h2.copyWith(fontSize: 28),
+                        ),
+                      ),
+                      Semantics(
+                        button: true,
+                        label: 'Close checkout',
+                        child: GhostButton(
+                          key: const Key('checkout-close'),
+                          onPressed: _isBusy ? null : () => closeSheet(context),
+                          density: ButtonDensity.icon,
+                          child: const Icon(LucideIcons.x),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Your ticket is created only after the server confirms payment.',
+                    style: theme.typography.p.copyWith(
+                      color: GetPrioTheme.mutedInk,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: GetPrioTheme.paperAccent,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.creditCard, size: 24),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Queue fee',
+                                style: theme.typography.small.copyWith(
+                                  color: GetPrioTheme.mutedInk,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${widget.currency} ${(widget.fee / 100).toStringAsFixed(2)}',
+                                style: theme.typography.h3,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  GetPrioActionButton.primary(
+                    key: const Key('checkout-open'),
+                    onPressed: _isBusy ? null : _openCheckout,
+                    leading: const Icon(LucideIcons.externalLink, size: 18),
+                    child: Text(
+                      _isBusy ? 'Please wait...' : 'Open secure checkout',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  GetPrioActionButton.outline(
+                    key: const Key('checkout-check-status'),
+                    onPressed: _isBusy ? null : _checkPayment,
+                    child: const Text('Check payment status'),
+                  ),
+                  const SizedBox(height: 10),
+                  GetPrioActionButton.outline(
+                    key: const Key('checkout-cancel'),
+                    onPressed: _isBusy ? null : _cancel,
+                    child: const Text('Cancel and scan again'),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 14),
+                    Semantics(
+                      liveRegion: true,
+                      child: DestructiveBadge(child: Text(_error!)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class JoinPreviewContent extends StatelessWidget {
   const JoinPreviewContent({
     super.key,
     required this.preview,
     required this.isBusy,
     required this.onJoin,
+    this.actionLabel,
     this.errorMessage,
   });
 
   final JoinPreview preview;
   final bool isBusy;
   final VoidCallback onJoin;
+  final String? actionLabel;
   final String? errorMessage;
 
   @override
@@ -437,6 +654,8 @@ class JoinPreviewContent extends StatelessWidget {
                 child: Text(
                   isBusy
                       ? 'Joining...'
+                      : actionLabel != null
+                      ? actionLabel!
                       : preview.paymentRequired
                       ? 'Continue to payment'
                       : 'Join queue',
