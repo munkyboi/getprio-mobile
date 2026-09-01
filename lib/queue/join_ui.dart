@@ -2,6 +2,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
+import '../navigation/swipe_back_page_route.dart';
 import 'join_repository.dart';
 import 'payment_flow.dart';
 import 'queue_models.dart';
@@ -237,11 +238,8 @@ class _JoinPageState extends State<JoinPage> {
 
   Future<void> _scan() async {
     final payload = await Navigator.of(context).push<QrJoinPayload>(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            QrScannerPage(allowedHosts: widget.allowedHosts),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-            FadeTransition(opacity: animation, child: child),
+      SwipeBackPageRoute<QrJoinPayload>(
+        builder: (context) => QrScannerPage(allowedHosts: widget.allowedHosts),
       ),
     );
     if (!mounted) return;

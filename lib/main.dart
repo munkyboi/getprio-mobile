@@ -14,6 +14,7 @@ import 'account/account_settings_repository.dart';
 import 'account/security_repository.dart';
 import 'directory/directory_repository.dart';
 import 'navigation/customer_navigation_bar.dart';
+import 'navigation/swipe_back_page_route.dart';
 import 'queue/auth_queue_api.dart';
 import 'queue/join_repository.dart';
 import 'queue/join_ui.dart';
@@ -533,24 +534,20 @@ class _SignInPageState extends State<SignInPage> {
 
   void _openRegister() {
     Navigator.of(context).push(
-      PageRouteBuilder<void>(
-        pageBuilder: (context, animation, secondaryAnimation) => RegisterPage(
+      SwipeBackPageRoute<void>(
+        builder: (context) => RegisterPage(
           authRepository: widget.authRepository,
           onAuthenticated: widget.onAuthenticated,
         ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-            FadeTransition(opacity: animation, child: child),
       ),
     );
   }
 
   void _openPasswordRecovery() {
     Navigator.of(context).push(
-      PageRouteBuilder<void>(
-        pageBuilder: (context, animation, secondaryAnimation) =>
+      SwipeBackPageRoute<void>(
+        builder: (context) =>
             PasswordRecoveryPage(authRepository: widget.authRepository),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-            FadeTransition(opacity: animation, child: child),
       ),
     );
   }
@@ -850,8 +847,8 @@ class _CustomerShellState extends State<CustomerShell> {
 
   Future<void> _openJoin({bool scanImmediately = false}) async {
     await Navigator.of(context).push<void>(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => Scaffold(
+      SwipeBackPageRoute<void>(
+        builder: (context) => Scaffold(
           headers: [
             AppBar(
               title: const Text('Scan to join'),
@@ -872,14 +869,6 @@ class _CustomerShellState extends State<CustomerShell> {
             paymentApi: widget.paymentApi,
           ),
         ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-            SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(1, 0),
-                end: Offset.zero,
-              ).animate(animation),
-              child: child,
-            ),
       ),
     );
     widget.ticketRepository?.requestRefresh();
@@ -1310,15 +1299,9 @@ class _VendorCard extends StatelessWidget {
     return CardButton(
       onPressed: () {
         Navigator.of(context).push(
-          PageRouteBuilder<void>(
-            pageBuilder: (context, animation, secondaryAnimation) =>
+          SwipeBackPageRoute<void>(
+            builder: (context) =>
                 VendorDetailPage(vendor: vendor, repository: repository),
-            transitionsBuilder: (
-              context,
-              animation,
-              secondaryAnimation,
-              child,
-            ) => FadeTransition(opacity: animation, child: child),
           ),
         );
       },
@@ -2083,18 +2066,11 @@ class _AccountPageState extends State<AccountPage> {
           title: 'Password, security, and MFA',
           subtitle: 'Manage your password and sign-in protection.',
           onPressed: () => Navigator.of(context).push(
-            PageRouteBuilder<void>(
-              pageBuilder: (context, animation, secondaryAnimation) =>
-                  SecurityPage(
-                    repository: widget.securityRepository,
-                    onPasswordChanged: widget.onSignOut,
-                  ),
-              transitionsBuilder: (
-                context,
-                animation,
-                secondaryAnimation,
-                child,
-              ) => FadeTransition(opacity: animation, child: child),
+            SwipeBackPageRoute<void>(
+              builder: (context) => SecurityPage(
+                repository: widget.securityRepository,
+                onPasswordChanged: widget.onSignOut,
+              ),
             ),
           ),
         ),
