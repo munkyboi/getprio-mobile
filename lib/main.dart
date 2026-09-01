@@ -1367,7 +1367,7 @@ class _VendorCard extends StatelessWidget {
   }
 }
 
-class VendorDetailPage extends StatelessWidget {
+class VendorDetailPage extends StatefulWidget {
   const VendorDetailPage({
     super.key,
     required this.vendor,
@@ -1376,6 +1376,50 @@ class VendorDetailPage extends StatelessWidget {
 
   final VendorSummary vendor;
   final DirectoryRepository repository;
+
+  @override
+  State<VendorDetailPage> createState() => _VendorDetailPageState();
+}
+
+class _VendorDetailPageState extends State<VendorDetailPage> {
+  late Future<VendorSummary> _details;
+
+  @override
+  void initState() {
+    super.initState();
+    _details = widget.repository.loadVendor(widget.vendor.slug);
+  }
+
+  @override
+  void didUpdateWidget(covariant VendorDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository ||
+        oldWidget.vendor.slug != widget.vendor.slug) {
+      _details = widget.repository.loadVendor(widget.vendor.slug);
+    }
+  }
+
+  Future<void> _refresh() async {
+    final details = widget.repository.loadVendor(widget.vendor.slug);
+    setState(() {
+      _details = details;
+    });
+    try {
+      await details;
+    } catch (_) {
+      // FutureBuilder renders the recoverable inline error state.
+    }
+  }
+
+  Widget _refreshableMessage(Widget child) {
+    return CustomScrollView(
+      key: const Key('vendor-details-scroll'),
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverFillRemaining(hasScrollBody: false, child: Center(child: child)),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1392,92 +1436,112 @@ class VendorDetailPage extends StatelessWidget {
           ],
         ),
       ],
-      child: FutureBuilder<VendorSummary>(
-        future: repository.loadVendor(vendor.slug),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: Text('Loading vendor details...'));
-          }
-          if (snapshot.hasError) {
-            return const Center(
-              child: DestructiveBadge(
-                child: Text('Vendor details are unavailable.'),
-              ),
+      child: RefreshTrigger(
+        key: const Key('vendor-details-refresh'),
+        onRefresh: _refresh,
+        child: FutureBuilder<VendorSummary>(
+          future: _details,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return _refreshableMessage(
+                const Text('Loading vendor details...'),
+              );
+            }
+            if (snapshot.hasError) {
+              return _refreshableMessage(
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const DestructiveBadge(
+                      child: Text('Vendor details are unavailable.'),
+                    ),
+                    const SizedBox(height: 12),
+                    GetPrioActionButton.outline(
+                      key: const Key('retry-vendor-details'),
+                      onPressed: _refresh,
+                      child: const Text('Try again'),
+                    ),
+                  ],
+                ),
+              );
+            }
+            final details = snapshot.data ?? widget.vendor;
+            final openLocations = details.locations
+                .where((location) => location.queueAvailable)
+                .length;
+            return ListView(
+              key: const Key('vendor-details-scroll'),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              children: [
+                Container(
+                  height: 180,
+                  decoration: BoxDecoration(
+                    color: GetPrioTheme.paperAccent,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Image(
+                    image: AssetImage(
+                      'assets/illustrations/hero-queue-scene-transparent.png',
+                    ),
+                    fit: BoxFit.contain,
+                    semanticLabel: 'Illustration of a customer at a queue',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(details.name).h1(),
+                if (details.category != null) ...[
+                  const SizedBox(height: 4),
+                  Text(details.category!),
+                ],
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _VendorHighlight(
+                        value: '${details.locations.length}',
+                        label: 'Locations',
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 48,
+                      child: VerticalDivider(width: 1, thickness: 1),
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: _VendorHighlight(
+                        value: '$openLocations',
+                        label: 'Queues open',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                const Text('Queue-capable locations').h3(),
+                const SizedBox(height: 12),
+                if (details.locations.isEmpty)
+                  const Card(
+                    child: Text('No queue-capable locations are listed.'),
+                  )
+                else ...[
+                  for (
+                    var index = 0;
+                    index < details.locations.length;
+                    index++
+                  ) ...[
+                    _VendorLocationRow(location: details.locations[index]),
+                    if (index < details.locations.length - 1) const Divider(),
+                  ],
+                ],
+                const SizedBox(height: 16),
+                const Text(
+                  'To join a queue, return to Home and scan the QR code displayed at the location.',
+                ),
+              ],
             );
-          }
-          final details = snapshot.data ?? vendor;
-          final openLocations = details.locations
-              .where((location) => location.queueAvailable)
-              .length;
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Container(
-                height: 180,
-                decoration: BoxDecoration(
-                  color: GetPrioTheme.paperAccent,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Image(
-                  image: AssetImage(
-                    'assets/illustrations/hero-queue-scene-transparent.png',
-                  ),
-                  fit: BoxFit.contain,
-                  semanticLabel: 'Illustration of a customer at a queue',
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(details.name).h1(),
-              if (details.category != null) ...[
-                const SizedBox(height: 4),
-                Text(details.category!),
-              ],
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: _VendorHighlight(
-                      value: '${details.locations.length}',
-                      label: 'Locations',
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 48,
-                    child: VerticalDivider(width: 1, thickness: 1),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: _VendorHighlight(
-                      value: '$openLocations',
-                      label: 'Queues open',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              const Text('Queue-capable locations').h3(),
-              const SizedBox(height: 12),
-              if (details.locations.isEmpty)
-                const Card(
-                  child: Text('No queue-capable locations are listed.'),
-                )
-              else ...[
-                for (
-                  var index = 0;
-                  index < details.locations.length;
-                  index++
-                ) ...[
-                  _VendorLocationRow(location: details.locations[index]),
-                  if (index < details.locations.length - 1) const Divider(),
-                ],
-              ],
-              const SizedBox(height: 16),
-              const Text(
-                'To join a queue, return to Home and scan the QR code displayed at the location.',
-              ),
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
   }

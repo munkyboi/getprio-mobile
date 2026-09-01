@@ -7,6 +7,7 @@ import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
 import 'package:getprio_mobile/queue/join_ui.dart';
+import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -231,6 +232,110 @@ void main() {
     expect(find.text('Quick Bank'), findsNothing);
   });
 
+  testWidgets('pulls down to refresh vendor details with short content', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = FakeDirectoryApi();
+    final repository = DirectoryRepository(api);
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: VendorDetailPage(
+          vendor: const VendorSummary(
+            slug: 'city-clinic',
+            name: 'City Clinic',
+            queueAvailable: true,
+            category: 'Clinic',
+            locations: [
+              VendorLocation(
+                id: 'clinic-1',
+                name: 'Main Clinic',
+                queueAvailable: true,
+              ),
+            ],
+          ),
+          repository: repository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.vendorDetailCalls, 1);
+    expect(find.text('City Clinic'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('vendor-details-scroll')),
+      const Offset(0, 300),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.vendorDetailCalls, 2);
+    expect(find.text('City Clinic refreshed'), findsOneWidget);
+  });
+
+  testWidgets('retries unavailable vendor details with the inline action', (
+    tester,
+  ) async {
+    final api = FakeDirectoryApi(failFirstVendorDetail: true);
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: VendorDetailPage(
+          vendor: const VendorSummary(
+            slug: 'city-clinic',
+            name: 'City Clinic',
+            queueAvailable: true,
+          ),
+          repository: DirectoryRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vendor details are unavailable.'), findsOneWidget);
+    expect(find.byKey(const Key('retry-vendor-details')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('retry-vendor-details')));
+    await tester.pumpAndSettle();
+
+    expect(api.vendorDetailCalls, 2);
+    expect(find.text('City Clinic refreshed'), findsOneWidget);
+    expect(find.text('Vendor details are unavailable.'), findsNothing);
+  });
+
+  testWidgets('handles a failed vendor detail refresh and offers retry', (
+    tester,
+  ) async {
+    final api = FakeDirectoryApi(failAfterFirstVendorDetail: true);
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: VendorDetailPage(
+          vendor: const VendorSummary(
+            slug: 'city-clinic',
+            name: 'City Clinic',
+            queueAvailable: true,
+          ),
+          repository: DirectoryRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('vendor-details-scroll')),
+      const Offset(0, 300),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.vendorDetailCalls, 2);
+    expect(find.text('Vendor details are unavailable.'), findsOneWidget);
+    expect(find.byKey(const Key('retry-vendor-details')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('separates active tickets from lightweight history', (
     tester,
   ) async {
@@ -347,12 +452,34 @@ class UnusedAuthApi implements AuthApi {
 }
 
 class FakeDirectoryApi implements DirectoryApi {
+  FakeDirectoryApi({
+    this.failFirstVendorDetail = false,
+    this.failAfterFirstVendorDetail = false,
+  });
+
+  final bool failFirstVendorDetail;
+  final bool failAfterFirstVendorDetail;
+  int vendorDetailCalls = 0;
+
   @override
-  Future<Map<String, dynamic>> loadVendor(String tenantSlug) async => {
-    'slug': tenantSlug,
-    'name': 'City Clinic',
-    'queueAvailable': true,
-  };
+  Future<Map<String, dynamic>> loadVendor(String tenantSlug) async {
+    vendorDetailCalls++;
+    if (failFirstVendorDetail && vendorDetailCalls == 1) {
+      throw StateError('Vendor details request failed.');
+    }
+    if (failAfterFirstVendorDetail && vendorDetailCalls > 1) {
+      throw StateError('Vendor details refresh failed.');
+    }
+    return {
+      'slug': tenantSlug,
+      'name': vendorDetailCalls == 1 ? 'City Clinic' : 'City Clinic refreshed',
+      'category': 'Clinic',
+      'queueAvailable': true,
+      'locations': [
+        {'id': 'clinic-1', 'name': 'Main Clinic', 'queueAvailable': true},
+      ],
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> loadVendors({
