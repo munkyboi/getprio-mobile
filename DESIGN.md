@@ -86,23 +86,23 @@ Use orange for action, teal for calm positive progress, and destructive red only
 
 ### Typefaces
 
-- **Display:** Georgia, weight 700–800. Use for screen titles, welcome moments, vendor names, and large ticket numbers.
+- **Display:** Georgia, weight 700. Use for screen titles, welcome moments, vendor names, and large ticket numbers.
 - **UI:** Inter, weight 400–700. Use for navigation, buttons, labels, forms, badges, metadata, and explanatory copy.
 
 ### Type scale
 
 | Style | Size · Weight · Line height | Use |
 | --- | --- | --- |
-| Display large | 36px · 800 · 1.10 | Auth welcome and major moments |
-| Display | 32px · 800 · 1.15 | Home and ticket titles |
-| Title | 26px · 800 · 1.20 | Vendor and detail titles |
-| Heading | 22px · 800 · 1.25 | Section headings |
-| Heading small | 18px · 700 · 1.30 | Card and status groups |
+| Display large | 32px · 700 · 1.15 | Auth welcome and major moments |
+| Display | 28px · 700 · 1.20 | Home and ticket titles |
+| Title | 24px · 700 · 1.20 | Vendor and detail titles |
+| Heading | 20px · 700 · 1.30 | Section headings |
+| Heading small | 17px · 700 · 1.35 | Card and status groups |
 | Body large | 16px · 400 · 1.50 | Guidance and onboarding copy |
 | Body | 14px · 400 · 1.50 | Standard content and vendor details |
 | Label | 13px · 600 · 1.30 | Buttons, chips, badges, and form labels |
 | Caption | 12px · 500 · 1.35 | Metadata and timestamps |
-| Ticket | 30px · 800 · 1.10 | Ticket number and queue position |
+| Ticket | 28px · 700 · 1.15 | Ticket number and queue position |
 
 ## Spacing, shape, and elevation
 
@@ -191,13 +191,13 @@ Purpose: make the physical QR code the shortest path into a queue.
 
 Flow:
 
-1. Open the scan screen from the center `Join Queue` action or empty Home state.
+1. Open the camera scanner immediately from the center `Join Queue` action or empty Home state.
 2. Scan a trusted HTTPS vendor QR URL using `source=qr&id=<uuid>`.
 3. Show the vendor/location and queue details for review.
 4. Join a free queue immediately, or open secure hosted payment when required.
 5. Show a confirmation state only after the server confirms the ticket.
 
-The scan screen should use the queue illustration, a clear camera state, permission guidance, retry action, and an error state for invalid or unapproved hosts.
+The camera scanner is the first screen in this flow. Show a clear framing guide plus recoverable invalid-host and scan-error states. Put camera guidance in the permission-denied state, where it is actionable; do not insert a static illustration or explanation screen before the camera.
 
 ### Tickets
 

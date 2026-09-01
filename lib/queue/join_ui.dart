@@ -15,7 +15,6 @@ class JoinPage extends StatefulWidget {
     required this.repository,
     required this.allowedHosts,
     required this.customerName,
-    this.scanOnOpen = false,
     this.paymentBrowser,
     this.paymentApi,
   });
@@ -23,7 +22,6 @@ class JoinPage extends StatefulWidget {
   final JoinRepository? repository;
   final Set<String> allowedHosts;
   final String customerName;
-  final bool scanOnOpen;
   final PaymentBrowser? paymentBrowser;
   final PaymentApi? paymentApi;
 
@@ -46,11 +44,13 @@ class _JoinPageState extends State<JoinPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.scanOnOpen) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scan();
-      });
-    }
+    _scheduleScan();
+  }
+
+  void _scheduleScan() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scan();
+    });
   }
 
   @override
@@ -73,6 +73,21 @@ class _JoinPageState extends State<JoinPage> {
         errorMessage: _error,
       );
     }
+    if (joinedTicket == null) return _buildScannerTransition();
+    return _buildConfirmation(joinedTicket);
+  }
+
+  Widget _buildScannerTransition() {
+    final error = _error;
+    if (error == null) {
+      return const Center(
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -82,70 +97,28 @@ class _JoinPageState extends State<JoinPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (joinedTicket == null)
-                Container(
-                  height: 180,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: GetPrioTheme.paperAccent,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(18),
                   ),
-                  child: const Image(
-                    image: AssetImage(
-                      'assets/illustrations/hero-queue-scene-transparent.png',
-                    ),
-                    fit: BoxFit.contain,
-                    semanticLabel: 'Illustration of joining a vendor queue',
-                  ),
-                )
-              else
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: GetPrioTheme.teal,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      LucideIcons.circleCheck,
-                      color: Color(0xFFFFFFFF),
-                      size: 40,
-                    ),
-                  ),
+                  child: const Icon(LucideIcons.scanLine, size: 32),
                 ),
+              ),
               const SizedBox(height: 20),
-              Text(
-                joinedTicket != null ? 'You are in the queue' : 'Join a queue',
-              ).h2(),
+              const Text('Could not open this queue').h3(),
               const SizedBox(height: 8),
-              Text(_description(joinedTicket)),
+              Text(error),
               const SizedBox(height: 24),
-              if (joinedTicket != null)
-                GetPrioActionButton.outline(
-                  onPressed: () => setState(_reset),
-                  child: const Text('Scan another QR code'),
-                )
-              else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    GetPrioActionButton.primary(
-                      key: const Key('join-scan-button'),
-                      onPressed: _scan,
-                      leading: const Icon(LucideIcons.scanQrCode),
-                      child: const Text('Scan QR code'),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Camera access is used only while scanning a vendor QR code.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                DestructiveBadge(child: Text(_error!)),
-              ],
+              GetPrioActionButton.primary(
+                key: const Key('join-rescan-button'),
+                onPressed: _scanAgain,
+                leading: const Icon(LucideIcons.scanQrCode),
+                child: const Text('Scan another QR code'),
+              ),
             ],
           ),
         ),
@@ -153,12 +126,48 @@ class _JoinPageState extends State<JoinPage> {
     );
   }
 
-  String _description(JoinedTicket? joinedTicket) {
-    if (joinedTicket != null) {
-      final ticket = joinedTicket.ticket;
-      return 'Ticket ${ticket.ticketNumber ?? ticket.lookupCode} is confirmed.';
-    }
-    return 'Scan the QR code displayed by a vendor. The app will identify the location and show the available queue.';
+  Widget _buildConfirmation(JoinedTicket joinedTicket) {
+    final ticket = joinedTicket.ticket;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: GetPrioTheme.teal,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    LucideIcons.circleCheck,
+                    color: Color(0xFFFFFFFF),
+                    size: 40,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text('You are in the queue').h2(),
+              const SizedBox(height: 8),
+              Text(
+                'Ticket ${ticket.ticketNumber ?? ticket.lookupCode} is confirmed.',
+              ),
+              const SizedBox(height: 24),
+              GetPrioActionButton.outline(
+                onPressed: _scanAgain,
+                child: const Text('Scan another QR code'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _scan() async {
@@ -277,9 +286,7 @@ class _JoinPageState extends State<JoinPage> {
             paymentApi: widget.paymentApi,
             onPaid: (ticket) =>
                 _confirmPayment(payment.paymentAttemptId, ticket),
-            onCancel: () {
-              if (mounted) setState(_reset);
-            },
+            onCancel: _scanAgain,
           );
         },
       );
@@ -321,6 +328,12 @@ class _JoinPageState extends State<JoinPage> {
     _joinedTicket = null;
     _payment = null;
     _error = null;
+  }
+
+  void _scanAgain() {
+    if (!mounted) return;
+    setState(_reset);
+    _scheduleScan();
   }
 
   String _messageFor(Object error) {
@@ -839,14 +852,18 @@ class _QrScannerPageState extends State<QrScannerPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          MobileScanner(controller: _controller, onDetect: _handleDetect),
-          Center(
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white, width: 3),
-                borderRadius: BorderRadius.circular(20),
+          MobileScanner(
+            controller: _controller,
+            onDetect: _handleDetect,
+            errorBuilder: _buildCameraError,
+            overlayBuilder: (context, constraints) => Center(
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white, width: 3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
               ),
             ),
           ),
@@ -873,6 +890,14 @@ class _QrScannerPageState extends State<QrScannerPage> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCameraError(BuildContext context, MobileScannerException error) {
+    return _ScannerCameraError(
+      permissionDenied:
+          error.errorCode == MobileScannerErrorCode.permissionDenied,
+      onBack: () => Navigator.of(context).pop(),
     );
   }
 
@@ -903,5 +928,74 @@ class _QrScannerPageState extends State<QrScannerPage> {
       _handled = false;
     });
     _controller.start();
+  }
+}
+
+class _ScannerCameraError extends StatelessWidget {
+  const _ScannerCameraError({
+    required this.permissionDenied,
+    required this.onBack,
+  });
+
+  final bool permissionDenied;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ColoredBox(
+      key: const Key('scanner-camera-error'),
+      color: const Color(0xFF111111),
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Semantics(
+                liveRegion: true,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Icon(
+                      LucideIcons.cameraOff,
+                      color: Color(0xFFFFFFFF),
+                      size: 44,
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      permissionDenied
+                          ? 'Camera access is off'
+                          : 'Camera unavailable',
+                      textAlign: TextAlign.center,
+                      style: theme.typography.h3.copyWith(
+                        color: const Color(0xFFFFFFFF),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      permissionDenied
+                          ? 'Open Settings and allow camera access for GetPrio, then return and scan again.'
+                          : 'We could not start the camera on this device. Go back and try again.',
+                      textAlign: TextAlign.center,
+                      style: theme.typography.p.copyWith(
+                        color: const Color(0xFFD7D1CA),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    GetPrioActionButton.primary(
+                      onPressed: onBack,
+                      leading: const Icon(LucideIcons.arrowLeft),
+                      child: const Text('Go back'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

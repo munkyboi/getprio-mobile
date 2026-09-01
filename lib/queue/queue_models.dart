@@ -165,6 +165,9 @@ class VendorSummary {
     required this.queueAvailable,
     this.category,
     this.locations = const [],
+    this.imageUrl,
+    this.logoUrl,
+    this.logoFit,
   });
 
   final String slug;
@@ -172,10 +175,25 @@ class VendorSummary {
   final bool queueAvailable;
   final String? category;
   final List<VendorLocation> locations;
+  final String? imageUrl;
+  final String? logoUrl;
+  final String? logoFit;
 
   factory VendorSummary.fromJson(Map<String, dynamic> json) {
     final capabilities = json['capabilities'];
-    final locations = json['locations'];
+    final rawLocations = json['locations'];
+    final locations = rawLocations is List
+        ? rawLocations
+              .whereType<Map<String, dynamic>>()
+              .map(VendorLocation.fromJson)
+              .toList(growable: false)
+        : const <VendorLocation>[];
+    final themeContainer =
+        _asMap(json['businessProfileTheme']) ??
+        _asMap(json['publicBoardTheme']) ??
+        _asMap(json['profileTheme']);
+    final theme = _asMap(themeContainer?['theme']) ?? themeContainer;
+    final imageUrl = _firstNonBlank([json['imageUrl'] as String?]);
     return VendorSummary(
       slug: json['slug'] as String? ?? '',
       name: json['name'] as String? ?? 'Vendor',
@@ -185,12 +203,13 @@ class VendorSummary {
               ? capabilities['queue'] as bool? ?? false
               : false),
       category: json['category'] as String?,
-      locations: locations is List
-          ? locations
-                .whereType<Map<String, dynamic>>()
-                .map(VendorLocation.fromJson)
-                .toList(growable: false)
-          : const [],
+      locations: locations,
+      imageUrl: imageUrl,
+      logoUrl: _firstNonBlank([
+        theme?['logoUrl'] as String?,
+        json['logoUrl'] as String?,
+      ]),
+      logoFit: _firstNonBlank([theme?['logoFit'] as String?]),
     );
   }
 }
@@ -211,3 +230,6 @@ String? _firstNonBlank(Iterable<String?> values) {
   }
   return null;
 }
+
+Map<String, dynamic>? _asMap(Object? value) =>
+    value is Map<String, dynamic> ? value : null;

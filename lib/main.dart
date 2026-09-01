@@ -814,7 +814,7 @@ class _CustomerShellState extends State<CustomerShell> {
         CustomerNavigationBar(
           selectedDestination: _selectedDestination,
           onDestinationSelected: _selectDestination,
-          onJoinQueue: () => _openJoin(scanImmediately: true),
+          onJoinQueue: _openJoin,
         ),
       ],
       child: SafeArea(
@@ -826,7 +826,7 @@ class _CustomerShellState extends State<CustomerShell> {
             HomePage(
               user: widget.user,
               ticketRepository: widget.ticketRepository,
-              onOpenJoin: () => _openJoin(),
+              onOpenJoin: _openJoin,
             ),
             ExplorePage(repository: widget.directoryRepository),
             TicketsPage(
@@ -845,7 +845,7 @@ class _CustomerShellState extends State<CustomerShell> {
     );
   }
 
-  Future<void> _openJoin({bool scanImmediately = false}) async {
+  Future<void> _openJoin() async {
     await Navigator.of(context).push<void>(
       SwipeBackPageRoute<void>(
         builder: (context) => Scaffold(
@@ -865,7 +865,6 @@ class _CustomerShellState extends State<CustomerShell> {
             repository: widget.joinRepository,
             allowedHosts: widget.allowedHosts,
             customerName: widget.user?.customerName ?? 'Customer',
-            scanOnOpen: scanImmediately,
             paymentApi: widget.paymentApi,
           ),
         ),
@@ -1031,7 +1030,7 @@ class _ActiveTicketCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '#${ticket.ticketNumber ?? ticket.lookupCode}',
-            style: Theme.of(context).typography.h2.copyWith(fontSize: 30),
+            style: GetPrioTheme.ticketStyle(Theme.of(context)),
           ),
           if (ticket.locationName != null) ...[
             const SizedBox(height: 4),
@@ -1088,10 +1087,7 @@ class _StatMetric extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          value,
-          style: Theme.of(context).typography.h2.copyWith(fontSize: 30),
-        ),
+        Text(value, style: GetPrioTheme.ticketStyle(Theme.of(context))),
         const SizedBox(height: 4),
         Text(label),
       ],
@@ -1307,14 +1303,7 @@ class _VendorCard extends StatelessWidget {
       },
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: GetPrioTheme.paperAccent,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(LucideIcons.store),
-          ),
+          _VendorDirectoryMedia(vendor: vendor),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1345,6 +1334,55 @@ class _VendorCard extends StatelessWidget {
           const SizedBox(width: 8),
           const Icon(LucideIcons.chevronRight, size: 18),
         ],
+      ),
+    );
+  }
+}
+
+class _VendorDirectoryMedia extends StatelessWidget {
+  const _VendorDirectoryMedia({required this.vendor});
+
+  final VendorSummary vendor;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = vendor.logoUrl ?? vendor.imageUrl;
+    return Semantics(
+      key: ValueKey('vendor-profile-media-${vendor.slug}'),
+      container: true,
+      image: true,
+      excludeSemantics: true,
+      label: imageUrl == null
+          ? '${vendor.name} profile media unavailable'
+          : '${vendor.name} profile media',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          width: 64,
+          height: 64,
+          child: ColoredBox(
+            color: GetPrioTheme.paperAccent,
+            child: imageUrl == null
+                ? _fallback()
+                : Image.network(
+                    imageUrl,
+                    fit: _vendorBoxFit(vendor.logoFit, BoxFit.cover),
+                    excludeFromSemantics: true,
+                    errorBuilder: (context, error, stackTrace) => _fallback(),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fallback() {
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: SvgPicture.asset(
+        'assets/branding/logo.svg',
+        fit: BoxFit.contain,
+        excludeFromSemantics: true,
       ),
     );
   }
@@ -1530,6 +1568,19 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
   }
 }
 
+BoxFit _vendorBoxFit(String? value, BoxFit fallback) {
+  return switch (value?.trim().toLowerCase()) {
+    'contain' => BoxFit.contain,
+    'fill' => BoxFit.fill,
+    'fitwidth' || 'fit-width' => BoxFit.fitWidth,
+    'fitheight' || 'fit-height' => BoxFit.fitHeight,
+    'none' => BoxFit.none,
+    'scaledown' || 'scale-down' => BoxFit.scaleDown,
+    'cover' => BoxFit.cover,
+    _ => fallback,
+  };
+}
+
 class _VendorHighlight extends StatelessWidget {
   const _VendorHighlight({required this.value, required this.label});
 
@@ -1698,7 +1749,7 @@ class _TicketsPageState extends State<TicketsPage> {
             const SizedBox(height: 12),
             Text(
               '#${ticket.ticketNumber ?? ticket.lookupCode}',
-              style: Theme.of(context).typography.h2.copyWith(fontSize: 30),
+              style: GetPrioTheme.ticketStyle(Theme.of(context)),
             ),
             if (ticket.locationName != null) ...[
               const SizedBox(height: 4),

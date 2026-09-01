@@ -61,10 +61,15 @@ void main() {
       expect(paymentApi.lastLocationSlug, 'main');
       expect(find.byKey(const Key('checkout-bottom-sheet')), findsNothing);
       expect(find.text('You are in the queue'), findsOneWidget);
+
+      await tester.tap(find.text('Scan another QR code'));
+      await tester.pumpAndSettle();
+      expect(find.byType(QrScannerPage), findsOneWidget);
+      expect(find.text('Join a queue'), findsNothing);
     },
   );
 
-  testWidgets('cancel discards the checkout attempt and returns to scanning', (
+  testWidgets('cancel discards the checkout attempt and reopens the scanner', (
     tester,
   ) async {
     final api = _CheckoutJoinApi();
@@ -81,7 +86,8 @@ void main() {
 
     expect(find.byKey(const Key('checkout-bottom-sheet')), findsNothing);
     expect(find.text('Resume checkout'), findsNothing);
-    expect(find.byKey(const Key('join-scan-button')), findsOneWidget);
+    expect(find.byType(QrScannerPage), findsOneWidget);
+    expect(find.text('Join a queue'), findsNothing);
     expect(api.joinCalls, 1);
   });
 
@@ -138,7 +144,6 @@ Future<void> _openPaidCheckout(
     ),
   );
 
-  await tester.tap(find.byKey(const Key('join-scan-button')));
   await tester.pumpAndSettle();
   final scanner = tester.widget<MobileScanner>(find.byType(MobileScanner));
   scanner.onDetect!(

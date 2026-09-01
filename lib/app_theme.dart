@@ -96,8 +96,8 @@ class GetPrioTheme {
       return style.copyWith(
         color: ink,
         fontFamily: 'Georgia',
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.8,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.4,
       );
     }
 
@@ -108,15 +108,23 @@ class GetPrioTheme {
     return base.copyWith(
       typography: () => typography.copyWith(
         sans: () => typography.sans.copyWith(fontFamily: 'Inter'),
-        h1: () => heading(typography.h1.copyWith(fontSize: 36, height: 1.1)),
-        h2: () => heading(typography.h2.copyWith(fontSize: 32, height: 1.15)),
-        h3: () => heading(typography.h3.copyWith(fontSize: 22, height: 1.25)),
-        h4: () => heading(typography.h4.copyWith(fontSize: 18, height: 1.3)),
+        h1: () => heading(typography.h1.copyWith(fontSize: 32, height: 1.15)),
+        h2: () => heading(typography.h2.copyWith(fontSize: 28, height: 1.2)),
+        h3: () => heading(typography.h3.copyWith(fontSize: 20, height: 1.3)),
+        h4: () => heading(typography.h4.copyWith(fontSize: 17, height: 1.35)),
         p: () => body(typography.p.copyWith(fontSize: 16)),
         textMuted: () =>
             body(typography.textMuted.copyWith(fontSize: 14, color: mutedInk)),
       ),
     );
+  }
+
+  static TextStyle titleStyle(ThemeData theme) {
+    return theme.typography.h2.copyWith(fontSize: 24, height: 1.2);
+  }
+
+  static TextStyle ticketStyle(ThemeData theme) {
+    return theme.typography.h2.copyWith(fontSize: 28, height: 1.15);
   }
 }
 

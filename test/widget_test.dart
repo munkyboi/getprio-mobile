@@ -163,7 +163,9 @@ void main() {
     );
   });
 
-  testWidgets('opens queue joining from the Home scan action', (tester) async {
+  testWidgets('opens the scanner directly from the Home scan action', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
     );
@@ -173,8 +175,8 @@ void main() {
     await tester.tap(find.byKey(const Key('scan-to-join-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Scan to join'), findsOneWidget);
-    expect(find.text('Scan QR code'), findsOneWidget);
+    expect(find.byType(QrScannerPage), findsOneWidget);
+    expect(find.text('Join a queue'), findsNothing);
   });
 
   testWidgets('switches between customer areas', (tester) async {

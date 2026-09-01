@@ -52,10 +52,49 @@ void main() {
 
     expect(find.byType(QrScannerPage), findsNothing);
     expect(find.byType(JoinPage), findsOneWidget);
+    expect(find.text('Join a queue'), findsNothing);
     expect(
       find.text('Queue API is not configured for this build.'),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('join-rescan-button')), findsOneWidget);
+  });
+
+  testWidgets('explains how to recover when camera permission is denied', (
+    tester,
+  ) async {
+    await _pumpScannerFlow(tester);
+    await _openScanner(tester);
+
+    final scannerFinder = find.byType(MobileScanner);
+    final scanner = tester.widget<MobileScanner>(scannerFinder);
+    expect(scanner.errorBuilder, isNotNull);
+
+    final scannerContext = tester.element(scannerFinder);
+    final errorState = scanner.errorBuilder!(
+      scannerContext,
+      const MobileScannerException(
+        errorCode: MobileScannerErrorCode.permissionDenied,
+      ),
+    );
+    final errorOverlay = OverlayEntry(
+      builder: (context) => SizedBox.expand(child: errorState),
+    );
+    Overlay.of(scannerContext).insert(errorOverlay);
+    await tester.pump();
+
+    expect(find.byKey(const Key('scanner-camera-error')), findsOneWidget);
+    expect(find.text('Camera access is off'), findsOneWidget);
+    expect(find.textContaining('Settings'), findsOneWidget);
+    expect(find.text('Go back'), findsOneWidget);
+
+    await tester.tap(find.text('Go back'));
+    if (errorOverlay.mounted) errorOverlay.remove();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QrScannerPage), findsNothing);
+    expect(find.byType(JoinPage), findsNothing);
+    expect(find.byKey(const Key('home-page')), findsOneWidget);
   });
 }
 
