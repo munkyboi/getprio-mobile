@@ -244,7 +244,12 @@ class _JoinPageState extends State<JoinPage> {
             FadeTransition(opacity: animation, child: child),
       ),
     );
-    if (!mounted || payload == null) return;
+    if (!mounted) return;
+    if (payload == null) {
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+      return;
+    }
     final repository = widget.repository;
     if (repository == null) {
       setState(() => _error = 'Queue API is not configured for this build.');
