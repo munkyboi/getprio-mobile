@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:async/async.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../queue/auth_queue_api.dart';
@@ -228,6 +229,13 @@ class FirebaseMessagingPort implements PushMessagingPort {
       sound: true,
       provisional: true,
     );
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
     return switch (settings.authorizationStatus) {
       AuthorizationStatus.authorized => PushPermission.authorized,
       AuthorizationStatus.provisional => PushPermission.provisional,
