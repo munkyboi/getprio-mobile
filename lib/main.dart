@@ -9,6 +9,8 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'auth/auth_models.dart';
 import 'auth/oauth_flow.dart';
 import 'auth/auth_repository.dart';
+import 'auth/password_utils.dart';
+import 'auth/username_utils.dart';
 import 'account/ticket_repository.dart';
 import 'account/account_settings_repository.dart';
 import 'account/security_repository.dart';
@@ -23,6 +25,7 @@ import 'queue/queue_models.dart';
 import 'queue/queue_repository.dart';
 import 'push/push_coordinator.dart';
 import 'app_theme.dart';
+import 'feedback_toast.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -242,6 +245,11 @@ class _LabeledTextField extends StatelessWidget {
     this.inputKey,
     this.keyboardType,
     this.obscureText = false,
+    this.onChanged,
+    this.supportingText,
+    this.supportingTextColor,
+    this.inputFormatters,
+    this.maxLength,
   });
 
   final String label;
@@ -250,6 +258,11 @@ class _LabeledTextField extends StatelessWidget {
   final Key? inputKey;
   final TextInputType? keyboardType;
   final bool obscureText;
+  final ValueChanged<String>? onChanged;
+  final String? supportingText;
+  final Color? supportingTextColor;
+  final List<TextInputFormatter>? inputFormatters;
+  final int? maxLength;
 
   @override
   Widget build(BuildContext context) {
@@ -271,7 +284,19 @@ class _LabeledTextField extends StatelessWidget {
           placeholder: Text(placeholder),
           keyboardType: keyboardType,
           obscureText: obscureText,
+          onChanged: onChanged,
+          inputFormatters: inputFormatters,
+          maxLength: maxLength,
         ),
+        if (supportingText != null && supportingText!.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            supportingText!,
+            style: theme.typography.small.copyWith(
+              color: supportingTextColor ?? GetPrioTheme.mutedInk,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -581,24 +606,47 @@ class _RegisterPageState extends State<RegisterPage> {
   final _username = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  String? _error;
+  final _otp = TextEditingController();
+  Timer? _nameDebounceTimer;
+  Timer? _usernameCheckTimer;
+  Timer? _passwordStrengthTimer;
+  int _usernameCheckId = 0;
+  int _passwordStrengthId = 0;
   bool _busy = false;
+  bool _usernameManuallyEdited = false;
+  bool _usernameAvailable = false;
+  bool _checkingUsername = false;
+  String _usernameMessage = '';
+  PasswordStrength? _passwordStrength;
+  CustomerRegistrationChallenge? _registrationChallenge;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.addListener(_handleNameChanged);
+  }
 
   @override
   void dispose() {
+    _nameDebounceTimer?.cancel();
+    _usernameCheckTimer?.cancel();
+    _passwordStrengthTimer?.cancel();
+    _name.removeListener(_handleNameChanged);
     _name.dispose();
     _username.dispose();
     _email.dispose();
     _password.dispose();
+    _otp.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final challenge = _registrationChallenge;
     return Scaffold(
       headers: [
         AppBar(
-          title: const Text('Create account'),
+          title: Text(challenge == null ? 'Create account' : 'Verify email'),
           leading: [
             GhostButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -610,87 +658,476 @@ class _RegisterPageState extends State<RegisterPage> {
       ],
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('Customer registration').h1(),
-            const SizedBox(height: 8),
-            const Text(
-              'Use a display name when you want staff to call you by a preferred name.',
-            ),
-            const SizedBox(height: 12),
-            const SizedBox(
-              height: 150,
-              child: Image(
-                image: AssetImage(
-                  'assets/illustrations/customer-onboarding.png',
-                ),
-                fit: BoxFit.contain,
-                semanticLabel: 'Illustration of a customer using GetPrio',
-              ),
-            ),
-            const SizedBox(height: 20),
-            _LabeledTextField(
-              controller: _name,
-              label: 'Display name',
-              placeholder: 'e.g. Carlo Abella',
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              controller: _username,
-              label: 'Username',
-              placeholder: 'Choose a username',
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              controller: _email,
-              label: 'Email address',
-              placeholder: 'you@example.com',
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            _LabeledTextField(
-              controller: _password,
-              label: 'Password',
-              placeholder: 'Create a password',
-              obscureText: true,
-            ),
-            const SizedBox(height: 20),
-            GetPrioActionButton.primary(
-              onPressed: _busy ? null : _register,
-              child: Text(_busy ? 'Creating...' : 'Create account'),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 16),
-              DestructiveBadge(child: Text(_error!)),
-            ],
-          ],
-        ),
+        child: challenge == null
+            ? _buildRegistrationForm(context)
+            : _buildOtpForm(context, challenge),
       ),
     );
   }
 
-  Future<void> _register() async {
-    setState(() {
-      _busy = true;
-      _error = null;
+  Widget _buildRegistrationForm(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('Customer registration').h1(),
+        const SizedBox(height: 8),
+        const Text('Create your account to manage bookings and queue tickets.'),
+        const SizedBox(height: 12),
+        const SizedBox(
+          height: 150,
+          child: Image(
+            image: AssetImage('assets/illustrations/customer-onboarding.png'),
+            fit: BoxFit.contain,
+            semanticLabel: 'Illustration of a customer using GetPrio',
+          ),
+        ),
+        const SizedBox(height: 20),
+        _LabeledTextField(
+          inputKey: const Key('register-full-name'),
+          controller: _name,
+          label: 'Full name',
+          placeholder: 'e.g. Carlo Abella',
+        ),
+        const SizedBox(height: 12),
+        _LabeledTextField(
+          inputKey: const Key('register-username'),
+          controller: _username,
+          label: 'Username',
+          placeholder: 'Choose a username',
+          onChanged: _handleUsernameChanged,
+          supportingText: _checkingUsername
+              ? 'Checking username...'
+              : !_usernameAvailable
+              ? null
+              : _usernameMessage.isEmpty
+              ? null
+              : _usernameMessage,
+          supportingTextColor: _checkingUsername
+              ? GetPrioTheme.mutedInk
+              : GetPrioTheme.teal,
+        ),
+        const SizedBox(height: 12),
+        _LabeledTextField(
+          inputKey: const Key('register-email'),
+          controller: _email,
+          label: 'Email address',
+          placeholder: 'you@example.com',
+          keyboardType: TextInputType.emailAddress,
+        ),
+        const SizedBox(height: 12),
+        _LabeledTextField(
+          inputKey: const Key('register-password'),
+          controller: _password,
+          label: 'Password',
+          placeholder: 'Create a password',
+          obscureText: true,
+          onChanged: _handlePasswordChanged,
+        ),
+        if (_passwordStrength != null && _password.text.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _PasswordStrengthIndicator(strength: _passwordStrength!),
+        ],
+        const SizedBox(height: 20),
+        GetPrioActionButton.primary(
+          key: const Key('register-submit'),
+          onPressed: _busy || _checkingUsername ? null : _register,
+          child: Text(
+            _checkingUsername
+                ? 'Checking username...'
+                : _busy
+                ? 'Sending code...'
+                : 'Create account',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOtpForm(
+    BuildContext context,
+    CustomerRegistrationChallenge challenge,
+  ) {
+    return Column(
+      key: const Key('register-otp-screen'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('Verify your email').h1(),
+        const SizedBox(height: 8),
+        Text(
+          'We sent a 6-digit verification code to ${challenge.deliveryTarget}.',
+        ),
+        const SizedBox(height: 20),
+        _LabeledTextField(
+          inputKey: const Key('register-otp'),
+          controller: _otp,
+          label: 'Verification code',
+          placeholder: 'Enter your 6-digit code',
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          maxLength: 6,
+        ),
+        const SizedBox(height: 20),
+        GetPrioActionButton.primary(
+          key: const Key('register-otp-submit'),
+          onPressed: _busy ? null : _verifyRegistrationOtp,
+          child: Text(_busy ? 'Verifying...' : 'Verify email'),
+        ),
+        const SizedBox(height: 8),
+        GetPrioActionButton.outline(
+          key: const Key('register-otp-resend'),
+          onPressed: _busy ? null : _resendRegistrationOtp,
+          child: const Text('Resend code'),
+        ),
+        const SizedBox(height: 8),
+        GetPrioActionButton.outline(
+          key: const Key('register-otp-back'),
+          onPressed: _busy
+              ? null
+              : () => setState(() {
+                  _registrationChallenge = null;
+                  _otp.clear();
+                }),
+          child: const Text('Use a different email'),
+        ),
+      ],
+    );
+  }
+
+  void _handleNameChanged() {
+    if (_usernameManuallyEdited) return;
+    _nameDebounceTimer?.cancel();
+    _usernameCheckTimer?.cancel();
+    ++_usernameCheckId;
+    if (_name.text.trim().isEmpty) {
+      _setControllerText(_username, '');
+      if (mounted) {
+        setState(() {
+          _usernameAvailable = false;
+          _checkingUsername = false;
+          _usernameMessage = '';
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _usernameAvailable = false;
+        _checkingUsername = false;
+        _usernameMessage = '';
+      });
+    }
+    _nameDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted || _usernameManuallyEdited) return;
+      _setControllerText(_username, buildUsernameFromName(_name.text));
+      _scheduleUsernameCheck(_username.text, debounce: false);
     });
+  }
+
+  void _handleUsernameChanged(String value) {
+    _nameDebounceTimer?.cancel();
+    _usernameManuallyEdited = true;
+    _setControllerText(_username, normalizeUsernameInput(value));
+    _scheduleUsernameCheck(_username.text);
+  }
+
+  void _handlePasswordChanged(String value) {
+    _passwordStrengthTimer?.cancel();
+    final requestId = ++_passwordStrengthId;
+    if (value.isEmpty) {
+      setState(() => _passwordStrength = null);
+      return;
+    }
+    setState(() => _passwordStrength = null);
+    _passwordStrengthTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted || requestId != _passwordStrengthId) return;
+      setState(() => _passwordStrength = evaluatePasswordStrength(value));
+    });
+  }
+
+  void _setControllerText(TextEditingController controller, String value) {
+    if (controller.text == value) return;
+    controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
+  void _scheduleUsernameCheck(String value, {bool debounce = true}) {
+    _usernameCheckTimer?.cancel();
+    final requestId = ++_usernameCheckId;
+    final username = value.trim();
+
+    if (username.isEmpty) {
+      setState(() {
+        _usernameAvailable = false;
+        _checkingUsername = false;
+        _usernameMessage = '';
+      });
+      return;
+    }
+
+    if (!isUsernameFormatValid(username)) {
+      setState(() {
+        _usernameAvailable = false;
+        _checkingUsername = false;
+        _usernameMessage =
+            'Use 3-30 lowercase letters, numbers, or underscores.';
+      });
+      return;
+    }
+
+    setState(() {
+      _usernameAvailable = false;
+      _checkingUsername = true;
+      _usernameMessage = '';
+    });
+    Future<void> check() async {
+      try {
+        final result = await widget.authRepository.checkUsernameAvailability(
+          username,
+        );
+        if (!mounted || requestId != _usernameCheckId) return;
+        setState(() {
+          _usernameAvailable = result.available && result.valid;
+          _usernameMessage = result.message;
+        });
+      } catch (error) {
+        if (!mounted || requestId != _usernameCheckId) return;
+        final message = _usernameCheckError(error);
+        setState(() {
+          _usernameAvailable = false;
+          _usernameMessage = message;
+        });
+        showFeedbackToast(context, message: message, isError: true);
+      } finally {
+        if (mounted && requestId == _usernameCheckId) {
+          setState(() => _checkingUsername = false);
+        }
+      }
+    }
+
+    if (debounce) {
+      _usernameCheckTimer = Timer(const Duration(milliseconds: 300), check);
+    } else {
+      unawaited(check());
+    }
+  }
+
+  String _usernameCheckError(Object error) {
+    if (error is ApiException && error.message.isNotEmpty) {
+      return error.message;
+    }
+    return 'We could not verify this username. Try again.';
+  }
+
+  Future<void> _register() async {
+    if (_checkingUsername) return;
+    final validationError = _validateRegistration();
+    if (validationError != null) {
+      _showRegistrationError(validationError);
+      return;
+    }
+    setState(() => _busy = true);
     try {
-      final result = await widget.authRepository.registerCustomer(
+      final challenge = await widget.authRepository.startCustomerRegistration(
         name: _name.text.trim(),
         username: _username.text.trim(),
         email: _email.text.trim(),
         password: _password.text,
       );
       if (mounted) {
+        setState(() => _registrationChallenge = challenge);
+      }
+    } catch (error) {
+      if (mounted) _showRegistrationError(_registrationError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _verifyRegistrationOtp() async {
+    final challenge = _registrationChallenge;
+    if (challenge == null) return;
+    final code = _otp.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      _showRegistrationError('Enter the 6-digit verification code.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final result = await widget.authRepository.verifyCustomerRegistration(
+        challengeId: challenge.challengeId,
+        code: code,
+      );
+      if (mounted) {
         widget.onAuthenticated(result.session);
         Navigator.of(context).pop();
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) _showRegistrationError(_registrationError(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _resendRegistrationOtp() async {
+    final challenge = _registrationChallenge;
+    if (challenge == null) return;
+    setState(() => _busy = true);
+    try {
+      final nextChallenge = await widget.authRepository
+          .resendCustomerRegistrationCode(challengeId: challenge.challengeId);
+      if (mounted) {
+        setState(() {
+          _registrationChallenge = nextChallenge;
+          _otp.clear();
+        });
+        showFeedbackToast(
+          context,
+          message: 'A new verification code was sent.',
+        );
+      }
+    } catch (error) {
+      if (mounted) _showRegistrationError(_registrationError(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String? _validateRegistration() {
+    if (_name.text.trim().length < 2) return 'Enter your full name.';
+    if (!isUsernameFormatValid(_username.text.trim())) {
+      return 'Use 3-30 lowercase letters, numbers, or underscores for your username.';
+    }
+    if (!_usernameAvailable) {
+      return _usernameMessage.isNotEmpty
+          ? _usernameMessage
+          : 'Choose an available username before creating your account.';
+    }
+    if (!_isValidEmail(_email.text.trim())) {
+      return 'Enter a valid email address.';
+    }
+    if (!evaluatePasswordStrength(_password.text).isValid) {
+      return 'Use a password with 1 special character, 2 numbers, 1 uppercase letter, and 6-32 characters.';
+    }
+    return null;
+  }
+
+  bool _isValidEmail(String value) {
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
+  }
+
+  void _showRegistrationError(String message) {
+    showFeedbackToast(context, message: message, isError: true);
+  }
+
+  String _registrationError(Object error) {
+    if (error is ApiException && error.code == 'API_BASE_URL_MISSING') {
+      return 'API URL is missing. Launch with --dart-define=GETPRIO_API_BASE_URL=<your-api-origin>.';
+    }
+    if (error is ApiException && error.message.isNotEmpty) return error.message;
+    if (error is FormatException) return error.message;
+    return 'We could not create your account. Check your connection and try again.';
+  }
+}
+
+class _PasswordStrengthIndicator extends StatelessWidget {
+  const _PasswordStrengthIndicator({required this.strength});
+
+  final PasswordStrength strength;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final progressColor = strength.isValid
+        ? GetPrioTheme.teal
+        : strength.score >= 3
+        ? GetPrioTheme.orange
+        : theme.colorScheme.destructive;
+    return Column(
+      key: const Key('register-password-strength'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Password strength', style: theme.typography.small),
+            Text(
+              strength.label,
+              style: theme.typography.small.copyWith(
+                color: progressColor,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        LinearProgressIndicator(
+          key: const Key('register-password-strength-bar'),
+          value: strength.score / 5,
+          minHeight: 6,
+          color: progressColor,
+          backgroundColor: GetPrioTheme.paperAccent,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            _PasswordRequirement(
+              label: '1 special character',
+              met: strength.hasSpecialCharacter,
+            ),
+            _PasswordRequirement(
+              label: 'At least 2 numbers',
+              met: strength.hasTwoNumbers,
+            ),
+            _PasswordRequirement(
+              label: '1 uppercase letter',
+              met: strength.hasUppercase,
+            ),
+            _PasswordRequirement(
+              label: 'At least 6 characters',
+              met: strength.hasMinimumLength,
+            ),
+            _PasswordRequirement(
+              label: 'Maximum 32 characters',
+              met: strength.isWithinMaximumLength,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PasswordRequirement extends StatelessWidget {
+  const _PasswordRequirement({required this.label, required this.met});
+
+  final String label;
+  final bool met;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          met ? LucideIcons.circleCheck : LucideIcons.circle,
+          size: 14,
+          color: met ? GetPrioTheme.teal : theme.colorScheme.mutedForeground,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: theme.typography.xSmall.copyWith(
+            color: met ? GetPrioTheme.teal : theme.colorScheme.mutedForeground,
+          ),
+        ),
+      ],
+    );
   }
 }
 
