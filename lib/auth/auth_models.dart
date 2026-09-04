@@ -29,6 +29,61 @@ class AuthUser {
   }
 }
 
+class UsernameAvailability {
+  const UsernameAvailability({
+    required this.username,
+    required this.available,
+    required this.valid,
+    required this.message,
+  });
+
+  final String username;
+  final bool available;
+  final bool valid;
+  final String message;
+
+  factory UsernameAvailability.fromJson(Map<String, dynamic> json) {
+    return UsernameAvailability(
+      username: json['username'] as String? ?? '',
+      available: json['available'] as bool? ?? false,
+      valid: json['valid'] as bool? ?? false,
+      message: json['message'] as String? ?? '',
+    );
+  }
+}
+
+class CustomerRegistrationChallenge {
+  const CustomerRegistrationChallenge({
+    required this.challengeId,
+    required this.step,
+    required this.deliveryTarget,
+    required this.expiresAt,
+  });
+
+  final String challengeId;
+  final String step;
+  final String deliveryTarget;
+  final DateTime? expiresAt;
+
+  factory CustomerRegistrationChallenge.fromJson(Map<String, dynamic> json) {
+    final challengeId = json['challengeId'] ?? json['registrationId'];
+    final step = json['step'];
+    if (challengeId is! String || challengeId.isEmpty || step is! String) {
+      throw const FormatException(
+        'Registration verification response is incomplete.',
+      );
+    }
+
+    final expiresAt = json['expiresAt'];
+    return CustomerRegistrationChallenge(
+      challengeId: challengeId,
+      step: step,
+      deliveryTarget: json['deliveryTarget'] as String? ?? 'your email address',
+      expiresAt: expiresAt is String ? DateTime.tryParse(expiresAt) : null,
+    );
+  }
+}
+
 class AuthSession {
   const AuthSession({
     required this.accessToken,

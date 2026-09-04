@@ -46,7 +46,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Display name'), findsOneWidget);
+    expect(find.text('Full name'), findsOneWidget);
     expect(find.text('e.g. Carlo Abella'), findsOneWidget);
     expect(find.text('Username'), findsOneWidget);
     expect(find.text('Email address'), findsOneWidget);

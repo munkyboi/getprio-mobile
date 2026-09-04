@@ -32,6 +32,28 @@ abstract interface class AuthApi {
   Future<void> logout(String refreshToken);
 }
 
+abstract interface class UsernameAvailabilityApi {
+  Future<Map<String, dynamic>> checkUsernameAvailability(String username);
+}
+
+abstract interface class CustomerRegistrationApi {
+  Future<Map<String, dynamic>> startCustomerRegistration({
+    required String name,
+    required String username,
+    required String email,
+    required String password,
+  });
+
+  Future<Map<String, dynamic>> verifyCustomerRegistration({
+    required String challengeId,
+    required String code,
+  });
+
+  Future<Map<String, dynamic>> resendCustomerRegistrationCode({
+    required String challengeId,
+  });
+}
+
 abstract interface class TokenStore {
   Future<String?> readRefreshToken();
 
@@ -126,6 +148,93 @@ class AuthRepository {
     return session;
   }
 
+  Future<UsernameAvailability> checkUsernameAvailability(
+    String username,
+  ) async {
+    final availabilityApi = api is UsernameAvailabilityApi
+        ? api as UsernameAvailabilityApi
+        : null;
+    if (availabilityApi == null) {
+      throw const ApiException(
+        0,
+        'USERNAME_AVAILABILITY_UNAVAILABLE',
+        'Username availability is not available. Try again later.',
+      );
+    }
+    return UsernameAvailability.fromJson(
+      await availabilityApi.checkUsernameAvailability(username),
+    );
+  }
+
+  Future<CustomerRegistrationChallenge> startCustomerRegistration({
+    required String name,
+    required String username,
+    required String email,
+    required String password,
+  }) async {
+    final registrationApi = _registrationApi;
+    if (registrationApi == null) {
+      throw const ApiException(
+        0,
+        'REGISTRATION_OTP_UNAVAILABLE',
+        'Email verification is not available. Try again later.',
+      );
+    }
+    return CustomerRegistrationChallenge.fromJson(
+      await registrationApi.startCustomerRegistration(
+        name: name,
+        username: username,
+        email: email,
+        password: password,
+      ),
+    );
+  }
+
+  Future<AuthenticatedSession> verifyCustomerRegistration({
+    required String challengeId,
+    required String code,
+  }) async {
+    final registrationApi = _registrationApi;
+    if (registrationApi == null) {
+      throw const ApiException(
+        0,
+        'REGISTRATION_OTP_UNAVAILABLE',
+        'Email verification is not available. Try again later.',
+      );
+    }
+    final session = AuthenticatedSession(
+      AuthSession.fromJson(
+        await registrationApi.verifyCustomerRegistration(
+          challengeId: challengeId,
+          code: code,
+        ),
+      ),
+    );
+    await _persistSession(session.session);
+    return session;
+  }
+
+  Future<CustomerRegistrationChallenge> resendCustomerRegistrationCode({
+    required String challengeId,
+  }) async {
+    final registrationApi = _registrationApi;
+    if (registrationApi == null) {
+      throw const ApiException(
+        0,
+        'REGISTRATION_OTP_UNAVAILABLE',
+        'Email verification is not available. Try again later.',
+      );
+    }
+    return CustomerRegistrationChallenge.fromJson(
+      await registrationApi.resendCustomerRegistrationCode(
+        challengeId: challengeId,
+      ),
+    );
+  }
+
+  CustomerRegistrationApi? get _registrationApi =>
+      api is CustomerRegistrationApi ? api as CustomerRegistrationApi : null;
+
   Future<void> requestPasswordReset(String email) async {
     await api.requestPasswordReset(email);
   }
@@ -213,7 +322,8 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode, $code, $message)';
 }
 
-class RestAuthApi implements AuthApi {
+class RestAuthApi
+    implements AuthApi, UsernameAvailabilityApi, CustomerRegistrationApi {
   RestAuthApi({required String baseUrl, http.Client? client})
     : _baseUrl = baseUrl.replaceFirst(RegExp(r'/$'), ''),
       _client = client ?? http.Client();
@@ -235,6 +345,67 @@ class RestAuthApi implements AuthApi {
       'email': email,
       if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
       'password': password,
+    }, compatibilityHeader: true);
+  }
+
+  @override
+  Future<Map<String, dynamic>> checkUsernameAvailability(
+    String username,
+  ) async {
+    if (_baseUrl.isEmpty) {
+      throw const ApiException(
+        0,
+        'API_BASE_URL_MISSING',
+        'API base URL is not configured.',
+      );
+    }
+
+    final uri = Uri.parse('$_baseUrl/api/auth/username-availability')
+        .replace(queryParameters: {'username': username});
+    final response = await _client.get(uri);
+    final decoded = _decode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        response.statusCode,
+        decoded?['code'] as String?,
+        decoded?['message'] as String? ?? 'The request could not be completed.',
+      );
+    }
+    return decoded ?? <String, dynamic>{};
+  }
+
+  @override
+  Future<Map<String, dynamic>> startCustomerRegistration({
+    required String name,
+    required String username,
+    required String email,
+    required String password,
+  }) {
+    return _post('/api/auth/register/customer/otp', {
+      'name': name,
+      'username': username,
+      'email': email,
+      'password': password,
+    }, compatibilityHeader: true);
+  }
+
+  @override
+  Future<Map<String, dynamic>> verifyCustomerRegistration({
+    required String challengeId,
+    required String code,
+  }) {
+    return _post('/api/auth/register/customer/otp/verify', {
+      'challengeId': challengeId,
+      'code': code,
+    }, compatibilityHeader: true);
+  }
+
+  @override
+  Future<Map<String, dynamic>> resendCustomerRegistrationCode({
+    required String challengeId,
+  }) {
+    return _post('/api/auth/register/customer/otp/resend', {
+      'challengeId': challengeId,
     }, compatibilityHeader: true);
   }
 
