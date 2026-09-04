@@ -12,6 +12,7 @@ import 'auth/auth_repository.dart';
 import 'account/ticket_repository.dart';
 import 'account/account_settings_repository.dart';
 import 'account/security_repository.dart';
+import 'feedback_toast.dart';
 import 'directory/directory_repository.dart';
 import 'navigation/customer_navigation_bar.dart';
 import 'navigation/swipe_back_page_route.dart';
@@ -2251,6 +2252,7 @@ class _SecurityPageState extends State<SecurityPage> {
   List<String>? _recoveryCodes;
   String? _message;
   bool _busy = false;
+  bool _mfaSetupInitiated = false;
 
   @override
   void dispose() {
@@ -2330,10 +2332,16 @@ class _SecurityPageState extends State<SecurityPage> {
             ),
             const SizedBox(height: 12),
             GetPrioActionButton.primary(
+              key: const Key('mfa-confirm-button'),
               onPressed: _busy ? null : _confirmMfa,
               child: Text(_busy ? 'Confirming...' : 'Confirm MFA setup'),
             ),
-          ],
+          ] else if (!_mfaSetupInitiated)
+            GetPrioActionButton.outline(
+              key: const Key('mfa-setup-button'),
+              onPressed: _busy ? null : _startMfa,
+              child: const Text('Set up MFA'),
+            ),
           if (_recoveryCodes != null) ...[
             const SizedBox(height: 16),
             Card(
@@ -2346,8 +2354,17 @@ class _SecurityPageState extends State<SecurityPage> {
                     'Each code can be used once if you lose access to your authenticator app.',
                   ),
                   const SizedBox(height: 12),
-                  SelectableText(_recoveryCodes!.join('\n')),
+                  SelectableText(
+                    _recoveryCodes!.join('\n'),
+                    key: const Key('mfa-recovery-codes'),
+                  ),
                   const SizedBox(height: 12),
+                  GetPrioActionButton.outline(
+                    key: const Key('mfa-copy-recovery-codes-button'),
+                    onPressed: _copyRecoveryCodes,
+                    child: const Text('Copy recovery codes'),
+                  ),
+                  const SizedBox(height: 8),
                   GetPrioActionButton.outline(
                     onPressed: () => setState(() => _recoveryCodes = null),
                     child: const Text('I saved these codes'),
@@ -2394,7 +2411,12 @@ class _SecurityPageState extends State<SecurityPage> {
     });
     try {
       final enrollment = await repository.startMfaEnrollment();
-      if (mounted) setState(() => _enrollment = enrollment);
+      if (mounted) {
+        setState(() {
+          _enrollment = enrollment;
+          _mfaSetupInitiated = true;
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _message = 'MFA setup failed: $error');
     } finally {
@@ -2421,6 +2443,25 @@ class _SecurityPageState extends State<SecurityPage> {
       if (mounted) setState(() => _message = 'MFA confirmation failed: $error');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _copyRecoveryCodes() async {
+    final recoveryCodes = _recoveryCodes;
+    if (recoveryCodes == null) return;
+    try {
+      await Clipboard.setData(ClipboardData(text: recoveryCodes.join('\n')));
+      if (mounted) {
+        showFeedbackToast(context, message: 'Recovery codes copied.');
+      }
+    } catch (_) {
+      if (mounted) {
+        showFeedbackToast(
+          context,
+          message: 'Could not copy the recovery codes.',
+          isError: true,
+        );
+      }
     }
   }
 }

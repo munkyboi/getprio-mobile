@@ -1,5 +1,8 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/account/security_repository.dart';
+import 'package:getprio_mobile/main.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
   test(
@@ -14,6 +17,49 @@ void main() {
       expect(recoveryCodes, ['recovery-1', 'recovery-2']);
     },
   );
+
+  testWidgets('hides setup after MFA confirmation and copies recovery codes', (
+    tester,
+  ) async {
+    MethodCall? clipboardCall;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') clipboardCall = call;
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: SecurityPage(repository: SecurityRepository(FakeSecurityApi())),
+      ),
+    );
+
+    await tester.tap(find.text('Set up MFA'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).last,
+      '123456',
+    );
+    await tester.ensureVisible(find.byKey(const Key('mfa-confirm-button')));
+    await tester.tap(find.byKey(const Key('mfa-confirm-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('mfa-setup-button')), findsNothing);
+    await tester.ensureVisible(
+      find.byKey(const Key('mfa-copy-recovery-codes-button')),
+    );
+    await tester.tap(find.byKey(const Key('mfa-copy-recovery-codes-button')));
+    await tester.pump();
+
+    expect(clipboardCall?.method, 'Clipboard.setData');
+    expect(clipboardCall?.arguments, {'text': 'recovery-1\nrecovery-2'});
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
 }
 
 class FakeSecurityApi implements SecurityApi {
