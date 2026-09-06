@@ -77,6 +77,52 @@ void main() {
     },
   );
 
+  test('enriches a joined ticket from the returned queue snapshot', () async {
+    final api = FakeJoinApi(
+      preview: {
+        'locationQrId': validId,
+        'vendorName': 'BOSS LOT',
+        'vendorSlug': 'bosslot',
+        'locationName': 'Main location',
+        'locationSlug': 'main',
+        'joinable': true,
+      },
+      joinResponse: {
+        'ticket': {
+          'id': 'joined-1',
+          'lookupCode': 'PB007',
+          'ticketNumber': 'PB007',
+          'status': 'waiting',
+        },
+        'snapshot': {
+          'tenant': {'name': 'BOSS LOT', 'slug': 'bosslot'},
+          'location': {'name': 'Main location', 'slug': 'main'},
+          'focusTicket': {
+            'id': 'joined-1',
+            'lookupCode': 'PB007',
+            'ticketNumber': 'PB007',
+            'status': 'waiting',
+            'position': 7,
+            'estimatedWaitMinutes': 35,
+            'joinedAt': '2026-09-02T08:40:00Z',
+          },
+        },
+      },
+    );
+
+    final result = await JoinRepository(api)
+        .join(locationQrId: validId, customerName: 'Preferred name');
+
+    final ticket = (result as JoinedTicket).ticket;
+    expect(ticket.vendorName, 'BOSS LOT');
+    expect(ticket.tenantSlug, 'bosslot');
+    expect(ticket.locationName, 'Main location');
+    expect(ticket.locationSlug, 'main');
+    expect(ticket.joinedAt, DateTime.parse('2026-09-02T08:40:00Z'));
+    expect(ticket.position, 7);
+    expect(ticket.estimatedWaitMinutes, 35);
+  });
+
   test('queue resolve preserves the scanned vendor profile', () {
     final preview = JoinPreview.fromJson({
       'locationQrId': validId,
@@ -129,6 +175,27 @@ void main() {
       preview.vendorProfile?.locations.single.address,
       'Quezon City, Philippines',
     );
+  });
+
+  test('queue resolve preserves safe current queue details', () {
+    final preview = JoinPreview.fromJson({
+      'locationQrId': validId,
+      'vendorName': 'BOSS LOT',
+      'locationName': 'Main location',
+      'joinable': true,
+      'snapshot': {
+        'stats': {
+          'waitingCount': 4,
+          'currentTicketNumber': 12,
+          'estimatedWaitMinutes': 20,
+        },
+        'current': {'ticketNumber': 12},
+      },
+    });
+
+    expect(preview.queueDetails?.waitingCount, 4);
+    expect(preview.queueDetails?.currentTicketNumber, '12');
+    expect(preview.queueDetails?.estimatedWaitMinutes, 20);
   });
 
   test('public profile image falls back as the vendor logo', () {
@@ -221,12 +288,14 @@ void main() {
       'user': {'id': 'customer-1', 'email': 'customer@example.com'},
     });
     final requestedPaths = <String>[];
+    final resolveHeaders = <String, String>{};
     final client = AuthenticatedApiClient(
       baseUrl: 'https://api.getprio.test',
       authRepository: auth,
       client: MockClient((request) async {
         requestedPaths.add(request.url.path);
         if (request.url.path == '/api/mobile/queue-join/resolve') {
+          resolveHeaders.addAll(request.headers);
           return http.Response(
             jsonEncode({
               'locationQrId': validId,
@@ -257,6 +326,10 @@ void main() {
       '/api/mobile/queue-join/resolve',
       '/api/public/vendors/bosslot',
     ]);
+    expect(
+      resolveHeaders['Cache-Control'] ?? resolveHeaders['cache-control'],
+      'no-cache',
+    );
     expect(
       (response['vendorProfile'] as Map<String, dynamic>)['name'],
       'Boss Lot Wellness',
@@ -346,6 +419,10 @@ class FakeJoinApi implements JoinApi {
 }
 
 class _NoopAuthApi implements AuthApi {
+  @override
+  Future<Map<String, dynamic>> checkUsernameAvailability(String username) =>
+      throw UnimplementedError();
+
   @override
   Future<Map<String, dynamic>> login({
     required String identifier,

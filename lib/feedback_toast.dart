@@ -11,9 +11,14 @@ void showFeedbackToast(
   required String message,
   bool isError = false,
 }) {
-  final theme = Theme.of(context);
+  // Drawer and sheet content can live in a separate overlay. Use the root
+  // navigator context so shadcn_flutter captures themes to an ancestor of the
+  // toast call site rather than across that overlay boundary.
+  final toastContext =
+      Navigator.maybeOf(context, rootNavigator: true)?.context ?? context;
+  final theme = Theme.of(toastContext);
   showToast(
-    context: context,
+    context: toastContext,
     location: ToastLocation.topCenter,
     showDuration: const Duration(seconds: 3),
     builder: (context, _) {

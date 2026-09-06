@@ -111,6 +111,26 @@ class AuthenticatedApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> uploadBytes(
+    String path, {
+    required List<int> bytes,
+    required String contentType,
+    Map<String, String>? queryParameters,
+  }) async {
+    final uri = Uri.parse('$_baseUrl$path')
+        .replace(queryParameters: queryParameters);
+    return _send(
+      (token) => _client.post(
+        uri,
+        headers: _headers(
+          token,
+          additionalHeaders: {'Content-Type': contentType},
+        ),
+        body: bytes,
+      ),
+    );
+  }
+
   Future<Map<String, dynamic>> _send(
     Future<http.Response> Function(String token) request, {
     bool isRetry = false,

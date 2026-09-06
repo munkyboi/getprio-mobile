@@ -12,6 +12,37 @@ flutter run \
 
 `GETPRIO_API_BASE_URL` is the trusted GetPrio API origin. `GETPRIO_APPROVED_HOSTS` is the comma-separated HTTPS host allowlist used by QR and payment-return parsing. The scanner never opens a scanned URL.
 
+### Physical iPhone testing when debug mode disconnects
+
+If the terminal reports `Lost connection to device` with no Dart exception,
+inspect the iPhone's crash report before changing widgets. On Zero32 with iOS
+26.6 and Flutter 3.47.1, the September 5 reports contained `EXC_BAD_ACCESS`,
+`SIGBUS`, and code `0x32` in Dart JIT-generated memory. This matches the signature
+reported in [Flutter issue #184254](https://github.com/flutter/flutter/issues/184254).
+It is distinct from a Dart assertion such as the toast overlay ancestry error.
+
+Use a compiled profile build to test this failure without the debug JIT:
+
+```bash
+flutter run --profile -t lib/main.dart -d <iphone-device-id> \
+  --dart-define=GETPRIO_API_BASE_URL=https://api.example.com \
+  --dart-define=GETPRIO_APPROVED_HOSTS=app.example.com,enterprise.example.com
+```
+
+Profile mode does not support hot reload. Rebuild after changing the app. This
+is a device-testing workaround, not evidence that the upstream debug-runtime
+issue is fixed. Keep the same build-time API values as the original test.
+
+During the September 5 device check, a profile build on Zero32 received two direct
+FCM tests with the same message IDs returned by Firebase and successfully opened
+the Profile menu through a pointer tap. The check used account `51` and its
+current installation token. iOS's `getDeliveredNotifications` also returned both
+test notifications, although the person testing did not see a banner. Native
+settings reported alerts, sound, Lock Screen, and Notification Center enabled,
+with Scheduled Summary disabled. If this recurs, check notification grouping
+and Focus on that phone before changing registration or presentation code.
+This does not prove that every server-stored registration is current.
+
 ## Firebase and push notifications
 
 The app uses Firebase Messaging, but Firebase initialization is non-blocking until platform configuration exists. Add the project-specific files through Firebase tooling:
@@ -33,8 +64,10 @@ Do not commit either platform file if the project policy treats them as environm
 
 OAuth uses the one-time callback scheme configured by `MOBILE_OAUTH_REDIRECT_URI`
 (default `getprio://oauth/callback`). Register that scheme in the iOS and Android
-native projects. Payment status checking works from the in-app action and does not
-trust a browser return URL.
+native projects. Paid queue joins return through the verified HTTPS
+`/payment/return` universal link; the app uses the link only to identify the
+active payment attempt and always confirms status through the authenticated sync
+endpoint.
 
 If the deployment uses an HTTPS universal link for OAuth, configure the selected host in:
 

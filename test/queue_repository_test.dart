@@ -28,6 +28,27 @@ void main() {
     expect(ticket.isActive, isTrue);
   });
 
+  test(
+    'maps account ticket aliases and preserves formatted ticket numbers',
+    () {
+      final ticket = QueueTicket.fromJson({
+        'id': 'ticket-account',
+        'lookupCode': 'ABC123',
+        'ticketNumber': 'AH002',
+        'tenantName': 'Acme Clinic',
+        'tenantSlug': 'acme-clinic',
+        'locationName': 'Main location',
+        'locationSlug': 'main',
+        'status': 'waiting',
+        'createdAt': '2026-09-02T10:00:00Z',
+      });
+
+      expect(ticket.ticketNumber, 'AH002');
+      expect(ticket.vendorName, 'Acme Clinic');
+      expect(ticket.joinedAt, isNotNull);
+    },
+  );
+
   test('keeps non-waiting ticket positions hidden from the domain', () {
     final ticket = QueueTicket.fromJson({
       'id': 'ticket-2',
@@ -42,6 +63,20 @@ void main() {
     expect(ticket.position, isNull);
     expect(ticket.estimatedWaitMinutes, isNull);
     expect(ticket.isActive, isTrue);
+  });
+
+  test('derives CONFIRMED for a called ticket after vendor scan', () {
+    final ticket = QueueTicket.fromJson({
+      'id': 'ticket-confirmed',
+      'lookupCode': 'CONFIRM1',
+      'ticketNumber': 'AH009',
+      'status': 'called',
+      'customerConfirmedAt': '2026-09-03T04:00:00Z',
+    });
+
+    expect(ticket.status, TicketStatus.called);
+    expect(ticket.isConfirmed, isTrue);
+    expect(ticket.displayStatusLabel, 'Confirmed');
   });
 
   test('cancellation rejects a ticket that is no longer waiting', () async {
@@ -60,6 +95,26 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect(api.cancelCalled, isFalse);
+  });
+
+  test('cancellation supports a pending carry-over ticket', () async {
+    final api = FakeQueueApi();
+    final repository = QueueRepository(api);
+    final ticket = QueueTicket.fromJson({
+      'id': 'ticket-carry-over',
+      'lookupCode': 'CARRY01',
+      'ticketNumber': 'AH008',
+      'customerName': 'Profile name',
+      'status': 'pending_carry_over',
+    });
+
+    final cancelled = await repository.cancelTicket(
+      tenantSlug: 'acme-clinic',
+      ticket: ticket,
+    );
+
+    expect(api.cancelCalled, isTrue);
+    expect(cancelled.status, TicketStatus.cancelled);
   });
 
   test('queue repository maps the focus ticket from a snapshot', () async {
@@ -87,6 +142,58 @@ void main() {
 
     expect(snapshot.joinable, isTrue);
     expect(snapshot.focusTicket?.lookupCode, 'ABC123');
+  });
+
+  test('parses live queue status and customer confirmation data', () async {
+    final repository = QueueRepository(
+      FakeQueueApi(
+        snapshot: {
+          'queueDay': {
+            'state': 'open',
+            'isClosed': false,
+            'isPaused': false,
+            'availabilityReason': 'accepting',
+          },
+          'queueIntake': {
+            'state': 'open',
+            'stateLabel': 'Open',
+            'currentWaitingCount': 2,
+          },
+          'stats': {
+            'waitingCount': 2,
+            'servedToday': 5,
+            'currentTicketNumber': 17,
+            'estimatedWaitMinutes': 10,
+          },
+          'current': {
+            'id': 'ticket-current',
+            'ticketNumber': 17,
+            'status': 'called',
+            'calledAt': '2026-09-02T10:00:00Z',
+          },
+          'focusTicket': {
+            'id': 'ticket-1',
+            'lookupCode': 'ABC123',
+            'ticketNumber': 42,
+            'customerName': 'Profile name',
+            'status': 'called',
+            'customerConfirmedAt': '2026-09-02T10:01:00Z',
+          },
+        },
+      ),
+    );
+
+    final snapshot = await repository.loadQueueSnapshot(
+      tenantSlug: 'acme-clinic',
+      lookupCode: 'ABC123',
+    );
+
+    expect(snapshot.queueDay.state, 'open');
+    expect(snapshot.queueIntake.stateLabel, 'Open');
+    expect(snapshot.stats.waitingCount, 2);
+    expect(snapshot.stats.estimatedWaitMinutes, 10);
+    expect(snapshot.current?.ticketNumber, '17');
+    expect(snapshot.focusTicket?.customerConfirmedAt, isNotNull);
   });
 
   test(
@@ -147,6 +254,16 @@ class FakeQueueApi implements QueueApi {
 
 class FakeAuthApiForTransport implements AuthApi {
   int refreshCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> checkUsernameAvailability(
+    String username,
+  ) async => {
+    'username': username,
+    'available': true,
+    'valid': true,
+    'message': 'Username is available.',
+  };
 
   @override
   Future<Map<String, dynamic>> registerCustomer({

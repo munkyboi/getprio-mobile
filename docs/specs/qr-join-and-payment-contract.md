@@ -28,7 +28,21 @@ The printed location QR uses the existing readable join URL with a separate opaq
 3. The app calls `POST /mobile/queue-join` with the UUID, customer preferences, and a client-generated `joinAttemptId`.
 4. The server resolves the UUID again and rechecks location activity, queue intake, and the current fee. The earlier preview is never trusted as authorization or pricing.
 
-Free queues create the authenticated customer ticket immediately. The customer name uses the saved display name, falling back to profile name. If the same customer already has an active ticket at that location and queue day, the request returns that ticket. Different vendors/locations remain allowed; after cancellation, a new join is allowed.
+Both join endpoints first return `otpRequired: true` with an email challenge. No ticket or checkout is created before verification. After successful verification, free queues create the authenticated customer ticket. The customer name uses the saved display name, falling back to profile name. If the same customer already has an active ticket at that location and queue day, the request returns that ticket. Different vendors/locations remain allowed; after cancellation, a new join is allowed.
+
+## Known-vendor join
+
+When a vendor has multiple locations, the vendor details action opens a modal bottom sheet populated from the loaded vendor details. Selecting a location starts the join for that location slug; dismissing the sheet does nothing. A single location skips the sheet. The authenticated app calls `POST /api/mobile/queue-join/direct` with the vendor slug and optional location slug. The server resolves the active primary/location queue, rechecks availability and the current fee, and uses the same authenticated payment and ticket-issuance flow as QR joins. The client never creates a ticket before a required PayMongo payment is confirmed.
+
+## Email verification
+
+- The server sends a six-digit code to the authenticated customer's account email for both QR and direct joins. An account without an email cannot join.
+- The initial response includes `otpId`, `deliveryTarget`, `expiresAt`, `resendAvailableAt`, `resendsRemaining`, and canonical tenant/location slugs.
+- `POST /api/mobile/queue-join/otp/verify` accepts `otpId` and `code` with an `Idempotency-Key`. It verifies challenge ownership, rechecks the original location's availability, and uses the existing queue OTP service before creating the ticket or payment attempt.
+- `POST /api/mobile/queue-join/otp/resend` accepts `otpId` with an `Idempotency-Key`, checks ownership, and returns the replacement challenge. The app replaces its active challenge ID and clears the old code.
+- Existing queue OTP expiry, attempt limits, resend cooldowns, and lockouts remain authoritative on the server. The app auto-submits a complete code, prevents concurrent submissions, displays errors, and disables resend during the cooldown or after the resend limit.
+- Email validation does not opt the customer into queue email notifications.
+- Deploy the backend contract and a compatible mobile build together; older builds cannot render the new challenge response.
 
 ## Paid queues
 

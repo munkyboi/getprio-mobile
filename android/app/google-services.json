@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "5864275861",
+    "project_id": "getprio",
+    "storage_bucket": "getprio.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:5864275861:android:4d27621def5dc68a30c09c",
+        "android_client_info": {
+          "package_name": "com.getprio.getprio_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCkkKknRYgX-6ry-KpxF4YaOXh8-SkOUmY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -8,7 +8,7 @@ class MfaEnrollment {
 
   factory MfaEnrollment.fromJson(Map<String, dynamic> json) {
     final secret = json['secret'];
-    final uri = json['otpauthUri'] ?? json['otpauthUrl'];
+    final uri = json['otpAuthUri'] ?? json['otpauthUri'] ?? json['otpauthUrl'];
     if (secret is! String || uri is! String) {
       throw const FormatException('MFA enrollment response is incomplete.');
     }

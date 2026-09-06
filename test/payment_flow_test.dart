@@ -26,4 +26,14 @@ void main() {
       throwsA(isA<PaymentReturnException>()),
     );
   });
+
+  test('rejects trusted-host links that are not payment returns', () {
+    expect(
+      () => PaymentReturn.parse(
+        Uri.parse('https://app.getprio.test/oauth/callback?payment=opaque-1'),
+        allowedHosts: {'app.getprio.test'},
+      ),
+      throwsA(isA<PaymentReturnException>()),
+    );
+  });
 }

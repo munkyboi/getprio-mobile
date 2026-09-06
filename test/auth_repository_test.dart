@@ -1,6 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/auth/auth_repository.dart';
+import 'package:getprio_mobile/auth/username_utils.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   test(
@@ -68,6 +73,26 @@ void main() {
     expect(api.lastRefreshToken, 'refresh-1');
   });
 
+  test('logout clears local auth when the server logout fails', () async {
+    final api = FakeAuthApi(
+      loginResponse: authenticatedJson(
+        token: 'access-1',
+        refreshToken: 'refresh-1',
+      ),
+    )..logoutError = StateError('offline');
+    final tokens = MemoryTokenStore();
+    final repository = AuthRepository(api: api, tokenStore: tokens);
+
+    await repository.signIn(
+      identifier: 'customer@example.com',
+      password: 'password',
+    );
+    await repository.logout();
+
+    expect(repository.accessToken, isNull);
+    expect(await tokens.readRefreshToken(), isNull);
+  });
+
   test(
     'customer registration creates and stores an authenticated session',
     () async {
@@ -97,6 +122,141 @@ void main() {
       expect(await tokens.readRefreshToken(), 'refresh-registration');
     },
   );
+
+  test('username utilities match the web normalization rules', () {
+    expect(buildUsernameFromName('Jane Doe!'), 'jane_doe');
+    expect(normalizeUsernameInput('  Jane.Doe_99  '), 'janedoe_99');
+    expect(isUsernameFormatValid('abc_123'), isTrue);
+    expect(isUsernameFormatValid('ab'), isFalse);
+  });
+
+  test('checks username availability through the auth endpoint', () async {
+    final api = RestAuthApi(
+      baseUrl: 'https://api.example.test',
+      client: MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/api/auth/username-availability');
+        expect(request.url.queryParameters['username'], 'jane_doe');
+        return http.Response(
+          jsonEncode({
+            'username': 'jane_doe',
+            'available': true,
+            'valid': true,
+            'message': 'Username is available.',
+          }),
+          200,
+        );
+      }),
+    );
+
+    final result = await AuthRepository(
+      api: api,
+      tokenStore: MemoryTokenStore(),
+    ).checkUsernameAvailability('jane_doe');
+
+    expect(result.username, 'jane_doe');
+    expect(result.available, isTrue);
+    expect(result.valid, isTrue);
+    expect(result.message, 'Username is available.');
+  });
+
+  test('turns non-JSON auth errors into an API exception', () async {
+    final api = RestAuthApi(
+      baseUrl: 'https://api.example.test',
+      client: MockClient((request) async {
+        return http.Response('<!doctype html><title>Not Found</title>', 404);
+      }),
+    );
+
+    await expectLater(
+      api.startCustomerRegistration(
+        name: 'Jane Doe',
+        username: 'jane_doe',
+        email: 'jane+signup@example.com',
+        password: 'Upper!12',
+      ),
+      throwsA(
+        isA<ApiException>()
+            .having((error) => error.statusCode, 'status code', 404)
+            .having((error) => error.message, 'message', isNotEmpty),
+      ),
+    );
+  });
+
+  test('starts customer registration with email verification', () async {
+    final api = RestAuthApi(
+      baseUrl: 'https://api.example.test',
+      client: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/api/auth/register/customer/otp');
+        expect(jsonDecode(request.body), {
+          'name': 'Jane Doe',
+          'username': 'jane_doe',
+          'email': 'jane@example.com',
+          'password': 'Upper!12',
+        });
+        return http.Response(
+          jsonEncode({
+            'challengeId': 'challenge-1',
+            'step': 'email_otp',
+            'deliveryTarget': 'j***@example.com',
+            'expiresAt': '2026-09-04T10:10:00Z',
+          }),
+          201,
+        );
+      }),
+    );
+
+    final challenge =
+        await AuthRepository(
+          api: api,
+          tokenStore: MemoryTokenStore(),
+        ).startCustomerRegistration(
+          name: 'Jane Doe',
+          username: 'jane_doe',
+          email: 'jane@example.com',
+          password: 'Upper!12',
+        );
+
+    expect(challenge.challengeId, 'challenge-1');
+    expect(challenge.deliveryTarget, 'j***@example.com');
+  });
+
+  test(
+    'verifies customer registration and stores the returned session',
+    () async {
+      final api = RestAuthApi(
+        baseUrl: 'https://api.example.test',
+        client: MockClient((request) async {
+          expect(request.url.path, '/api/auth/register/customer/otp/verify');
+          expect(jsonDecode(request.body), {
+            'challengeId': 'challenge-1',
+            'code': '123456',
+          });
+          return http.Response(
+            jsonEncode(
+              authenticatedJson(
+                token: 'access-otp',
+                refreshToken: 'refresh-otp',
+              ),
+            ),
+            200,
+          );
+        }),
+      );
+      final tokens = MemoryTokenStore();
+      final repository = AuthRepository(api: api, tokenStore: tokens);
+
+      final session = await repository.verifyCustomerRegistration(
+        challengeId: 'challenge-1',
+        code: '123456',
+      );
+
+      expect(session.session.user.email, 'customer@example.com');
+      expect(repository.accessToken, 'access-otp');
+      expect(await tokens.readRefreshToken(), 'refresh-otp');
+    },
+  );
 }
 
 Map<String, dynamic> authenticatedJson({
@@ -124,6 +284,17 @@ class FakeAuthApi implements AuthApi {
   Map<String, dynamic>? registrationResponse;
   String? lastIdentifier;
   String? lastRefreshToken;
+  Object? logoutError;
+
+  @override
+  Future<Map<String, dynamic>> checkUsernameAvailability(
+    String username,
+  ) async => {
+    'username': username,
+    'available': true,
+    'valid': true,
+    'message': 'Username is available.',
+  };
 
   @override
   Future<Map<String, dynamic>> registerCustomer({
@@ -163,5 +334,7 @@ class FakeAuthApi implements AuthApi {
   }
 
   @override
-  Future<void> logout(String refreshToken) async {}
+  Future<void> logout(String refreshToken) async {
+    if (logoutError != null) throw logoutError!;
+  }
 }

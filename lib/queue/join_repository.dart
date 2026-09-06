@@ -84,6 +84,7 @@ class JoinPreview {
     this.locationSlug,
     this.unavailableReason,
     this.vendorProfile,
+    this.queueDetails,
     this.fee = 0,
     this.currency = 'PHP',
   });
@@ -96,6 +97,7 @@ class JoinPreview {
   final bool joinable;
   final String? unavailableReason;
   final JoinVendorProfile? vendorProfile;
+  final JoinQueueDetails? queueDetails;
   final num fee;
   final String currency;
 
@@ -111,6 +113,7 @@ class JoinPreview {
       joinable: false,
       unavailableReason: reason,
       vendorProfile: vendorProfile,
+      queueDetails: queueDetails,
       fee: fee,
       currency: currency,
     );
@@ -118,6 +121,7 @@ class JoinPreview {
 
   factory JoinPreview.fromJson(Map<String, dynamic> json) {
     final vendorProfile = json['vendorProfile'];
+    final snapshot = json['snapshot'];
     return JoinPreview(
       locationQrId: json['locationQrId'] as String? ?? '',
       vendorName: json['vendorName'] as String? ?? 'Vendor',
@@ -130,12 +134,41 @@ class JoinPreview {
       vendorProfile: vendorProfile is Map<String, dynamic>
           ? JoinVendorProfile.fromJson(vendorProfile)
           : null,
+      queueDetails: snapshot is Map<String, dynamic>
+          ? JoinQueueDetails.fromSnapshot(snapshot)
+          : null,
       fee: json['amountCents'] is num
           ? (json['amountCents'] as num)
           : json['fee'] is num
           ? json['fee'] as num
           : 0,
       currency: json['currency'] as String? ?? 'PHP',
+    );
+  }
+}
+
+class JoinQueueDetails {
+  const JoinQueueDetails({
+    this.waitingCount,
+    this.currentTicketNumber,
+    this.estimatedWaitMinutes,
+  });
+
+  final int? waitingCount;
+  final String? currentTicketNumber;
+  final int? estimatedWaitMinutes;
+
+  factory JoinQueueDetails.fromSnapshot(Map<String, dynamic> snapshot) {
+    final stats = _joinMap(snapshot['stats']);
+    final current = _joinMap(snapshot['current']);
+    final currentTicketNumber = _joinText([
+      current?['ticketNumber']?.toString(),
+      stats?['currentTicketNumber']?.toString(),
+    ]);
+    return JoinQueueDetails(
+      waitingCount: _joinInt(stats?['waitingCount']),
+      currentTicketNumber: currentTicketNumber,
+      estimatedWaitMinutes: _joinInt(stats?['estimatedWaitMinutes']),
     );
   }
 }
@@ -237,6 +270,12 @@ String? _joinText(Iterable<String?> values) {
   return null;
 }
 
+int? _joinInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.round();
+  return int.tryParse(value?.toString() ?? '');
+}
+
 String? _joinAddress(Iterable<String?> values) {
   final parts = values
       .map((value) => value?.trim())
@@ -281,8 +320,66 @@ abstract interface class JoinApi {
   });
 }
 
+abstract interface class DirectJoinApi {
+  Future<Map<String, dynamic>> joinDirect({
+    required String tenantSlug,
+    String? locationSlug,
+    required String joinAttemptId,
+    required String customerName,
+  });
+}
+
+abstract interface class JoinOtpApi {
+  Future<Map<String, dynamic>> verifyOtp({
+    required String otpId,
+    required String code,
+    required String attemptId,
+  });
+  Future<Map<String, dynamic>> resendOtp({
+    required String otpId,
+    required String attemptId,
+  });
+}
+
 sealed class JoinResult {
   const JoinResult();
+}
+
+class JoinEmailVerification extends JoinResult {
+  const JoinEmailVerification({
+    required this.otpId,
+    required this.email,
+    required this.tenantSlug,
+    required this.locationSlug,
+    this.expiresAt,
+    this.resendAvailableAt,
+    this.resendsRemaining = 0,
+  });
+  final String otpId;
+  final String email;
+  final String tenantSlug;
+  final String locationSlug;
+  final DateTime? expiresAt;
+  final DateTime? resendAvailableAt;
+  final int resendsRemaining;
+
+  factory JoinEmailVerification.fromJson(Map<String, dynamic> json) {
+    final id = json['otpId']?.toString() ?? '';
+    if (id.isEmpty) {
+      throw const FormatException('Email verification response is incomplete.');
+    }
+    return JoinEmailVerification(
+      otpId: id,
+      email: json['deliveryTarget'] as String? ?? '',
+      tenantSlug: json['tenantSlug'] as String? ?? '',
+      locationSlug: json['locationSlug'] as String? ?? '',
+      expiresAt: DateTime.tryParse(json['expiresAt']?.toString() ?? ''),
+      resendAvailableAt: DateTime.tryParse(
+        json['resendAvailableAt']?.toString() ?? '',
+      ),
+      resendsRemaining: json['resendsRemaining'] as int? ?? 0,
+    );
+  }
 }
 
 class JoinedTicket extends JoinResult {
@@ -297,12 +394,16 @@ class PaymentRequired extends JoinResult {
     required this.checkoutUrl,
     this.tenantSlug,
     this.locationSlug,
+    this.fee = 0,
+    this.currency = 'PHP',
   });
 
   final String paymentAttemptId;
   final Uri checkoutUrl;
   final String? tenantSlug;
   final String? locationSlug;
+  final num fee;
+  final String currency;
 }
 
 class JoinRepository {
@@ -338,9 +439,89 @@ class JoinRepository {
       }
       rethrow;
     }
+    return _parseJoinResult(response, preview: preview);
+  }
+
+  Future<JoinResult> joinDirect({
+    required String tenantSlug,
+    String? locationSlug,
+    required String customerName,
+  }) async {
+    final directApi = api;
+    if (directApi is! DirectJoinApi) {
+      throw const ApiException(
+        501,
+        'DIRECT_JOIN_UNAVAILABLE',
+        'Direct queue joining is not configured for this build.',
+      );
+    }
+    final response = await (directApi as DirectJoinApi).joinDirect(
+      tenantSlug: tenantSlug,
+      locationSlug: locationSlug,
+      joinAttemptId: _newAttemptId(),
+      customerName: customerName,
+    );
+    return _parseJoinResult(
+      response,
+      tenantSlug: tenantSlug,
+      locationSlug: locationSlug,
+    );
+  }
+
+  Future<JoinResult> verifyEmail(
+    JoinEmailVerification challenge,
+    String code,
+  ) async {
+    final otpApi = api;
+    if (otpApi is! JoinOtpApi) {
+      throw const FormatException('Email verification is unavailable.');
+    }
+    final response = await (otpApi as JoinOtpApi).verifyOtp(
+      otpId: challenge.otpId,
+      code: code,
+      attemptId: _newAttemptId(),
+    );
+    return _parseJoinResult(
+      response,
+      tenantSlug: challenge.tenantSlug,
+      locationSlug: challenge.locationSlug,
+    );
+  }
+
+  Future<JoinEmailVerification> resendEmail(
+    JoinEmailVerification challenge,
+  ) async {
+    final otpApi = api;
+    if (otpApi is! JoinOtpApi) {
+      throw const FormatException('Email verification is unavailable.');
+    }
+    return JoinEmailVerification.fromJson(
+      await (otpApi as JoinOtpApi).resendOtp(
+        otpId: challenge.otpId,
+        attemptId: _newAttemptId(),
+      ),
+    );
+  }
+
+  JoinResult _parseJoinResult(
+    Map<String, dynamic> response, {
+    JoinPreview? preview,
+    String? tenantSlug,
+    String? locationSlug,
+  }) {
+    if (response['otpRequired'] == true) {
+      return JoinEmailVerification.fromJson(response);
+    }
     final ticket = response['ticket'];
     if (ticket is Map<String, dynamic>) {
-      return JoinedTicket(QueueTicket.fromJson(ticket));
+      return JoinedTicket(
+        queueTicketFromJoinResponse(
+          response,
+          preview: preview,
+          tenantSlug: tenantSlug,
+          locationSlug: locationSlug,
+        ),
+      );
     }
 
     if (response['paymentRequired'] == true) {
@@ -353,11 +534,31 @@ class JoinRepository {
       if (uri == null || uri.scheme != 'https') {
         throw const FormatException('Payment checkout URL is invalid.');
       }
+      final queueFee = response['queueFee'];
+      final payment = response['payment'];
       return PaymentRequired(
         paymentAttemptId: paymentAttemptId,
         checkoutUrl: uri,
         tenantSlug: response['tenantSlug'] as String?,
         locationSlug: response['locationSlug'] as String?,
+        fee:
+            response['amountCents'] as num? ??
+            (queueFee is Map<String, dynamic>
+                ? queueFee['amountCents'] as num?
+                : null) ??
+            (payment is Map<String, dynamic>
+                ? payment['amountCents'] as num?
+                : null) ??
+            0,
+        currency:
+            response['currency'] as String? ??
+            (queueFee is Map<String, dynamic>
+                ? queueFee['currency'] as String?
+                : null) ??
+            (payment is Map<String, dynamic>
+                ? payment['currency'] as String?
+                : null) ??
+            'PHP',
       );
     }
 
@@ -375,6 +576,73 @@ class JoinRepository {
     return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
         '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
+}
+
+QueueTicket queueTicketFromJoinResponse(
+  Map<String, dynamic> response, {
+  JoinPreview? preview,
+  String? tenantSlug,
+  String? locationSlug,
+}) {
+  final ticket = response['ticket'];
+  if (ticket is! Map<String, dynamic>) {
+    throw const FormatException('Queue join response is missing a ticket.');
+  }
+
+  final snapshot = _joinResponseMap(response['snapshot']);
+  final focusTicket = _joinResponseMap(snapshot?['focusTicket']);
+  final tenant = _joinResponseMap(snapshot?['tenant']);
+  final location = _joinResponseMap(snapshot?['location']);
+  final merged = <String, dynamic>{...?focusTicket, ...ticket};
+
+  final vendorName = _firstJoinText([
+    merged['vendorName'],
+    merged['tenantName'],
+    merged['businessName'],
+    preview?.vendorName,
+    tenant?['name'],
+    tenant?['businessName'],
+  ]);
+  final resolvedTenantSlug = _firstJoinText([
+    merged['tenantSlug'],
+    merged['vendorSlug'],
+    preview?.vendorSlug,
+    tenant?['slug'],
+    tenantSlug,
+  ]);
+  final locationName = _firstJoinText([
+    merged['locationName'],
+    preview?.locationName,
+    location?['name'],
+  ]);
+  final resolvedLocationSlug = _firstJoinText([
+    merged['locationSlug'],
+    preview?.locationSlug,
+    location?['slug'],
+    locationSlug,
+  ]);
+
+  if (vendorName != null) merged['vendorName'] = vendorName;
+  if (resolvedTenantSlug != null) {
+    merged['tenantSlug'] = resolvedTenantSlug;
+  }
+  if (locationName != null) merged['locationName'] = locationName;
+  if (resolvedLocationSlug != null) {
+    merged['locationSlug'] = resolvedLocationSlug;
+  }
+
+  return QueueTicket.fromJson(merged);
+}
+
+Map<String, dynamic>? _joinResponseMap(Object? value) {
+  return value is Map<String, dynamic> ? value : null;
+}
+
+String? _firstJoinText(Iterable<Object?> values) {
+  for (final value in values) {
+    if (value is String && value.trim().isNotEmpty) return value;
+  }
+  return null;
 }
 
 class JoinUnavailableException implements Exception {
@@ -403,16 +671,38 @@ bool _isQueueUnavailableApiCode(String? code) {
           code.startsWith('SUBSCRIPTION_'));
 }
 
-class RestJoinApi implements JoinApi {
+class RestJoinApi implements JoinApi, DirectJoinApi, JoinOtpApi {
   RestJoinApi(this.client);
 
   final AuthenticatedApiClient client;
+
+  @override
+  Future<Map<String, dynamic>> verifyOtp({
+    required String otpId,
+    required String code,
+    required String attemptId,
+  }) => client.post(
+    '/api/mobile/queue-join/otp/verify',
+    {'otpId': otpId, 'code': code},
+    additionalHeaders: {'Idempotency-Key': attemptId},
+  );
+
+  @override
+  Future<Map<String, dynamic>> resendOtp({
+    required String otpId,
+    required String attemptId,
+  }) => client.post(
+    '/api/mobile/queue-join/otp/resend',
+    {'otpId': otpId},
+    additionalHeaders: {'Idempotency-Key': attemptId},
+  );
 
   @override
   Future<Map<String, dynamic>> resolve(String locationQrId) async {
     final queue = await client.get(
       '/api/mobile/queue-join/resolve',
       queryParameters: {'id': locationQrId},
+      additionalHeaders: const {'Cache-Control': 'no-cache'},
     );
     final vendorSlug = queue['vendorSlug'];
     if (vendorSlug is! String || vendorSlug.trim().isEmpty) return queue;
@@ -441,6 +731,25 @@ class RestJoinApi implements JoinApi {
       {
         'id': locationQrId,
         'joinAttemptId': joinAttemptId,
+        'customerName': customerName,
+      },
+      additionalHeaders: {'Idempotency-Key': joinAttemptId},
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> joinDirect({
+    required String tenantSlug,
+    String? locationSlug,
+    required String joinAttemptId,
+    required String customerName,
+  }) {
+    return client.post(
+      '/api/mobile/queue-join/direct',
+      {
+        'tenantSlug': tenantSlug,
+        if (locationSlug != null && locationSlug.trim().isNotEmpty)
+          'locationSlug': locationSlug,
         'customerName': customerName,
       },
       additionalHeaders: {'Idempotency-Key': joinAttemptId},

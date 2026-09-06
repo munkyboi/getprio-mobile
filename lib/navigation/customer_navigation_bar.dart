@@ -22,7 +22,7 @@ class CustomerNavigationBar extends StatelessWidget {
       key: const Key('customer-main-menu'),
       backgroundColor: GetPrioTheme.paper,
       alignment: NavigationBarAlignment.spaceBetween,
-      padding: const EdgeInsets.fromLTRB(12, 18, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       spacing: 0,
       selectedKey: ValueKey(selectedDestination),
       onSelected: (key) {
@@ -53,7 +53,7 @@ class CustomerNavigationBar extends StatelessWidget {
         _destinationItem(
           context: context,
           destination: CustomerDestination.account,
-          label: 'Account',
+          label: 'Profile',
           icon: LucideIcons.circleUserRound,
         ),
       ],

@@ -35,19 +35,26 @@ Bearer-only requests bypass the browser-cookie CSRF branch, while the auth middl
 
 ### Registration
 
-Call `POST /api/auth/register/customer` with the shared customer request:
+The mobile customer registration flow uses the email-verification endpoints under
+the shared `/api/auth` surface. Call `POST /api/auth/register/customer/otp` with:
 
 ```json
 {
   "name": "Profile name",
   "username": "customer_handle",
   "email": "customer@example.com",
-  "phone": "+639171234567",
-  "password": "..."
+  "password": "Upper!12"
 }
 ```
 
-`name`, `username`, `email`, and `password` are required by the route; `phone` is normalized when supplied ([`authRoutes.js:759-810`](/Users/carloabella/Projects/getprio/dev/backend/src/routes/authRoutes.js:759)). The app should label `name` as the profile name. When a ticket needs a customer-facing name, use the saved display name first and profile name second.
+`name`, `username`, `email`, and `password` are required. Customer passwords must
+contain a special character, at least two numbers, an uppercase letter, and be
+6-32 characters long. The response is an email OTP challenge, not an authenticated
+session. Verify it with `POST /api/auth/register/customer/otp/verify` using the
+challenge ID and six-digit code; only that response returns the bearer session.
+`POST /api/auth/register/customer/otp/resend` issues a replacement code for an
+active challenge. The app should label `name` as the full name. When a ticket needs
+a customer-facing name, use the saved display name first and profile name second.
 
 On success, persist the returned refresh token securely, keep the access token only in memory, retain the returned session expiry, and load the returned user. On `409`, show the server's existing account-conflict message without probing whether a specific email exists.
 

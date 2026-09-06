@@ -78,6 +78,33 @@ void main() {
     },
   );
 
+  test('a failed registration can be retried after the API recovers', () async {
+    final messaging = FakeMessaging(
+      permission: PushPermission.authorized,
+      token: 'fcm-1',
+    );
+    final api = FakePushRegistrationApi()
+      ..registerError = StateError('offline');
+    final coordinator = PushCoordinator(
+      messaging: messaging,
+      api: api,
+      installationStore: MemoryInstallationStore('installation-1'),
+      platform: 'ios',
+      appVersion: '1.0.0',
+      locale: 'en-PH',
+    );
+
+    await coordinator.initialize();
+    expect(api.registration, isNull);
+
+    api.registerError = null;
+    await coordinator.initialize();
+    await coordinator.flush();
+
+    expect(api.registration?.token, 'fcm-1');
+    await coordinator.logout();
+  });
+
   test('safe push signal is passed to the REST refresh callback', () async {
     final messaging = FakeMessaging(
       permission: PushPermission.authorized,
@@ -133,6 +160,35 @@ void main() {
       expect(api.deactivatedInstallationId, 'installation-1');
     },
   );
+
+  test(
+    'logout tolerates push cleanup failure and stops token registration',
+    () async {
+      final messaging = FakeMessaging(
+        permission: PushPermission.authorized,
+        token: 'fcm-1',
+      );
+      final api = FakePushRegistrationApi()
+        ..deactivateError = StateError('offline');
+      final coordinator = PushCoordinator(
+        messaging: messaging,
+        api: api,
+        installationStore: MemoryInstallationStore('installation-1'),
+        platform: 'ios',
+        appVersion: '1.0.0',
+        locale: 'en-PH',
+      );
+
+      await coordinator.initialize();
+      await coordinator.logout();
+      messaging.emitToken('fcm-2');
+      await Future<void>.delayed(Duration.zero);
+      await coordinator.flush();
+
+      expect(api.registrationCount, 1);
+      expect(api.deactivatedInstallationId, isNull);
+    },
+  );
 }
 
 class FakeMessaging implements PushMessagingPort {
@@ -171,11 +227,20 @@ class FakeMessaging implements PushMessagingPort {
 class FakePushRegistrationApi implements PushRegistrationApi {
   PushRegistration? registration;
   String? deactivatedInstallationId;
+  Object? registerError;
+  Object? deactivateError;
+  int registrationCount = 0;
 
   @override
-  Future<void> register(PushRegistration value) async => registration = value;
+  Future<void> register(PushRegistration value) async {
+    if (registerError != null) throw registerError!;
+    registrationCount++;
+    registration = value;
+  }
 
   @override
-  Future<void> deactivate(String installationId) async =>
-      deactivatedInstallationId = installationId;
+  Future<void> deactivate(String installationId) async {
+    if (deactivateError != null) throw deactivateError!;
+    deactivatedInstallationId = installationId;
+  }
 }
