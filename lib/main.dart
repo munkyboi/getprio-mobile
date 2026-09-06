@@ -91,7 +91,10 @@ class GetPrioApp extends StatelessWidget {
             platform: defaultTargetPlatform == TargetPlatform.android
                 ? 'android'
                 : 'ios',
-            appVersion: '1.0.0',
+            appVersion: const String.fromEnvironment(
+              'FLUTTER_BUILD_NAME',
+              defaultValue: '1.0.1',
+            ),
             locale: 'en-PH',
             onSignal: (_) async => ticketRepository.requestRefresh(),
           )
