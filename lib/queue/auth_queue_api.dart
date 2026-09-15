@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../auth/auth_repository.dart';
+import '../network/api_paths.dart';
 
 abstract interface class QueueApi {
   Future<Map<String, dynamic>> loadQueueSnapshot({
@@ -35,7 +36,7 @@ class AuthenticatedApiClient {
     Map<String, String>? queryParameters,
     Map<String, String>? additionalHeaders,
   }) async {
-    final uri = Uri.parse('$_baseUrl$path')
+    final uri = Uri.parse('$_baseUrl${versionedApiPath(path)}')
         .replace(queryParameters: queryParameters);
     return _send(
       (token) => _client.get(
@@ -51,7 +52,7 @@ class AuthenticatedApiClient {
   }) async {
     return _send(
       (token) => _client.delete(
-        Uri.parse('$_baseUrl$path'),
+        Uri.parse('$_baseUrl${versionedApiPath(path)}'),
         headers: _headers(token, additionalHeaders: additionalHeaders),
       ),
     );
@@ -64,7 +65,7 @@ class AuthenticatedApiClient {
   }) async {
     return _send(
       (token) => _client.post(
-        Uri.parse('$_baseUrl$path'),
+        Uri.parse('$_baseUrl${versionedApiPath(path)}'),
         headers: _headers(
           token,
           contentType: true,
@@ -82,7 +83,7 @@ class AuthenticatedApiClient {
   }) async {
     return _send(
       (token) => _client.put(
-        Uri.parse('$_baseUrl$path'),
+        Uri.parse('$_baseUrl${versionedApiPath(path)}'),
         headers: _headers(
           token,
           contentType: true,
@@ -100,7 +101,7 @@ class AuthenticatedApiClient {
   }) async {
     return _send(
       (token) => _client.patch(
-        Uri.parse('$_baseUrl$path'),
+        Uri.parse('$_baseUrl${versionedApiPath(path)}'),
         headers: _headers(
           token,
           contentType: true,
@@ -117,7 +118,7 @@ class AuthenticatedApiClient {
     required String contentType,
     Map<String, String>? queryParameters,
   }) async {
-    final uri = Uri.parse('$_baseUrl$path')
+    final uri = Uri.parse('$_baseUrl${versionedApiPath(path)}')
         .replace(queryParameters: queryParameters);
     return _send(
       (token) => _client.post(
