@@ -294,7 +294,7 @@ void main() {
       authRepository: auth,
       client: MockClient((request) async {
         requestedPaths.add(request.url.path);
-        if (request.url.path == '/api/mobile/queue-join/resolve') {
+        if (request.url.path == '/api/v1/mobile/queue-join/resolve') {
           resolveHeaders.addAll(request.headers);
           return http.Response(
             jsonEncode({
@@ -323,8 +323,8 @@ void main() {
     final response = await RestJoinApi(client).resolve(validId);
 
     expect(requestedPaths, [
-      '/api/mobile/queue-join/resolve',
-      '/api/public/vendors/bosslot',
+      '/api/v1/mobile/queue-join/resolve',
+      '/api/v1/public/vendors/bosslot',
     ]);
     expect(
       resolveHeaders['Cache-Control'] ?? resolveHeaders['cache-control'],
@@ -355,7 +355,7 @@ void main() {
         authRepository: auth,
         client: MockClient((request) async {
           requestedPaths.add(request.url.path);
-          if (request.url.path == '/api/mobile/queue-join/resolve') {
+          if (request.url.path == '/api/v1/mobile/queue-join/resolve') {
             return http.Response(
               jsonEncode({
                 'locationQrId': validId,
@@ -381,8 +381,8 @@ void main() {
       final response = await RestJoinApi(client).resolve(validId);
 
       expect(requestedPaths, [
-        '/api/mobile/queue-join/resolve',
-        '/api/public/vendors/bosslot',
+        '/api/v1/mobile/queue-join/resolve',
+        '/api/v1/public/vendors/bosslot',
       ]);
       expect(response['joinable'], isTrue);
       expect(response['vendorName'], 'BOSS LOT');

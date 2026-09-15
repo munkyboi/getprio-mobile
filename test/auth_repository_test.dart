@@ -135,7 +135,7 @@ void main() {
       baseUrl: 'https://api.example.test',
       client: MockClient((request) async {
         expect(request.method, 'GET');
-        expect(request.url.path, '/api/auth/username-availability');
+        expect(request.url.path, '/api/v1/auth/username-availability');
         expect(request.url.queryParameters['username'], 'jane_doe');
         return http.Response(
           jsonEncode({
@@ -188,7 +188,7 @@ void main() {
       baseUrl: 'https://api.example.test',
       client: MockClient((request) async {
         expect(request.method, 'POST');
-        expect(request.url.path, '/api/auth/register/customer/otp');
+        expect(request.url.path, '/api/v1/auth/register/customer/otp');
         expect(jsonDecode(request.body), {
           'name': 'Jane Doe',
           'username': 'jane_doe',
@@ -228,7 +228,7 @@ void main() {
       final api = RestAuthApi(
         baseUrl: 'https://api.example.test',
         client: MockClient((request) async {
-          expect(request.url.path, '/api/auth/register/customer/otp/verify');
+          expect(request.url.path, '/api/v1/auth/register/customer/otp/verify');
           expect(jsonDecode(request.body), {
             'challengeId': 'challenge-1',
             'code': '123456',
