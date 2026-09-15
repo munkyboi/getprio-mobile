@@ -77,6 +77,7 @@ flutter:
     - assets/illustrations/hero-queue-scene-transparent.png
     - assets/illustrations/dashboard-empty.png
     - assets/illustrations/scan-invalid-qr-half-body-transparent-v3.png
+    - shorebird.yaml
 
   # To add assets to your application, add an assets section, like this:
   # assets:
