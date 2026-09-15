@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'auth_models.dart';
 import 'auth_repository.dart';
+import '../network/api_paths.dart';
 
 class PkcePair {
   const PkcePair({
@@ -100,7 +101,9 @@ class RestOAuthApi implements OAuthApi {
     required String state,
   }) async {
     final response = await _client.post(
-      Uri.parse('$_baseUrl/api/mobile/auth/oauth/exchange'),
+      Uri.parse(
+        '$_baseUrl${versionedApiPath('/api/mobile/auth/oauth/exchange')}',
+      ),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'code': code,
@@ -169,8 +172,10 @@ class OAuthFlow {
       throw const OAuthException('This OAuth provider is not supported.');
     }
     final pair = PkcePair.generate();
-    final startUri = Uri.parse('$baseUrl/api/mobile/auth/oauth/$provider/start')
-        .replace(
+    final startUri =
+        Uri.parse(
+          '$baseUrl${versionedApiPath('/api/mobile/auth/oauth/$provider/start')}',
+        ).replace(
           queryParameters: {
             'intent': 'login',
             'state': pair.state,

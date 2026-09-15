@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import '../network/api_paths.dart';
+
 import 'auth_models.dart';
 
 abstract interface class AuthApi {
@@ -376,8 +378,9 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
       );
     }
 
-    final uri = Uri.parse('$_baseUrl/api/auth/username-availability')
-        .replace(queryParameters: {'username': username});
+    final uri = Uri.parse(
+      '$_baseUrl${versionedApiPath('/api/auth/username-availability')}',
+    ).replace(queryParameters: {'username': username});
     final response = await _client.get(uri);
     final decoded = _decode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -480,7 +483,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
     }
 
     final response = await _client.post(
-      Uri.parse('$_baseUrl$path'),
+      Uri.parse('$_baseUrl${versionedApiPath(path)}'),
       headers: {
         'Content-Type': 'application/json',
         if (compatibilityHeader) 'X-Auth-Compatibility': 'bearer-v1',
