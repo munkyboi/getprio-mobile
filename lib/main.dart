@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'auth/auth_models.dart';
 import 'auth/biometric_login.dart';
@@ -728,6 +729,21 @@ class _SignInPageState extends State<SignInPage>
                   ),
                 ),
                 if (!widget.biometricLogin &&
+                    shouldShowAppleSignInButton(
+                      enabled: widget.oauthFlow?.enabled == true,
+                      platform: defaultTargetPlatform,
+                    )) ...[
+                  const SizedBox(height: 16),
+                  const Text('Or continue with', textAlign: TextAlign.center),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SignInWithAppleButton(
+                      onPressed: _isBusy ? () {} : _signInWithApple,
+                    ),
+                  ),
+                ],
+                if (!widget.biometricLogin &&
                     shouldShowLegacyOAuthButtons(
                       enabled: widget.oauthFlow?.enabled == true,
                       platform: defaultTargetPlatform,
@@ -893,6 +909,29 @@ class _SignInPageState extends State<SignInPage>
     });
     try {
       final result = await flow.signIn(provider);
+      if (!mounted) return;
+      switch (result) {
+        case AuthenticatedSession(:final session):
+          widget.onAuthenticated(session);
+        case final MfaChallenge challenge:
+          setState(() => _challenge = challenge);
+      }
+    } catch (error) {
+      if (mounted) showFormError(error, _authError(error));
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _signInWithApple() async {
+    final flow = widget.oauthFlow;
+    if (flow == null) return;
+    setState(() {
+      _error = null;
+      _isBusy = true;
+    });
+    try {
+      final result = await flow.signInWithApple();
       if (!mounted) return;
       switch (result) {
         case AuthenticatedSession(:final session):

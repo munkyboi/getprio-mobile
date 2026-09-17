@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/oauth_flow.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   test('generates an S256 PKCE challenge from the verifier', () {
@@ -51,10 +55,7 @@ void main() {
 
   test('hides legacy OAuth buttons on iOS', () {
     expect(
-      shouldShowLegacyOAuthButtons(
-        enabled: true,
-        platform: TargetPlatform.iOS,
-      ),
+      shouldShowLegacyOAuthButtons(enabled: true, platform: TargetPlatform.iOS),
       isFalse,
     );
   });
@@ -78,4 +79,61 @@ void main() {
       isFalse,
     );
   });
+
+  test('shows Apple sign-in only on iOS when OAuth is configured', () {
+    expect(
+      shouldShowAppleSignInButton(enabled: true, platform: TargetPlatform.iOS),
+      isTrue,
+    );
+    expect(
+      shouldShowAppleSignInButton(
+        enabled: true,
+        platform: TargetPlatform.android,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldShowAppleSignInButton(enabled: false, platform: TargetPlatform.iOS),
+      isFalse,
+    );
+  });
+
+  test(
+    'posts Apple credentials to the versioned mobile exchange route',
+    () async {
+      Uri? requestUri;
+      Map<String, dynamic>? requestBody;
+      final api = RestOAuthApi(
+        baseUrl: 'https://api.example.com/',
+        client: MockClient((request) async {
+          requestUri = request.url;
+          requestBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return httpResponse(jsonEncode({'token': 'access-token'}), 200);
+        }),
+      );
+
+      await api.exchangeApple(
+        identityToken: 'identity-token',
+        authorizationCode: 'authorization-code',
+        nonce: 'nonce',
+        givenName: 'Apple',
+        familyName: 'Customer',
+      );
+
+      expect(requestUri?.path, '/api/v1/mobile/auth/oauth/apple');
+      expect(requestBody, {
+        'identityToken': 'identity-token',
+        'authorizationCode': 'authorization-code',
+        'nonce': 'nonce',
+        'givenName': 'Apple',
+        'familyName': 'Customer',
+      });
+    },
+  );
 }
+
+http.Response httpResponse(String body, int statusCode) => http.Response(
+  body,
+  statusCode,
+  headers: {'content-type': 'application/json'},
+);

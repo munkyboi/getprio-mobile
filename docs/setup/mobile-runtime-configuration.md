@@ -77,16 +77,32 @@ If the deployment uses an HTTPS universal link for OAuth, configure the selected
 
 The exact host remains deployment configuration and must match the platform dashboard allowlist.
 
-For the current iOS App Store release, Google and Facebook buttons are intentionally
-hidden until Sign in with Apple is implemented. Android keeps the existing providers.
-Re-enable the iOS buttons only after the Apple provider, equivalent privacy controls,
-and physical-device callback verification are complete.
+For the current iOS App Store release, Google and Facebook buttons remain hidden while
+the Apple provider, equivalent privacy controls, and physical-device callback are
+being verified. Android keeps the existing providers.
+
+Sign in with Apple is now available on iOS through the native Apple authorization
+sheet. The Apple Developer account must enable Sign in with Apple for the app's
+App ID, and the backend deployment must provide these secret values through its
+environment (never through `--dart-define` or source control):
+
+- `APPLE_CLIENT_ID` — the app's bundle identifier
+- `APPLE_TEAM_ID` — the Apple Developer team identifier
+- `APPLE_KEY_ID` — the Sign in with Apple key identifier
+- `APPLE_PRIVATE_KEY` — the downloaded `.p8` key contents, with newlines preserved
+
+The backend validates Apple's identity token against Apple's rotating JWKS and
+exchanges the authorization code before creating a GetPrio session. If users can
+choose Apple's private relay address, publish the required SPF record for the
+relay email domain. The first authorization supplies the user's name; subsequent
+authorizations may omit it, so the backend retains the existing profile name.
 
 ## Server dependencies
 
 The mobile client expects the existing shared bearer routes plus these mobile-only surfaces:
 
 - `GET /api/mobile/auth/oauth/{provider}/start`
+- `POST /api/mobile/auth/oauth/apple`
 - `POST /api/mobile/auth/oauth/exchange`
 - `GET /api/mobile/queue-join/resolve?id=<uuid>`
 - `POST /api/mobile/queue-join`

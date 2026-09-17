@@ -6,6 +6,7 @@ import 'package:app_links/app_links.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'auth_models.dart';
@@ -68,6 +69,11 @@ bool shouldShowLegacyOAuthButtons({
   required TargetPlatform platform,
 }) => enabled && platform != TargetPlatform.iOS;
 
+bool shouldShowAppleSignInButton({
+  required bool enabled,
+  required TargetPlatform platform,
+}) => enabled && platform == TargetPlatform.iOS;
+
 abstract interface class OAuthLinkSource {
   Future<Uri?> getInitialLink();
 
@@ -91,6 +97,14 @@ abstract interface class OAuthApi {
     required String code,
     required String codeVerifier,
     required String state,
+  });
+
+  Future<Map<String, dynamic>> exchangeApple({
+    required String identityToken,
+    required String authorizationCode,
+    required String nonce,
+    String? givenName,
+    String? familyName,
   });
 }
 
@@ -130,6 +144,42 @@ class RestOAuthApi implements OAuthApi {
         response.statusCode,
         body['code'] as String?,
         body['message'] as String? ?? 'OAuth sign-in could not be completed.',
+      );
+    }
+    return body;
+  }
+
+  @override
+  Future<Map<String, dynamic>> exchangeApple({
+    required String identityToken,
+    required String authorizationCode,
+    required String nonce,
+    String? givenName,
+    String? familyName,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('$_baseUrl${versionedApiPath('/api/mobile/auth/oauth/apple')}'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'identityToken': identityToken,
+        'authorizationCode': authorizationCode,
+        'nonce': nonce,
+        if (givenName != null && givenName.isNotEmpty) 'givenName': givenName,
+        if (familyName != null && familyName.isNotEmpty)
+          'familyName': familyName,
+      }),
+    );
+    final decoded = response.body.trim().isEmpty
+        ? null
+        : jsonDecode(response.body);
+    final body = decoded is Map<String, dynamic>
+        ? decoded
+        : <String, dynamic>{};
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        response.statusCode,
+        body['code'] as String?,
+        body['message'] as String? ?? 'Apple sign-in could not be completed.',
       );
     }
     return body;
@@ -202,6 +252,47 @@ class OAuthFlow {
       code: callback.code!,
       codeVerifier: pair.verifier,
       state: pair.state,
+    );
+    return authRepository.completeLoginResponse(response);
+  }
+
+  Future<LoginResult> signInWithApple() async {
+    if (!enabled) {
+      throw const OAuthException('Apple sign-in is not available.');
+    }
+    final state = PkcePair.generate().state;
+    final nonce = generateNonce();
+    final credential = await SignInWithApple.getAppleIDCredential(
+      scopes: const [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: nonce,
+      state: state,
+    );
+    if (credential.state != state) {
+      throw const OAuthException(
+        'Apple sign-in state did not match the pending sign-in.',
+      );
+    }
+    final identityToken = credential.identityToken;
+    final authorizationCode = credential.authorizationCode;
+    if (identityToken == null || identityToken.isEmpty) {
+      throw const OAuthException(
+        'Apple sign-in did not return an identity token.',
+      );
+    }
+    if (authorizationCode.isEmpty) {
+      throw const OAuthException(
+        'Apple sign-in did not return an authorization code.',
+      );
+    }
+    final response = await api.exchangeApple(
+      identityToken: identityToken,
+      authorizationCode: authorizationCode,
+      nonce: nonce,
+      givenName: credential.givenName,
+      familyName: credential.familyName,
     );
     return authRepository.completeLoginResponse(response);
   }
