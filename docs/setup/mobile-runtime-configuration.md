@@ -82,7 +82,8 @@ the Apple provider, equivalent privacy controls, and physical-device callback ar
 being verified. Android keeps the existing providers.
 
 Sign in with Apple is now available on iOS through the native Apple authorization
-sheet. The Apple Developer account must enable Sign in with Apple for the app's
+sheet. A paid Apple Developer Program membership is required, and the Apple
+Developer account must enable Sign in with Apple for the app's
 App ID, and the backend deployment must provide these secret values through its
 environment (never through `--dart-define` or source control):
 
