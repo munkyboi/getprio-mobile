@@ -77,6 +77,11 @@ If the deployment uses an HTTPS universal link for OAuth, configure the selected
 
 The exact host remains deployment configuration and must match the platform dashboard allowlist.
 
+For the current iOS App Store release, Google and Facebook buttons are intentionally
+hidden until Sign in with Apple is implemented. Android keeps the existing providers.
+Re-enable the iOS buttons only after the Apple provider, equivalent privacy controls,
+and physical-device callback verification are complete.
+
 ## Server dependencies
 
 The mobile client expects the existing shared bearer routes plus these mobile-only surfaces:

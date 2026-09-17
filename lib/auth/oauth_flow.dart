@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:app_links/app_links.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -59,6 +60,13 @@ class ExternalOAuthBrowser implements OAuthBrowser {
   Future<bool> open(Uri uri) =>
       launchUrl(uri, mode: LaunchMode.externalApplication);
 }
+
+/// Legacy Google/Facebook buttons remain available on Android, where Apple’s
+/// equivalent-login requirement does not apply to the iOS submission surface.
+bool shouldShowLegacyOAuthButtons({
+  required bool enabled,
+  required TargetPlatform platform,
+}) => enabled && platform != TargetPlatform.iOS;
 
 abstract interface class OAuthLinkSource {
   Future<Uri?> getInitialLink();

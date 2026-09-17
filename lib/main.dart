@@ -728,7 +728,10 @@ class _SignInPageState extends State<SignInPage>
                   ),
                 ),
                 if (!widget.biometricLogin &&
-                    widget.oauthFlow?.enabled == true) ...[
+                    shouldShowLegacyOAuthButtons(
+                      enabled: widget.oauthFlow?.enabled == true,
+                      platform: defaultTargetPlatform,
+                    )) ...[
                   const SizedBox(height: 16),
                   const Text('Or continue with', textAlign: TextAlign.center),
                   const SizedBox(height: 8),

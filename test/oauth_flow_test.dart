@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/oauth_flow.dart';
 
@@ -45,6 +46,36 @@ void main() {
         expectedState: 'expected',
       ),
       throwsA(isA<OAuthException>()),
+    );
+  });
+
+  test('hides legacy OAuth buttons on iOS', () {
+    expect(
+      shouldShowLegacyOAuthButtons(
+        enabled: true,
+        platform: TargetPlatform.iOS,
+      ),
+      isFalse,
+    );
+  });
+
+  test('shows legacy OAuth buttons on Android when enabled', () {
+    expect(
+      shouldShowLegacyOAuthButtons(
+        enabled: true,
+        platform: TargetPlatform.android,
+      ),
+      isTrue,
+    );
+  });
+
+  test('hides legacy OAuth buttons when OAuth is unavailable', () {
+    expect(
+      shouldShowLegacyOAuthButtons(
+        enabled: false,
+        platform: TargetPlatform.android,
+      ),
+      isFalse,
     );
   });
 }
