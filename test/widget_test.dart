@@ -1,3 +1,5 @@
+import 'support/memory_onboarding_store.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
@@ -5,27 +7,134 @@ import 'package:getprio_mobile/app_theme.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
+import 'package:getprio_mobile/directory/vendor_contact.dart';
 import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/loading_skeleton.dart';
+import 'package:getprio_mobile/queue/join_repository.dart';
 import 'package:getprio_mobile/queue/join_ui.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  test('uses the display name or first profile name in greetings', () {
+    expect(
+      homeGreetingName(
+        const AuthUser(
+          id: 'user-1',
+          email: 'customer@example.com',
+          profileName: 'Ava Reyes',
+          displayName: 'Ava R.',
+        ),
+      ),
+      'Ava R.',
+    );
+    expect(
+      homeGreetingName(
+        const AuthUser(
+          id: 'user-2',
+          email: 'customer@example.com',
+          profileName: 'Carlo Abella',
+        ),
+      ),
+      'Carlo',
+    );
+    expect(
+      homeGreetingName(
+        const AuthUser(id: 'user-3', email: 'customer@example.com'),
+      ),
+      'there',
+    );
+  });
+
+  testWidgets('shows the centered logo while the session is restoring', (
+    tester,
+  ) async {
+    await tester.pumpWidget(ShadcnApp(home: const SplashLoadingScreen()));
+
+    final splash = find.byKey(const Key('splash-loading-screen'));
+    final logo = find.byKey(const Key('splash-logo'));
+    expect(splash, findsOneWidget);
+    expect(logo, findsOneWidget);
+    expect(
+      tester.getCenter(logo).dx,
+      closeTo(tester.getCenter(splash).dx, 0.5),
+    );
+    expect(
+      tester.getCenter(logo).dy,
+      closeTo(tester.getCenter(splash).dy, 0.5),
+    );
+  });
+
+  testWidgets('builds the shared skeleton layouts for preload surfaces', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: SingleChildScrollView(
+          child: Column(
+            children: const [
+              HomeActiveTicketSkeleton(),
+              VendorDirectorySkeleton(itemCount: 2),
+              VendorDetailsSkeleton(),
+              LiveQueueStatusSkeleton(),
+              TicketsSkeleton(),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(GetPrioSkeleton), findsNWidgets(5));
+    expect(find.byType(SkeletonBlock), findsWidgets);
+    expect(
+      find.byKey(const Key('home-active-ticket-skeleton')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('home-active-ticket-progress-skeleton')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('home-active-ticket-action-skeleton')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('tickets-active-ticket-progress-skeleton')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('tickets-active-ticket-action-skeleton')),
+      findsOneWidget,
+    );
+    for (var index = 0; index < 3; index++) {
+      expect(
+        find.byKey(ValueKey('tickets-history-skeleton-$index')),
+        findsOneWidget,
+      );
+    }
+  });
+
   testWidgets('uses the light theme by default', (tester) async {
     await tester.pumpWidget(
       GetPrioApp(
+        onboardingStore: MemoryOnboardingStore(completed: true),
         authRepository: AuthRepository(
           api: UnusedAuthApi(),
           tokenStore: MemoryTokenStore(),
         ),
       ),
     );
+    expect(find.byType(SplashLoadingScreen), findsOneWidget);
     await tester.pumpAndSettle();
 
     final app = tester.widget<ShadcnApp>(find.byType(ShadcnApp));
     expect(app.themeMode, ThemeMode.light);
-    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(find.byType(SvgPicture), findsNothing);
+    expect(
+      find.image(const AssetImage('assets/branding/login-biometric-scene.png')),
+      findsOneWidget,
+    );
     expect(find.text('Email or username'), findsOneWidget);
     expect(find.text('you@example.com or username'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
@@ -53,6 +162,245 @@ void main() {
     expect(find.text('Create a password'), findsOneWidget);
   });
 
+  testWidgets('auto-generates a username from the display name', (
+    tester,
+  ) async {
+    final api = UsernameAvailabilityAuthApi(available: true);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: RegisterPage(
+          authRepository: AuthRepository(
+            api: api,
+            tokenStore: MemoryTokenStore(),
+          ),
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('register-full-name')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('register-username')));
+    await tester.pump();
+
+    final initiallyEmptyUsername = tester.widget<TextField>(
+      find.byKey(const Key('register-username')),
+    );
+    expect(initiallyEmptyUsername.controller?.text, isEmpty);
+
+    await tester.enterText(
+      find.byKey(const Key('register-full-name')),
+      'Jane Doe',
+    );
+    await tester.pump();
+
+    final usernameField = tester.widget<TextField>(
+      find.byKey(const Key('register-username')),
+    );
+    expect(usernameField.controller?.text, isEmpty);
+
+    await tester.tap(find.byKey(const Key('register-username')));
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.pump();
+
+    final generatedUsername = tester.widget<TextField>(
+      find.byKey(const Key('register-username')),
+    );
+    expect(generatedUsername.controller?.text, 'jane_doe');
+  });
+
+  testWidgets(
+    'keeps a manually edited username when the display name changes',
+    (tester) async {
+      final api = UsernameAvailabilityAuthApi(available: true);
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: RegisterPage(
+            authRepository: AuthRepository(
+              api: api,
+              tokenStore: MemoryTokenStore(),
+            ),
+            onAuthenticated: (_) {},
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('register-full-name')),
+        'Jane Doe',
+      );
+      await tester.enterText(
+        find.byKey(const Key('register-username')),
+        'custom_name',
+      );
+      await tester.enterText(
+        find.byKey(const Key('register-full-name')),
+        'Another Person',
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      final usernameField = tester.widget<TextField>(
+        find.byKey(const Key('register-username')),
+      );
+      expect(usernameField.controller?.text, 'custom_name');
+      expect(api.checkedUsernames, ['custom_name']);
+    },
+  );
+
+  testWidgets('asynchronously verifies the generated username is available', (
+    tester,
+  ) async {
+    final api = UsernameAvailabilityAuthApi(available: true);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: RegisterPage(
+          authRepository: AuthRepository(
+            api: api,
+            tokenStore: MemoryTokenStore(),
+          ),
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('register-full-name')),
+      'Jane Doe',
+    );
+    await tester.pump();
+    expect(find.text('Checking username...'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('register-username')));
+    await tester.pump();
+    expect(find.text('Checking username...'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.pump();
+
+    expect(api.checkedUsernames, ['jane_doe']);
+    expect(find.text('Username is available.'), findsOneWidget);
+  });
+
+  testWidgets('does not submit a username that is no longer available', (
+    tester,
+  ) async {
+    final api = UsernameAvailabilityAuthApi(available: false);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: RegisterPage(
+          authRepository: AuthRepository(
+            api: api,
+            tokenStore: MemoryTokenStore(),
+          ),
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('register-full-name')),
+      'Jane Doe',
+    );
+    await tester.tap(find.byKey(const Key('register-username')));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+
+    final submitButton = find.byKey(const Key('register-submit'));
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(DestructiveBadge), findsNothing);
+    expect(find.text('That username is already taken.'), findsOneWidget);
+    expect(api.registrationCalls, 0);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('shows debounced password strength and requirements', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: RegisterPage(
+          authRepository: AuthRepository(
+            api: UnusedAuthApi(),
+            tokenStore: MemoryTokenStore(),
+          ),
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('register-password')),
+      'Upper!12',
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('register-password-strength')), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('register-password-strength')), findsOneWidget);
+    expect(find.text('Strong'), findsOneWidget);
+    expect(find.text('At least 2 numbers'), findsOneWidget);
+  });
+
+  testWidgets('moves to email OTP verification after valid registration', (
+    tester,
+  ) async {
+    final api = RegistrationOtpAuthApi();
+    var authenticated = false;
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: RegisterPage(
+          authRepository: AuthRepository(
+            api: api,
+            tokenStore: MemoryTokenStore(),
+          ),
+          onAuthenticated: (_) => authenticated = true,
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('register-full-name')),
+      'Jane Doe',
+    );
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('register-username')),
+      'jane_doe',
+    );
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('register-email')),
+      'jane+signup@example.com',
+    );
+    await tester.enterText(
+      find.byKey(const Key('register-password')),
+      'Upper!12',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.byKey(const Key('register-submit')));
+    await tester.tap(find.byKey(const Key('register-submit')));
+    await tester.pumpAndSettle();
+
+    expect(api.startCalls, 1);
+    expect(api.startEmail, 'jane+signup@example.com');
+    expect(find.byKey(const Key('register-otp-screen')), findsOneWidget);
+    expect(find.textContaining('j***@example.com'), findsOneWidget);
+    expect(authenticated, isFalse);
+
+    await tester.enterText(find.byKey(const Key('register-otp')), '123456');
+    await tester.tap(find.byKey(const Key('register-otp-submit')));
+    await tester.pumpAndSettle();
+
+    expect(authenticated, isTrue);
+  });
+
   testWidgets('labels password recovery field', (tester) async {
     await tester.pumpWidget(
       ShadcnApp(
@@ -75,11 +423,40 @@ void main() {
       ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
     );
 
-    expect(find.text('Good morning, Carlo'), findsOneWidget);
+    final greeting = find.textContaining(', Carlo');
+    expect(greeting, findsOneWidget);
+    final greetingText = tester.widget<Text>(greeting).data!;
+    expect(
+      homeGreetingOpeners,
+      contains(greetingText.replaceFirst(', Carlo', '')),
+    );
     expect(find.text('Your queue activity at a glance'), findsNothing);
     expect(find.text('Scan to join'), findsOneWidget);
     expect(find.byKey(const Key('home-page')), findsOneWidget);
-    expect(find.byType(Card), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('home-page')),
+        matching: find.byType(Card),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('centers the empty active ticket card contents', (tester) async {
+    await tester.pumpWidget(
+      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+    );
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(const Key('empty-active-ticket-card'));
+    final cardCenter = tester.getCenter(card).dx;
+    for (final label in const [
+      'Active ticket',
+      'No active tickets',
+      'Scan a vendor QR code when you are ready to join.',
+    ]) {
+      expect(tester.getCenter(find.text(label)).dx, closeTo(cardCenter, 0.5));
+    }
   });
 
   testWidgets('shows five menu items and opens QR joining from the center', (
@@ -100,7 +477,7 @@ void main() {
     expect(find.text('Explore'), findsOneWidget);
     expect(find.text('Join Queue'), findsOneWidget);
     expect(find.text('Tickets'), findsOneWidget);
-    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
     expect(find.byType(NavigationItem), findsNWidgets(4));
     expect(find.byType(NavigationButton), findsOneWidget);
 
@@ -275,6 +652,158 @@ void main() {
 
     expect(api.vendorDetailCalls, 2);
     expect(find.text('City Clinic refreshed'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'centers the vendor logo over the cover and places contact action',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var joinQueueCalls = 0;
+
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: VendorDetailPage(
+            vendor: const VendorSummary(
+              slug: 'city-clinic',
+              name: 'City Clinic',
+              queueAvailable: true,
+            ),
+            repository: DirectoryRepository(FakeDirectoryApi()),
+            contactLauncher: FakeVendorContactLauncher(),
+            onJoinQueue: () => joinQueueCalls++,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final cover = tester.getRect(
+        find.byKey(const Key('vendor-profile-cover')),
+      );
+      final logo = tester.getRect(find.byKey(const Key('vendor-logo')));
+      final surface = tester.getRect(
+        find.byKey(const Key('vendor-detail-surface')),
+      );
+      final contact = tester.getRect(
+        find.byKey(const Key('vendor-contact-button')),
+      );
+
+      expect(logo.center.dx, closeTo(cover.center.dx, 0.5));
+      expect(logo.center.dy, closeTo(cover.center.dy, 0.5));
+      expect(surface.top, lessThan(cover.bottom));
+      expect(contact.center.dx, greaterThan(surface.center.dx));
+      expect(contact.top, lessThan(surface.top + 120));
+      expect(find.byKey(const Key('vendor-join-queue-button')), findsOneWidget);
+      final actionSurface = tester.widget<Container>(
+        find.byKey(const Key('vendor-join-queue-action-surface')),
+      );
+      expect(actionSurface.color, GetPrioTheme.paper);
+
+      await tester.tap(find.byKey(const Key('vendor-join-queue-button')));
+      expect(joinQueueCalls, 1);
+    },
+  );
+
+  testWidgets(
+    'vendor detail Join Queue opens direct secure checkout without scanning',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final joinApi = FakeDirectJoinApi();
+
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: CustomerShell(
+            user: AuthUserForTest.user,
+            joinRepository: JoinRepository(joinApi),
+            directoryRepository: DirectoryRepository(FakeDirectoryApi()),
+            allowedHosts: const {'app.getprio.test'},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Explore'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('City Clinic'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('vendor-join-queue-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(QrScannerPage), findsNothing);
+      expect(find.byKey(const Key('direct-join-flow-shell')), findsOneWidget);
+      expect(find.byKey(const Key('checkout-bottom-sheet')), findsOneWidget);
+      expect(find.text('Secure checkout'), findsOneWidget);
+      expect(find.text('PHP 20.00'), findsOneWidget);
+      expect(joinApi.directJoinCalls, 1);
+      expect(joinApi.lastTenantSlug, 'city-clinic');
+    },
+  );
+
+  testWidgets('opens and submits the vendor contact bottom sheet', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final launcher = FakeVendorContactLauncher();
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: VendorDetailPage(
+          vendor: const VendorSummary(
+            slug: 'city-clinic',
+            name: 'City Clinic',
+            queueAvailable: true,
+          ),
+          repository: DirectoryRepository(FakeDirectoryApi()),
+          contactLauncher: launcher,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('vendor-contact-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('vendor-contact-sheet')), findsOneWidget);
+    expect(find.text('Contact City Clinic'), findsOneWidget);
+    expect(find.text('hello@cityclinic.example'), findsOneWidget);
+    expect(find.bySemanticsLabel('Close contact form'), findsOneWidget);
+
+    final sheetOverlay = tester.widget<DrawerWrapper>(
+      find.byWidgetPredicate((widget) => widget is DrawerWrapper),
+    );
+    expect(
+      sheetOverlay.borderRadius,
+      const BorderRadius.vertical(top: Radius.circular(28)),
+    );
+    final sheetSurface = tester.widget<Container>(
+      find.byKey(const Key('vendor-contact-sheet')),
+    );
+    final sheetDecoration = sheetSurface.decoration! as BoxDecoration;
+    expect(
+      sheetDecoration.borderRadius,
+      const BorderRadius.vertical(top: Radius.circular(28)),
+    );
+    expect(sheetSurface.clipBehavior, Clip.antiAlias);
+
+    await tester.enterText(
+      find.byKey(const Key('vendor-contact-subject')),
+      'Queue hours',
+    );
+    await tester.enterText(
+      find.byKey(const Key('vendor-contact-message')),
+      'Are you open this afternoon?',
+    );
+    await tester.tap(find.byKey(const Key('vendor-contact-continue')));
+    await tester.pumpAndSettle();
+
+    expect(launcher.recipient, 'hello@cityclinic.example');
+    expect(launcher.subject, 'Queue hours');
+    expect(launcher.message, 'Are you open this afternoon?');
+    expect(find.byKey(const Key('vendor-contact-sheet')), findsNothing);
   });
 
   testWidgets('retries unavailable vendor details with the inline action', (
@@ -305,6 +834,8 @@ void main() {
     expect(api.vendorDetailCalls, 2);
     expect(find.text('City Clinic refreshed'), findsOneWidget);
     expect(find.text('Vendor details are unavailable.'), findsNothing);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('handles a failed vendor detail refresh and offers retry', (
@@ -336,6 +867,8 @@ void main() {
     expect(find.text('Vendor details are unavailable.'), findsOneWidget);
     expect(find.byKey(const Key('retry-vendor-details')), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('separates active tickets from lightweight history', (
@@ -356,7 +889,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Queue progress'), findsOneWidget);
-    expect(find.byType(Card), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('tickets-page')),
+        matching: find.byType(Card),
+      ),
+      findsOneWidget,
+    );
 
     await tester.fling(
       find.byKey(const Key('tickets-page')),
@@ -423,6 +962,67 @@ void main() {
     expect(queueApi.cancelCalled, isFalse);
   });
 
+  testWidgets('shows a success toast after ticket cancellation', (
+    tester,
+  ) async {
+    final queueApi = FakeQueueApi();
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketsPage(
+          ticketRepository: QueueTicketRepository(FakeAccountQueueApi()),
+          queueRepository: QueueRepository(queueApi),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Cancel ticket'));
+    await tester.tap(find.text('Cancel ticket'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('cancel-ticket-dialog')),
+        matching: find.text('Cancel ticket'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(queueApi.cancelCalled, isTrue);
+    expect(find.text('Ticket cancelled.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('shows an error toast when ticket cancellation fails', (
+    tester,
+  ) async {
+    final queueApi = FakeQueueApi(cancelShouldFail: true);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketsPage(
+          ticketRepository: QueueTicketRepository(FakeAccountQueueApi()),
+          queueRepository: QueueRepository(queueApi),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Cancel ticket'));
+    await tester.tap(find.text('Cancel ticket'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('cancel-ticket-dialog')),
+        matching: find.text('Cancel ticket'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not cancel ticket.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('uses grouped Account rows with one profile card', (
     tester,
   ) async {
@@ -453,6 +1053,93 @@ class UnusedAuthApi implements AuthApi {
       throw UnimplementedError('This test does not call the auth API.');
 }
 
+class UsernameAvailabilityAuthApi extends UnusedAuthApi {
+  UsernameAvailabilityAuthApi({required this.available});
+
+  final bool available;
+  final checkedUsernames = <String>[];
+  int registrationCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> checkUsernameAvailability(
+    String username,
+  ) async {
+    checkedUsernames.add(username);
+    return {
+      'username': username,
+      'available': available,
+      'valid': true,
+      'message': available
+          ? 'Username is available.'
+          : 'That username is already taken.',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> registerCustomer({
+    required String name,
+    required String username,
+    required String email,
+    String? phone,
+    required String password,
+  }) async {
+    registrationCalls++;
+    throw StateError('Registration should be blocked by username checks.');
+  }
+}
+
+class RegistrationOtpAuthApi extends UnusedAuthApi
+    implements CustomerRegistrationApi {
+  int startCalls = 0;
+  String? startEmail;
+
+  @override
+  Future<Map<String, dynamic>> checkUsernameAvailability(
+    String username,
+  ) async => {
+    'username': username,
+    'available': true,
+    'valid': true,
+    'message': 'Username is available.',
+  };
+
+  @override
+  Future<Map<String, dynamic>> startCustomerRegistration({
+    required String name,
+    required String username,
+    required String email,
+    required String password,
+  }) async {
+    startCalls++;
+    startEmail = email;
+    return {
+      'challengeId': 'registration-challenge',
+      'step': 'email_otp',
+      'deliveryTarget': 'j***@example.com',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> verifyCustomerRegistration({
+    required String challengeId,
+    required String code,
+  }) async => {
+    'token': 'access-otp',
+    'refreshToken': 'refresh-otp',
+    'sessionExpiresAt': '2026-09-29T10:00:00Z',
+    'user': {'id': 'user-1', 'email': 'jane@example.com'},
+  };
+
+  @override
+  Future<Map<String, dynamic>> resendCustomerRegistrationCode({
+    required String challengeId,
+  }) async => {
+    'challengeId': challengeId,
+    'step': 'email_otp',
+    'deliveryTarget': 'j***@example.com',
+  };
+}
+
 class FakeDirectoryApi implements DirectoryApi {
   FakeDirectoryApi({
     this.failFirstVendorDetail = false,
@@ -476,9 +1163,19 @@ class FakeDirectoryApi implements DirectoryApi {
       'slug': tenantSlug,
       'name': vendorDetailCalls == 1 ? 'City Clinic' : 'City Clinic refreshed',
       'category': 'Clinic',
+      'description': '<p>Friendly neighborhood care.</p>',
       'queueAvailable': true,
       'locations': [
-        {'id': 'clinic-1', 'name': 'Main Clinic', 'queueAvailable': true},
+        {
+          'id': 'clinic-1',
+          'slug': 'main',
+          'name': 'Main Clinic',
+          'queueAvailable': true,
+          'contactEmail': 'hello@cityclinic.example',
+          'contactPhone': '+63 917 555 0100',
+          'addressLine1': '10 Health Street',
+          'city': 'Cebu City',
+        },
       ],
     };
   }
@@ -518,6 +1215,58 @@ class FakeDirectoryApi implements DirectoryApi {
       },
     ],
   };
+}
+
+class FakeDirectJoinApi implements JoinApi, DirectJoinApi {
+  int directJoinCalls = 0;
+  String? lastTenantSlug;
+
+  @override
+  Future<Map<String, dynamic>> resolve(String locationQrId) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> join({
+    required String locationQrId,
+    required String joinAttemptId,
+    required String customerName,
+  }) async => const {};
+
+  @override
+  Future<Map<String, dynamic>> joinDirect({
+    required String tenantSlug,
+    String? locationSlug,
+    required String joinAttemptId,
+    required String customerName,
+  }) async {
+    directJoinCalls++;
+    lastTenantSlug = tenantSlug;
+    return {
+      'paymentRequired': true,
+      'paymentAttemptId': 'direct-attempt-1',
+      'checkoutUrl': 'https://paymongo.example/checkout/direct',
+      'tenantSlug': tenantSlug,
+      'locationSlug': locationSlug ?? 'main-clinic',
+      'queueFee': {'amountCents': 2000, 'currency': 'PHP'},
+    };
+  }
+}
+
+class FakeVendorContactLauncher implements VendorContactLauncher {
+  String? recipient;
+  String? subject;
+  String? message;
+
+  @override
+  Future<bool> openEmail({
+    required String recipient,
+    required String subject,
+    required String message,
+  }) async {
+    this.recipient = recipient;
+    this.subject = subject;
+    this.message = message;
+    return true;
+  }
 }
 
 class FakeAccountQueueApi implements AccountQueueApi {
@@ -566,6 +1315,9 @@ class FakeAccountQueueApi implements AccountQueueApi {
 }
 
 class FakeQueueApi implements QueueApi {
+  FakeQueueApi({this.cancelShouldFail = false});
+
+  final bool cancelShouldFail;
   bool cancelCalled = false;
 
   @override
@@ -575,6 +1327,7 @@ class FakeQueueApi implements QueueApi {
     String? locationSlug,
   }) async {
     cancelCalled = true;
+    if (cancelShouldFail) throw StateError('cancel failed');
     return const {};
   }
 

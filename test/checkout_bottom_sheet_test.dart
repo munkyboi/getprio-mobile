@@ -14,12 +14,14 @@ void main() {
       final api = _CheckoutJoinApi();
       final browser = _RecordingPaymentBrowser();
       final paymentApi = _ConfirmedPaymentApi();
+      final paymentLinks = _FakePaymentLinkSource();
 
       await _openPaidCheckout(
         tester,
         api: api,
         browser: browser,
         paymentApi: paymentApi,
+        paymentLinks: paymentLinks,
       );
 
       expect(find.byKey(const Key('checkout-bottom-sheet')), findsOneWidget);
@@ -69,6 +71,40 @@ void main() {
     },
   );
 
+  testWidgets(
+    'direct vendor join skips the scanner and opens secure checkout',
+    (tester) async {
+      final api = _CheckoutJoinApi();
+
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: Scaffold(
+            child: JoinPage(
+              repository: JoinRepository(api),
+              allowedHosts: const {'app.getprio.test'},
+              customerName: 'Preferred name',
+              directTenantSlug: 'bosslot',
+              directLocationSlug: 'main',
+              paymentBrowser: _RecordingPaymentBrowser(),
+              paymentApi: _ConfirmedPaymentApi(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byType(QrScannerPage), findsNothing);
+      expect(find.byKey(const Key('checkout-bottom-sheet')), findsOneWidget);
+      expect(find.text('PHP 20.00'), findsOneWidget);
+      expect(api.directJoinCalls, 1);
+      expect(api.lastDirectTenantSlug, 'bosslot');
+      expect(api.lastDirectLocationSlug, 'main');
+    },
+  );
+
   testWidgets('cancel discards the checkout attempt and reopens the scanner', (
     tester,
   ) async {
@@ -89,6 +125,31 @@ void main() {
     expect(find.byType(QrScannerPage), findsOneWidget);
     expect(find.text('Join a queue'), findsNothing);
     expect(api.joinCalls, 1);
+  });
+
+  testWidgets('matching payment return link syncs the active checkout', (
+    tester,
+  ) async {
+    final paymentLinks = _FakePaymentLinkSource();
+    final paymentApi = _ConfirmedPaymentApi();
+
+    await _openPaidCheckout(
+      tester,
+      api: _CheckoutJoinApi(),
+      browser: _RecordingPaymentBrowser(),
+      paymentApi: paymentApi,
+      paymentLinks: paymentLinks,
+    );
+
+    paymentLinks.emit(
+      Uri.parse(
+        'https://app.getprio.test/payment/return?payment=attempt-1&payment_status=success',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(paymentApi.syncCalls, 1);
+    expect(find.text('You are in the queue'), findsOneWidget);
   });
 
   testWidgets('confirmation closes a resumed sheet for the same payment', (
@@ -127,6 +188,7 @@ Future<void> _openPaidCheckout(
   required _CheckoutJoinApi api,
   required PaymentBrowser browser,
   required PaymentApi paymentApi,
+  PaymentLinkSource? paymentLinks,
 }) async {
   await tester.binding.setSurfaceSize(const Size(390, 844));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -139,6 +201,7 @@ Future<void> _openPaidCheckout(
           customerName: 'Preferred name',
           paymentBrowser: browser,
           paymentApi: paymentApi,
+          paymentLinkSource: paymentLinks,
         ),
       ),
     ),
@@ -161,8 +224,11 @@ Future<void> _openPaidCheckout(
   await tester.pumpAndSettle();
 }
 
-class _CheckoutJoinApi implements JoinApi {
+class _CheckoutJoinApi implements JoinApi, DirectJoinApi {
   int joinCalls = 0;
+  int directJoinCalls = 0;
+  String? lastDirectTenantSlug;
+  String? lastDirectLocationSlug;
 
   @override
   Future<Map<String, dynamic>> resolve(String locationQrId) async {
@@ -193,6 +259,26 @@ class _CheckoutJoinApi implements JoinApi {
       'locationSlug': 'main',
     };
   }
+
+  @override
+  Future<Map<String, dynamic>> joinDirect({
+    required String tenantSlug,
+    String? locationSlug,
+    required String joinAttemptId,
+    required String customerName,
+  }) async {
+    directJoinCalls += 1;
+    lastDirectTenantSlug = tenantSlug;
+    lastDirectLocationSlug = locationSlug;
+    return {
+      'paymentRequired': true,
+      'paymentAttemptId': 'attempt-direct-1',
+      'checkoutUrl': 'https://paymongo.example/checkout/direct',
+      'tenantSlug': tenantSlug,
+      'locationSlug': locationSlug,
+      'queueFee': {'amountCents': 2000, 'currency': 'PHP'},
+    };
+  }
 }
 
 class _RecordingPaymentBrowser implements PaymentBrowser {
@@ -203,6 +289,15 @@ class _RecordingPaymentBrowser implements PaymentBrowser {
     openedUrls.add(checkoutUrl);
     return true;
   }
+}
+
+class _FakePaymentLinkSource implements PaymentLinkSource {
+  final _links = StreamController<Uri>.broadcast();
+
+  @override
+  Stream<Uri> get linkStream => _links.stream;
+
+  void emit(Uri uri) => _links.add(uri);
 }
 
 class _ConfirmedPaymentApi implements PaymentApi {

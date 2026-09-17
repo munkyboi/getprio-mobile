@@ -1,0 +1,2 @@
+Use case: background-extraction.
+Remove the baked-in gray and white checkerboard background from this illustration. Output actual transparent pixels outside the artwork, including gaps around the arms and between the legs. Preserve the same customer identity, face, pose, smartphone, bag, QR error card, orange X, black ink outlines, crosshatching, scale and composition. Keep the cream and white fills INSIDE the character, shoes, phone and QR card opaque. Do not draw a checkerboard. No new elements or text.

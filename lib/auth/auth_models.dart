@@ -4,12 +4,22 @@ class AuthUser {
     required this.email,
     this.profileName,
     this.displayName,
+    this.phone,
+    this.avatarUrl,
+    this.emailVerified = false,
+    this.mfaEnabled = false,
+    this.mfaRequired = false,
   });
 
   final String id;
   final String email;
   final String? profileName;
   final String? displayName;
+  final String? phone;
+  final String? avatarUrl;
+  final bool emailVerified;
+  final bool mfaEnabled;
+  final bool mfaRequired;
 
   String get customerName =>
       _nonBlank(displayName) ?? _nonBlank(profileName) ?? email;
@@ -20,6 +30,35 @@ class AuthUser {
       email: json['email'] as String? ?? '',
       profileName: json['name'] as String?,
       displayName: json['displayName'] as String?,
+      phone: json['phone'] as String?,
+      avatarUrl: json['avatarUrl'] as String?,
+      emailVerified: json['emailVerified'] as bool? ?? false,
+      mfaEnabled: json['mfaEnabled'] as bool? ?? false,
+      mfaRequired: json['mfaRequired'] as bool? ?? false,
+    );
+  }
+
+  AuthUser copyWith({
+    String? id,
+    String? email,
+    String? profileName,
+    String? displayName,
+    String? phone,
+    String? avatarUrl,
+    bool? emailVerified,
+    bool? mfaEnabled,
+    bool? mfaRequired,
+  }) {
+    return AuthUser(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      profileName: profileName ?? this.profileName,
+      displayName: displayName ?? this.displayName,
+      phone: phone ?? this.phone,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      emailVerified: emailVerified ?? this.emailVerified,
+      mfaEnabled: mfaEnabled ?? this.mfaEnabled,
+      mfaRequired: mfaRequired ?? this.mfaRequired,
     );
   }
 
@@ -124,6 +163,20 @@ class AuthSession {
       refreshToken: refreshToken,
       user: AuthUser.fromJson(userJson),
       sessionExpiresAt: expiry,
+    );
+  }
+
+  AuthSession copyWith({
+    String? accessToken,
+    String? refreshToken,
+    AuthUser? user,
+    DateTime? sessionExpiresAt,
+  }) {
+    return AuthSession(
+      accessToken: accessToken ?? this.accessToken,
+      refreshToken: refreshToken ?? this.refreshToken,
+      user: user ?? this.user,
+      sessionExpiresAt: sessionExpiresAt ?? this.sessionExpiresAt,
     );
   }
 }

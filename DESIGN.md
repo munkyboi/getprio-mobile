@@ -50,8 +50,7 @@ Warm paper, restrained shadows, friendly illustrations, and readable copy should
 
 | Token | Value | Use |
 | --- | --- | --- |
-| GetPrio Orange | `#BB4D00` | Primary CTA, scan/join actions, active navigation, focus ring |
-| Orange Strong | `#912F00` | Pressed primary state and strong orange emphasis |
+| Primary | `#FD7E14` | Primary CTA, scan/join actions, active navigation, focus ring |
 | Queue Teal | `#0F766E` | Positive progress, open queues, confirmed and supporting actions |
 | Queue Highlight | `#FFD166` | Wait-time or position emphasis; never use as a full-screen fill |
 
@@ -76,9 +75,10 @@ Warm paper, restrained shadows, friendly illustrations, and readable copy should
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Success | `#397A5A` | Successful joins and completed actions |
-| Warning | `#B77932` | Delays, pending payment, expiring tickets |
-| Destructive | `#B42318` | Cancellation, invalid credentials, failed requests |
+| Success | `#40C057` | Successful joins and completed actions |
+| Info | `#4C6EF5` | Informational notices and neutral guidance |
+| Warning | `#D9480F` | Delays, pending payment, expiring tickets |
+| Destructive | `#FA5252` | Cancellation, invalid credentials, failed requests |
 
 Use orange for action, teal for calm positive progress, and destructive red only for actual failure or irreversible actions.
 
@@ -93,15 +93,15 @@ Use orange for action, teal for calm positive progress, and destructive red only
 
 | Style | Size · Weight · Line height | Use |
 | --- | --- | --- |
-| Display large | 32px · 700 · 1.15 | Auth welcome and major moments |
-| Display | 28px · 700 · 1.20 | Home and ticket titles |
-| Title | 24px · 700 · 1.20 | Vendor and detail titles |
-| Heading | 20px · 700 · 1.30 | Section headings |
-| Heading small | 17px · 700 · 1.35 | Card and status groups |
-| Body large | 16px · 400 · 1.50 | Guidance and onboarding copy |
-| Body | 14px · 400 · 1.50 | Standard content and vendor details |
-| Label | 13px · 600 · 1.30 | Buttons, chips, badges, and form labels |
-| Caption | 12px · 500 · 1.35 | Metadata and timestamps |
+| Display large | 28px · 700 · 1.15 | Auth welcome and major moments |
+| Display | 24px · 700 · 1.20 | Home and ticket titles |
+| Title | 21px · 700 · 1.20 | Vendor and detail titles |
+| Heading | 18px · 700 · 1.30 | Section headings |
+| Heading small | 16px · 700 · 1.35 | Card and status groups |
+| Body large | 14px · 400 · 1.50 | Guidance and onboarding copy |
+| Body | 12px · 400 · 1.50 | Standard content and vendor details |
+| Label | 11px · 600 · 1.30 | Buttons, chips, badges, and form labels |
+| Caption | 10px · 500 · 1.35 | Metadata and timestamps |
 | Ticket | 28px · 700 · 1.15 | Ticket number and queue position |
 
 ## Spacing, shape, and elevation
@@ -142,6 +142,25 @@ Distribute all five items across the full bar width with space between them. The
 
 ## Screen specifications
 
+### Fresh-install onboarding
+
+Use the approved three-slide reference: centered GetPrio branding, floating
+photography and queue previews, generous whitespace, dark pagination dots,
+and a full-width orange pill button. This introduction uses 28px semibold
+sans-serif headings to match the approved design.
+
+1. **Your place in line, just one scan away:** three reception photos, with
+   `Reception Interaction.png` at the front and a decorative `Scan to join` label.
+2. **Less wondering, more time for you:** floating ticket updates showing a joined
+   ticket, queue position, and current status.
+3. **A little heads-up, right on time:** a notification bell with supporting
+   ticket, time, location, and phone icons.
+
+Allow swiping and accessible pagination. Use `Next` on the first two slides
+and `Get started` on the third. Save completion before opening authentication.
+Keep completion across launches and sign-outs, and remove it with the installation.
+Do not request camera or notification permissions during onboarding.
+
 ### Home
 
 Purpose: show the customer’s next queue action at a glance.
@@ -176,14 +195,16 @@ Purpose: explain the vendor and let the customer choose a queue-capable location
 
 Structure:
 
-- Compact app bar with back and optional share/save actions.
-- Hero illustration or vendor image with a 16px radius.
-- Vendor name, category, and concise description.
+- Full-bleed vendor profile cover with the vendor logo centered precisely over the image and a circular back action floating above it.
+- One warm-paper details surface overlaps the lower edge of the cover with 32px top corners.
+- Vendor name and category lead the surface. A single circular contact action sits at the top right and opens a draggable modal bottom sheet.
+- The contact sheet labels the recipient, subject, and message clearly, then hands the draft to the customer’s email app. Never imply that GetPrio sent the message itself.
+- Concise vendor description under an `About` heading.
 - Highlights row for queue-relevant facts such as open locations, estimated wait, and operating hours.
-- Location list with queue-open status, address, and a clear selection affordance.
+- Location list with queue-open status, address, and operating-hours summary.
 - Direction to return Home and scan the location QR code to join.
 
-Use a single surface for a selected location or important queue preview. Keep the location list lightweight.
+Use real vendor cover and logo media from the public API, falling back to existing GetPrio artwork only when media is absent. Keep the location list lightweight and avoid nesting it in additional cards.
 
 ### QR queue joining
 

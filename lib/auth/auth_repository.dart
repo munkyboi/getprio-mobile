@@ -1,7 +1,12 @@
+import 'biometric_login.dart';
+import 'remembered_user_store.dart';
+
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+
+import '../network/api_paths.dart';
 
 import 'auth_models.dart';
 
@@ -13,6 +18,8 @@ abstract interface class AuthApi {
     String? phone,
     required String password,
   });
+
+  Future<Map<String, dynamic>> checkUsernameAvailability(String username);
 
   Future<Map<String, dynamic>> requestPasswordReset(String email);
 
@@ -30,10 +37,6 @@ abstract interface class AuthApi {
   });
 
   Future<void> logout(String refreshToken);
-}
-
-abstract interface class UsernameAvailabilityApi {
-  Future<Map<String, dynamic>> checkUsernameAvailability(String username);
 }
 
 abstract interface class CustomerRegistrationApi {
@@ -98,7 +101,16 @@ class MemoryTokenStore implements TokenStore {
 }
 
 class AuthRepository {
-  AuthRepository({required this.api, required this.tokenStore});
+  AuthRepository({
+    required this.api,
+    required this.tokenStore,
+    this.biometricLogin,
+    RememberedUserStore? rememberedUserStore,
+  }) : rememberedUserStore = rememberedUserStore ?? MemoryRememberedUserStore();
+
+  final RememberedUserStore rememberedUserStore;
+
+  final BiometricLogin? biometricLogin;
 
   final AuthApi api;
   final TokenStore tokenStore;
@@ -151,18 +163,8 @@ class AuthRepository {
   Future<UsernameAvailability> checkUsernameAvailability(
     String username,
   ) async {
-    final availabilityApi = api is UsernameAvailabilityApi
-        ? api as UsernameAvailabilityApi
-        : null;
-    if (availabilityApi == null) {
-      throw const ApiException(
-        0,
-        'USERNAME_AVAILABILITY_UNAVAILABLE',
-        'Username availability is not available. Try again later.',
-      );
-    }
     return UsernameAvailability.fromJson(
-      await availabilityApi.checkUsernameAvailability(username),
+      await api.checkUsernameAvailability(username),
     );
   }
 
@@ -265,9 +267,13 @@ class AuthRepository {
     final refreshToken = await tokenStore.readRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) return null;
 
+    if (_accessToken == null && await biometricLogin?.isEnabled() == true) {
+      if (await biometricLogin!.authenticate() != true) return null;
+    }
+
     try {
       final session = AuthSession.fromJson(await api.refresh(refreshToken));
-      await _persistSession(session);
+      await _persistSession(session, restoring: true);
       return session;
     } on ApiException catch (error) {
       if (error.statusCode == 401) await clearLocalSession();
@@ -282,8 +288,10 @@ class AuthRepository {
     final refreshToken = await tokenStore.readRefreshToken();
     try {
       if (refreshToken != null && refreshToken.isNotEmpty) {
-        await api.logout(refreshToken);
+        await api.logout(refreshToken).timeout(const Duration(seconds: 5));
       }
+    } catch (_) {
+      // Local sign-out must not depend on the server being reachable.
     } finally {
       await clearLocalSession();
     }
@@ -292,6 +300,8 @@ class AuthRepository {
   Future<void> clearLocalSession() async {
     _accessToken = null;
     await tokenStore.clearRefreshToken();
+    await biometricLogin?.disable();
+    await rememberedUserStore.clear();
   }
 
   LoginResult _parseLoginResult(Map<String, dynamic> json) {
@@ -305,7 +315,16 @@ class AuthRepository {
     }
   }
 
-  Future<void> _persistSession(AuthSession session) async {
+  Future<void> _persistSession(
+    AuthSession session, {
+    bool restoring = false,
+  }) async {
+    // Keep the opt-in for password sign-in to the same saved account.
+    if (!restoring &&
+        (await rememberedUserStore.read())?.id != session.user.id) {
+      await biometricLogin?.disable();
+    }
+    await rememberedUserStore.write(session.user);
     _accessToken = session.accessToken;
     await tokenStore.writeRefreshToken(session.refreshToken);
   }
@@ -322,8 +341,7 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode, $code, $message)';
 }
 
-class RestAuthApi
-    implements AuthApi, UsernameAvailabilityApi, CustomerRegistrationApi {
+class RestAuthApi implements AuthApi, CustomerRegistrationApi {
   RestAuthApi({required String baseUrl, http.Client? client})
     : _baseUrl = baseUrl.replaceFirst(RegExp(r'/$'), ''),
       _client = client ?? http.Client();
@@ -360,8 +378,9 @@ class RestAuthApi
       );
     }
 
-    final uri = Uri.parse('$_baseUrl/api/auth/username-availability')
-        .replace(queryParameters: {'username': username});
+    final uri = Uri.parse(
+      '$_baseUrl${versionedApiPath('/api/auth/username-availability')}',
+    ).replace(queryParameters: {'username': username});
     final response = await _client.get(uri);
     final decoded = _decode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -464,7 +483,7 @@ class RestAuthApi
     }
 
     final response = await _client.post(
-      Uri.parse('$_baseUrl$path'),
+      Uri.parse('$_baseUrl${versionedApiPath(path)}'),
       headers: {
         'Content-Type': 'application/json',
         if (compatibilityHeader) 'X-Auth-Compatibility': 'bearer-v1',
@@ -484,7 +503,11 @@ class RestAuthApi
 
   Map<String, dynamic>? _decode(String body) {
     if (body.trim().isEmpty) return null;
-    final decoded = jsonDecode(body);
-    return decoded is Map<String, dynamic> ? decoded : null;
+    try {
+      final decoded = jsonDecode(body);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } on FormatException {
+      return null;
+    }
   }
 }

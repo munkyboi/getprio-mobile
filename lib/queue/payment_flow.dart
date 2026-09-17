@@ -1,3 +1,4 @@
+import 'package:app_links/app_links.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'auth_queue_api.dart';
@@ -16,6 +17,7 @@ class PaymentReturn {
         uri.queryParameters['payment'];
     if (uri.scheme != 'https' ||
         !hosts.contains(uri.host.toLowerCase()) ||
+        uri.path != '/payment/return' ||
         reference == null ||
         reference.trim().isEmpty ||
         uri.fragment.isNotEmpty) {
@@ -43,6 +45,20 @@ class PaymentReturnException implements Exception {
 
 abstract interface class PaymentBrowser {
   Future<bool> open(Uri checkoutUrl);
+}
+
+abstract interface class PaymentLinkSource {
+  Stream<Uri> get linkStream;
+}
+
+class AppPaymentLinkSource implements PaymentLinkSource {
+  AppPaymentLinkSource({AppLinks? appLinks})
+    : _appLinks = appLinks ?? AppLinks();
+
+  final AppLinks _appLinks;
+
+  @override
+  Stream<Uri> get linkStream => _appLinks.uriLinkStream;
 }
 
 class ExternalPaymentBrowser implements PaymentBrowser {

@@ -17,15 +17,64 @@ class QueueTicketRepository {
 
   final AccountQueueApi api;
   final refreshVersion = ValueNotifier<int>(0);
+  final servedTicket = ValueNotifier<QueueTicket?>(null);
+  final Set<String> _observedActive = {};
+
+  void _observeTickets(List<QueueTicket> tickets) {
+    for (final ticket in tickets) {
+      if (ticket.isActive) _observedActive.add(ticket.lookupCode);
+      if (ticket.status == TicketStatus.served &&
+          _observedActive.remove(ticket.lookupCode)) {
+        servedTicket.value = ticket;
+      }
+    }
+  }
+
+  List<QueueTicket> _latestTickets = const [];
+
+  bool get hasActiveTickets => _latestTickets.any((ticket) => ticket.isActive);
 
   void requestRefresh() => refreshVersion.value++;
+  void clearSession() {
+    _latestTickets = const [];
+    _observedActive.clear();
+    servedTicket.value = null;
+  }
 
   Future<List<QueueTicket>> loadOverview() async {
-    return _ticketsFrom(await api.loadOverview());
+    final tickets = _ticketsFrom(await api.loadOverview());
+    _observeTickets(tickets);
+    _latestTickets = tickets;
+    return tickets;
   }
 
   Future<List<QueueTicket>> loadHistory({int page = 1, int limit = 20}) async {
-    return _ticketsFrom(await api.loadHistory(page: page, limit: limit));
+    final tickets = _ticketsFrom(
+      await api.loadHistory(page: page, limit: limit),
+    );
+    _observeTickets(tickets);
+    return tickets;
+  }
+
+  Future<List<QueueTicket>> loadAllTickets({
+    int historyPage = 1,
+    int historyLimit = 20,
+  }) async {
+    final overview = await loadOverview();
+    final history = await loadHistory(page: historyPage, limit: historyLimit);
+    final ticketsByKey = <String, QueueTicket>{};
+
+    for (final ticket in [...overview, ...history]) {
+      final key = ticket.id.trim().isNotEmpty
+          ? 'id:${ticket.id}'
+          : 'lookup:${ticket.lookupCode}';
+      ticketsByKey.putIfAbsent(key, () => ticket);
+    }
+
+    final tickets = ticketsByKey.values.toList(growable: false);
+    _observeTickets(tickets);
+    _latestTickets = tickets;
+    return tickets;
   }
 
   List<QueueTicket> _ticketsFrom(Map<String, dynamic> response) {

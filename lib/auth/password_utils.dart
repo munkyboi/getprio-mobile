@@ -29,7 +29,7 @@ class PasswordStrength {
   ].where((requirement) => requirement).length;
 
   String get label {
-    if (!isWithinMaximumLength) return 'Too long';
+    if (isWithinMaximumLength == false) return 'Too long';
     if (score <= 1) return 'Weak';
     if (score <= 3) return 'Fair';
     if (score == 4) return 'Good';

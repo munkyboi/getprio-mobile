@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.13.1
@@ -30,14 +30,18 @@ environment:
 dependencies:
   app_links: ^7.2.1
   async: ^2.13.1
+  barcode_widget: ^2.0.4
   crypto: ^3.0.7
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0
   flutter:
     sdk: flutter
+  flutter_local_notifications: ^22.3.0
   flutter_secure_storage: ^11.0.0
   flutter_svg: ^2.2.1
   http: ^1.6.0
+  image_picker: ^1.2.0
+  local_auth: ^3.0.2
   mobile_scanner: ^7.4.0
   shadcn_flutter: ^0.0.54
   url_launcher: ^6.3.2
@@ -65,11 +69,15 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/onboarding/
     - assets/branding/logo.svg
     - assets/branding/logo-dark.svg
+    - assets/branding/login-biometric-scene.png
     - assets/illustrations/customer-onboarding.png
     - assets/illustrations/hero-queue-scene-transparent.png
     - assets/illustrations/dashboard-empty.png
+    - assets/illustrations/scan-invalid-qr-half-body-transparent-v3.png
+    - shorebird.yaml
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../queue/auth_queue_api.dart';
+import 'foreground_notification_presenter.dart';
 
 enum PushPermission { authorized, provisional, denied }
 
@@ -128,31 +129,54 @@ class PushCoordinator {
   StreamSubscription<String>? _tokenSubscription;
   StreamSubscription<PushSignal>? _signalSubscription;
   Future<void> _pending = Future.value();
+  Timer? _registrationRetryTimer;
   String? _installationId;
+  int _sessionGeneration = 0;
 
   Future<bool> initialize() async {
+    final sessionGeneration = ++_sessionGeneration;
     final permission = await messaging.requestPermission();
     if (permission != PushPermission.authorized &&
         permission != PushPermission.provisional) {
       return false;
     }
     _installationId = await installationStore.getOrCreate();
-    _tokenSubscription ??= messaging.onTokenRefresh.listen(_registerToken);
-    _signalSubscription ??= messaging.onSignal.listen(_handleSignal);
+    _tokenSubscription ??= messaging.onTokenRefresh.listen(
+      (token) => _registerToken(token, _sessionGeneration),
+    );
+    _signalSubscription ??= messaging.onSignal.listen(
+      (signal) => _handleSignal(signal, _sessionGeneration),
+    );
     final initialSignal = await messaging.initialSignal;
-    if (initialSignal != null) await _handleSignal(initialSignal);
+    if (initialSignal != null) {
+      await _handleSignal(initialSignal, sessionGeneration);
+    }
     final token = await messaging.getToken();
-    if (token != null && token.isNotEmpty) await _registerToken(token);
+    if (token != null && token.isNotEmpty) {
+      await _registerToken(token, sessionGeneration);
+    }
     return true;
   }
 
   Future<void> logout() async {
     final installationId = _installationId;
+    _sessionGeneration++;
+    _installationId = null;
+    _registrationRetryTimer?.cancel();
+    _registrationRetryTimer = null;
+    final tokenSubscription = _tokenSubscription;
+    final signalSubscription = _signalSubscription;
+    _tokenSubscription = null;
+    _signalSubscription = null;
+    await tokenSubscription?.cancel();
+    await signalSubscription?.cancel();
     if (installationId != null) {
       try {
-        await api.deactivate(installationId);
-      } finally {
-        _installationId = null;
+        await api
+            .deactivate(installationId)
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // Push cleanup is best effort and must not block local sign-out.
       }
     }
   }
@@ -160,34 +184,63 @@ class PushCoordinator {
   Future<void> flush() => _pending;
 
   Future<void> dispose() async {
+    _registrationRetryTimer?.cancel();
+    _registrationRetryTimer = null;
     await _tokenSubscription?.cancel();
     await _signalSubscription?.cancel();
   }
 
-  Future<void> _registerToken(String token) {
+  Future<void> _registerToken(String token, int sessionGeneration) async {
+    try {
+      await _enqueue(() async {
+        final installationId = _installationId;
+        if (installationId == null || sessionGeneration != _sessionGeneration) {
+          return;
+        }
+        await api.register(
+          PushRegistration(
+            installationId: installationId,
+            token: token,
+            platform: platform,
+            appVersion: appVersion,
+            locale: locale,
+          ),
+        );
+      });
+      if (sessionGeneration == _sessionGeneration) {
+        _registrationRetryTimer?.cancel();
+        _registrationRetryTimer = null;
+      }
+    } catch (error) {
+      if (sessionGeneration == _sessionGeneration) {
+        _scheduleRegistrationRetry(token, sessionGeneration);
+        debugPrint('[push] token registration failed: $error');
+      }
+    }
+  }
+
+  Future<void> _handleSignal(PushSignal signal, int sessionGeneration) {
     return _enqueue(() async {
-      final installationId = _installationId ??= await installationStore
-          .getOrCreate();
-      await api.register(
-        PushRegistration(
-          installationId: installationId,
-          token: token,
-          platform: platform,
-          appVersion: appVersion,
-          locale: locale,
-        ),
-      );
+      if (sessionGeneration != _sessionGeneration) return;
+      final callback = onSignal;
+      if (callback != null) await callback(signal);
     });
   }
 
-  Future<void> _handleSignal(PushSignal signal) {
-    final callback = onSignal;
-    return callback == null ? Future.value() : _enqueue(() => callback(signal));
+  Future<void> _enqueue(Future<void> Function() operation) {
+    final next = _pending.then((_) => operation());
+    _pending = next.catchError((_) {});
+    return next;
   }
 
-  Future<void> _enqueue(Future<void> Function() operation) {
-    _pending = _pending.then((_) => operation());
-    return _pending;
+  void _scheduleRegistrationRetry(String token, int sessionGeneration) {
+    _registrationRetryTimer?.cancel();
+    _registrationRetryTimer = Timer(const Duration(seconds: 30), () {
+      if (sessionGeneration != _sessionGeneration || _installationId == null) {
+        return;
+      }
+      unawaited(_registerToken(token, sessionGeneration));
+    });
   }
 }
 
@@ -216,18 +269,30 @@ class RestPushRegistrationApi implements PushRegistrationApi {
 }
 
 class FirebaseMessagingPort implements PushMessagingPort {
-  FirebaseMessagingPort({FirebaseMessaging? messaging})
-    : _messaging = messaging ?? FirebaseMessaging.instance;
+  FirebaseMessagingPort({
+    FirebaseMessaging? messaging,
+    ForegroundNotificationPresenter? foregroundPresenter,
+  }) : _messaging = messaging ?? FirebaseMessaging.instance,
+       _foregroundPresenter =
+           foregroundPresenter ?? NativeForegroundNotificationPresenter();
 
   final FirebaseMessaging _messaging;
+  final ForegroundNotificationPresenter _foregroundPresenter;
 
   @override
   Future<PushPermission> requestPermission() async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        await _foregroundPresenter.initialize();
+      } catch (_) {
+        // A banner failure must not prevent token registration or ticket refresh.
+      }
+    }
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
-      provisional: true,
+      provisional: false,
     );
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       await _messaging.setForegroundNotificationPresentationOptions(
@@ -244,14 +309,17 @@ class FirebaseMessagingPort implements PushMessagingPort {
   }
 
   @override
-  Future<String?> getToken() => _messaging.getToken();
+  Future<String?> getToken() async {
+    await _waitForApnsToken();
+    return _messaging.getToken();
+  }
 
   @override
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
   @override
-  Stream<PushSignal> get onSignal => StreamGroup.merge([
-    FirebaseMessaging.onMessage,
+  Stream<PushSignal> get onSignal => StreamGroup.merge<RemoteMessage>([
+    FirebaseMessaging.onMessage.asyncMap(_presentForegroundMessage),
     FirebaseMessaging.onMessageOpenedApp,
   ]).expand(_parseSignal);
 
@@ -260,6 +328,35 @@ class FirebaseMessagingPort implements PushMessagingPort {
     final message = await _messaging.getInitialMessage();
     if (message == null) return null;
     return _tryParseSignal(message.data);
+  }
+
+  Future<RemoteMessage> _presentForegroundMessage(RemoteMessage message) async {
+    final signal = _tryParseSignal(message.data);
+    if (signal != null) {
+      try {
+        await _foregroundPresenter.show(
+          notificationId: signal.notificationId,
+          ticketRef: signal.ticketRef,
+          title: message.notification?.title,
+          body: message.notification?.body,
+        );
+      } catch (_) {
+        // A banner failure must not prevent the ticket refresh signal.
+      }
+    }
+    return message;
+  }
+
+  Future<void> _waitForApnsToken() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final token = await _messaging.getAPNSToken();
+      if (token != null && token.isNotEmpty) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
   }
 }
 

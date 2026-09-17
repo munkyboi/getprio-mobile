@@ -26,6 +26,27 @@ void main() {
     },
   );
 
+  test(
+    'merges overview and history without duplicating the same ticket',
+    () async {
+      final repository = QueueTicketRepository(
+        FakeAccountQueueApi(
+          overview: {
+            'tickets': [ticketJson('active-1', 'waiting')],
+          },
+          history: {
+            'items': [ticketJson('active-1', 'waiting')],
+          },
+        ),
+      );
+
+      final tickets = await repository.loadAllTickets();
+
+      expect(tickets, hasLength(1));
+      expect(tickets.single.id, 'active-1');
+    },
+  );
+
   test('directory hides vendors without queue capability', () async {
     final repository = DirectoryRepository(
       FakeDirectoryApi(
@@ -50,6 +71,69 @@ void main() {
 
     expect(vendors.map((vendor) => vendor.slug), ['queue-vendor']);
   });
+
+  test(
+    'vendor details parse profile media, contact, and open location data',
+    () async {
+      final repository = DirectoryRepository(
+        FakeDirectoryApi(
+          vendors: {
+            'slug': 'city-clinic',
+            'name': 'City Clinic',
+            'description':
+                '<p>Trusted care &amp; clear advice.<br>Open daily.</p>',
+            'capabilities': {'queue': true},
+            'businessProfileTheme': {
+              'scope': 'tenant',
+              'theme': {
+                'logoUrl': 'https://cdn.example.com/logo.jpg',
+                'logoFit': 'contain',
+                'backgroundImageUrl': 'https://cdn.example.com/cover.jpg',
+                'backgroundImageFit': 'cover',
+              },
+            },
+            'locations': [
+              {
+                'name': 'Main Clinic',
+                'capabilities': {'queue': true},
+                'contactEmail': 'hello@cityclinic.example',
+                'contactPhone': '+63 917 555 0100',
+                'addressLine1': '10 Health Street',
+                'city': 'Cebu City',
+                'country': 'Philippines',
+                'openStatus': {
+                  'isOpen': true,
+                  'summary': 'Mon-Fri 08:00-17:00',
+                },
+              },
+              {
+                'name': 'Closed Annex',
+                'capabilities': {'queue': true},
+                'openStatus': {'isOpen': false},
+              },
+            ],
+          },
+        ),
+      );
+
+      final vendor = await repository.loadVendor('city-clinic');
+
+      expect(vendor.description, 'Trusted care & clear advice.\nOpen daily.');
+      expect(vendor.logoUrl, 'https://cdn.example.com/logo.jpg');
+      expect(vendor.logoFit, 'contain');
+      expect(vendor.coverImageUrl, 'https://cdn.example.com/cover.jpg');
+      expect(vendor.coverImageFit, 'cover');
+      expect(vendor.contactEmail, 'hello@cityclinic.example');
+      expect(vendor.contactPhone, '+63 917 555 0100');
+      expect(vendor.locations.first.queueAvailable, isTrue);
+      expect(vendor.locations.last.queueAvailable, isFalse);
+      expect(
+        vendor.locations.first.address,
+        '10 Health Street, Cebu City, Philippines',
+      );
+      expect(vendor.locations.first.openStatus, 'Mon-Fri 08:00-17:00');
+    },
+  );
 }
 
 Map<String, dynamic> ticketJson(String id, String status) {

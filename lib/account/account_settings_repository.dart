@@ -26,14 +26,21 @@ class AccountSettingsRepository {
   final AccountSettingsApi api;
 
   Future<NotificationSettings> loadNotificationSettings() async {
-    return NotificationSettings.fromJson(await api.loadNotificationSettings());
+    return _parseSettingsResponse(await api.loadNotificationSettings());
   }
 
   Future<NotificationSettings> updateNotificationSettings({
     required bool queueAlerts,
   }) async {
-    return NotificationSettings.fromJson(
+    return _parseSettingsResponse(
       await api.updateNotificationSettings(queueAlerts: queueAlerts),
+    );
+  }
+
+  NotificationSettings _parseSettingsResponse(Map<String, dynamic> response) {
+    final settings = response['notificationSettings'];
+    return NotificationSettings.fromJson(
+      settings is Map<String, dynamic> ? settings : response,
     );
   }
 }

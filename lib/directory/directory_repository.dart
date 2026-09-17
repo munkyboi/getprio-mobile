@@ -1,3 +1,4 @@
+import '../social/vendor_social_repository.dart';
 import '../queue/auth_queue_api.dart';
 import '../queue/queue_models.dart';
 
@@ -8,7 +9,12 @@ abstract interface class DirectoryApi {
 }
 
 class DirectoryRepository {
-  DirectoryRepository(this.api);
+  DirectoryRepository(this.api, {VendorSocialRepository? social})
+    : social =
+          social ??
+          (api is RestDirectoryApi ? VendorSocialRepository(api.client) : null);
+
+  final VendorSocialRepository? social;
 
   final DirectoryApi api;
 

@@ -1,0 +1,12 @@
+Generation mode: built-in image_gen
+Reference: assets/illustrations/customer-onboarding.png
+
+Use case: illustration-story
+Asset type: GetPrio mobile app illustration for the Scan to join QR code error screen.
+Primary request: Create a new illustration showing the same GetPrio female customer character from reference image 1 just after scanning an invalid QR code.
+Input images: Image 1 is the exact character and illustration style reference, not an edit target.
+Subject: Preserve her shoulder-length wavy black hair, facial design, off-white long-sleeve top, dark cropped trousers, flat shoes, crossbody shoulder bag and adult proportions. She holds her smartphone up, looking at it with a gently puzzled expression and her free hand slightly raised in a natural questioning gesture. Beside the phone is one clear enlarged QR-code card with a small orange circle containing a dark X overlapping its corner, communicating an invalid scan. QR pattern is decorative and need not scan.
+Style/medium: Match the reference's hand-drawn black ink contours, delicate pencil crosshatching, cream/off-white fills and restrained warm orange accent. Friendly, polished, understated.
+Composition/framing: Compact centered composition, full character visible and QR card clearly legible at small mobile size; ample clean margin all around. Square canvas. Character and QR error card only.
+Scene/backdrop: Genuinely transparent background with alpha, including outside the illustration; retain opaque cream fills inside character and card.
+Constraints: No text, captions, logos, watermark, app screen mockup, furniture, extra people, gradients, photorealism or 3D. No alarming or distressed expression. Preserve the reference character identity and drawing style.

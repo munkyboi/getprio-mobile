@@ -1,10 +1,15 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
+
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
-import '../navigation/swipe_back_page_route.dart';
+import '../form_validation.dart';
+import '../feedback_toast.dart';
+import '../auth/auth_repository.dart';
+import '../navigation/scroll_aware_app_bar.dart';
 import 'join_repository.dart';
 import 'payment_flow.dart';
 import 'queue_models.dart';
@@ -15,42 +20,54 @@ class JoinPage extends StatefulWidget {
     required this.repository,
     required this.allowedHosts,
     required this.customerName,
+    this.directTenantSlug,
+    this.directLocationSlug,
+    this.onJoined,
     this.paymentBrowser,
     this.paymentApi,
+    this.paymentLinkSource,
   });
 
   final JoinRepository? repository;
   final Set<String> allowedHosts;
   final String customerName;
+  final String? directTenantSlug;
+  final String? directLocationSlug;
+  final ValueChanged<QueueTicket>? onJoined;
   final PaymentBrowser? paymentBrowser;
   final PaymentApi? paymentApi;
+  final PaymentLinkSource? paymentLinkSource;
 
   @override
   State<JoinPage> createState() => _JoinPageState();
 }
 
-class _JoinPageState extends State<JoinPage> {
+class _JoinPageState extends State<JoinPage>
+    with FormValidationMixin<JoinPage> {
   final _drawerAnchorKey = GlobalKey();
   QrJoinPayload? _payload;
   JoinPreview? _preview;
   JoinedTicket? _joinedTicket;
   PaymentRequired? _payment;
+  JoinEmailVerification? _emailChallenge;
+  final _otpController = TextEditingController();
+  Timer? _otpTimer;
   String? _error;
   bool _isBusy = false;
   bool _checkoutSheetOpen = false;
   DrawerOverlayCompleter<void>? _checkoutSheetCompleter;
   BuildContext? _checkoutSheetContext;
 
+  bool get _isDirectJoin => widget.directTenantSlug != null;
+
   @override
   void initState() {
     super.initState();
-    _scheduleScan();
-  }
-
-  void _scheduleScan() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _scan();
-    });
+    if (_isDirectJoin) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_joinDirect());
+      });
+    }
   }
 
   @override
@@ -60,7 +77,161 @@ class _JoinPageState extends State<JoinPage> {
     );
   }
 
+  @override
+  void dispose() {
+    _otpTimer?.cancel();
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildEmailVerification(JoinEmailVerification challenge) {
+    final resendAt = challenge.resendAvailableAt;
+    final seconds = resendAt == null
+        ? 0
+        : resendAt.difference(DateTime.now()).inSeconds + 1;
+    final expired = challenge.expiresAt?.isBefore(DateTime.now()) ?? false;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Verify your email').h3(),
+              const SizedBox(height: 12),
+              Text(
+                'Enter the 6-digit code sent to ${challenge.email} to join this queue.',
+              ),
+              const SizedBox(height: 24),
+              ValidatedField(
+                validation: formValidation,
+                controller: _otpController,
+                child: TextField(
+                  key: const Key('queue-join-otp'),
+                  controller: _otpController,
+                  enabled: !_isBusy && !expired,
+                  keyboardType: TextInputType.number,
+                  autofillHints: const [AutofillHints.oneTimeCode],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  onChanged: (value) {
+                    setState(() {});
+                    if (value.length == 6) unawaited(_verifyEmail());
+                  },
+                ),
+              ),
+              if (expired)
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text('This code has expired. Request a new code.'),
+                ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(_error!),
+                ),
+              const SizedBox(height: 20),
+              GetPrioActionButton.primary(
+                key: const Key('queue-join-otp-verify'),
+                onPressed: _isBusy || expired || _otpController.text.length != 6
+                    ? null
+                    : _verifyEmail,
+                child: Text(
+                  _isBusy ? 'Please wait...' : 'Verify and join queue',
+                ),
+              ),
+              const SizedBox(height: 12),
+              GetPrioActionButton.outline(
+                key: const Key('queue-join-otp-resend'),
+                onPressed:
+                    _isBusy || seconds > 0 || challenge.resendsRemaining <= 0
+                    ? null
+                    : _resendEmail,
+                child: Text(
+                  challenge.resendsRemaining <= 0
+                      ? 'Resend limit reached'
+                      : seconds > 0
+                      ? 'Resend code in ${seconds}s'
+                      : 'Resend code',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _verifyEmail() async {
+    final challenge = _emailChallenge;
+    if (_isBusy || challenge == null || _otpController.text.length != 6) return;
+    setState(() {
+      _isBusy = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.repository!.verifyEmail(
+        challenge,
+        _otpController.text,
+      );
+      if (mounted) {
+        setState(() => _emailChallenge = null);
+        _otpTimer?.cancel();
+        _handleJoinResult(result);
+      }
+    } catch (error) {
+      if (mounted) {
+        showFormError(
+          error,
+          _messageFor(error),
+          field: error is ApiException && error.statusCode == 400
+              ? _otpController
+              : null,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _resendEmail() async {
+    if (_isBusy || _emailChallenge == null) return;
+    setState(() {
+      _isBusy = true;
+      _error = null;
+    });
+    try {
+      final challenge = await widget.repository!.resendEmail(_emailChallenge!);
+      if (mounted) {
+        _otpController.clear();
+        setState(() => _emailChallenge = challenge);
+        formValidation.setErrors({});
+        showFeedbackToast(
+          context,
+          message: 'A new verification code has been sent.',
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showFormError(
+          error,
+          _messageFor(error),
+          field: error is ApiException && error.statusCode == 400
+              ? _otpController
+              : null,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
   Widget _buildContent(BuildContext context) {
+    final challenge = _emailChallenge;
+    if (challenge != null) return _buildEmailVerification(challenge);
     final preview = _preview;
     final joinedTicket = _joinedTicket;
     final payment = _payment;
@@ -73,19 +244,53 @@ class _JoinPageState extends State<JoinPage> {
         errorMessage: _error,
       );
     }
-    if (joinedTicket == null) return _buildScannerTransition();
+    if (joinedTicket == null && _isDirectJoin) return _buildDirectState();
+    if (joinedTicket == null) return _buildScannerState();
     return _buildConfirmation(joinedTicket);
   }
 
-  Widget _buildScannerTransition() {
+  Widget _buildDirectState() {
+    final error = _error;
+    if (_payment != null && error == null) return const SizedBox.shrink();
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (error == null) ...[
+                const Center(child: CircularProgressIndicator()),
+                const SizedBox(height: 20),
+                const Text('Checking queue availability...'),
+              ] else ...[
+                const Text('Could not join this queue').h3(),
+                const SizedBox(height: 8),
+                Text(error),
+                const SizedBox(height: 24),
+                GetPrioActionButton.primary(
+                  key: const Key('direct-join-retry-button'),
+                  onPressed: _isBusy ? null : _retryDirectJoin,
+                  child: const Text('Try again'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScannerState() {
     final error = _error;
     if (error == null) {
-      return const Center(
-        child: SizedBox(
-          width: 32,
-          height: 32,
-          child: CircularProgressIndicator(),
-        ),
+      return QrScannerPage(
+        allowedHosts: widget.allowedHosts,
+        showAppBar: false,
+        onBack: _closeJoinFlow,
+        onPayload: (payload) => unawaited(_handleScannedPayload(payload)),
       );
     }
     return Center(
@@ -170,18 +375,8 @@ class _JoinPageState extends State<JoinPage> {
     );
   }
 
-  Future<void> _scan() async {
-    final payload = await Navigator.of(context).push<QrJoinPayload>(
-      SwipeBackPageRoute<QrJoinPayload>(
-        builder: (context) => QrScannerPage(allowedHosts: widget.allowedHosts),
-      ),
-    );
+  Future<void> _handleScannedPayload(QrJoinPayload payload) async {
     if (!mounted) return;
-    if (payload == null) {
-      final navigator = Navigator.of(context);
-      if (navigator.canPop()) navigator.pop();
-      return;
-    }
     final repository = widget.repository;
     if (repository == null) {
       setState(() => _error = 'Queue API is not configured for this build.');
@@ -217,24 +412,7 @@ class _JoinPageState extends State<JoinPage> {
         customerName: widget.customerName,
       );
       if (!mounted) return;
-      switch (result) {
-        case JoinedTicket(:final ticket):
-          setState(() => _joinedTicket = JoinedTicket(ticket));
-        case PaymentRequired(
-          :final paymentAttemptId,
-          :final checkoutUrl,
-          :final tenantSlug,
-          :final locationSlug,
-        ):
-          final payment = PaymentRequired(
-            paymentAttemptId: paymentAttemptId,
-            checkoutUrl: checkoutUrl,
-            tenantSlug: tenantSlug,
-            locationSlug: locationSlug,
-          );
-          setState(() => _payment = payment);
-          unawaited(_showCheckoutSheet());
-      }
+      _handleJoinResult(result);
     } catch (error) {
       if (mounted) {
         final message = _messageFor(error);
@@ -249,6 +427,51 @@ class _JoinPageState extends State<JoinPage> {
       }
     } finally {
       if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _joinDirect() async {
+    final repository = widget.repository;
+    final tenantSlug = widget.directTenantSlug;
+    if (repository == null || tenantSlug == null || tenantSlug.isEmpty) {
+      if (mounted) {
+        setState(() => _error = 'Queue API is not configured for this build.');
+      }
+      return;
+    }
+    setState(() {
+      _error = null;
+      _isBusy = true;
+    });
+    try {
+      final result = await repository.joinDirect(
+        tenantSlug: tenantSlug,
+        locationSlug: widget.directLocationSlug,
+        customerName: widget.customerName,
+      );
+      if (mounted) _handleJoinResult(result);
+    } catch (error) {
+      if (mounted) setState(() => _error = _messageFor(error));
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  void _handleJoinResult(JoinResult result) {
+    switch (result) {
+      case JoinEmailVerification challenge:
+        setState(() => _emailChallenge = challenge);
+        _otpTimer?.cancel();
+        _otpTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) setState(() {});
+        });
+      case JoinedTicket(:final ticket):
+        final onJoined = widget.onJoined;
+        setState(() => _joinedTicket = JoinedTicket(ticket));
+        onJoined?.call(ticket);
+      case PaymentRequired payment:
+        setState(() => _payment = payment);
+        unawaited(_showCheckoutSheet());
     }
   }
 
@@ -280,13 +503,15 @@ class _JoinPageState extends State<JoinPage> {
           _checkoutSheetContext = sheetContext;
           return CheckoutBottomSheet(
             payment: payment,
-            fee: preview?.fee ?? 0,
-            currency: preview?.currency ?? 'PHP',
+            fee: payment.fee > 0 ? payment.fee : preview?.fee ?? 0,
+            currency: payment.currency,
             paymentBrowser: widget.paymentBrowser ?? ExternalPaymentBrowser(),
             paymentApi: widget.paymentApi,
+            allowedHosts: widget.allowedHosts,
+            paymentLinkSource: widget.paymentLinkSource,
             onPaid: (ticket) =>
                 _confirmPayment(payment.paymentAttemptId, ticket),
-            onCancel: _scanAgain,
+            onCancel: _isDirectJoin ? _closeJoinFlow : _scanAgain,
           );
         },
       );
@@ -307,6 +532,20 @@ class _JoinPageState extends State<JoinPage> {
       _error = null;
     });
 
+    final closeFuture = _closeCheckoutSheet();
+    final onJoined = widget.onJoined;
+    if (onJoined == null) {
+      unawaited(closeFuture);
+    } else {
+      unawaited(
+        closeFuture.then((_) {
+          if (mounted) onJoined(ticket);
+        }),
+      );
+    }
+  }
+
+  Future<void> _closeCheckoutSheet() async {
     final sheetContext = _checkoutSheetContext;
     final completer = _checkoutSheetCompleter;
     final animationStatus = completer?.animationController?.status;
@@ -314,7 +553,7 @@ class _JoinPageState extends State<JoinPage> {
         animationStatus == AnimationStatus.reverse ||
         animationStatus == AnimationStatus.dismissed;
     if (sheetContext != null && sheetContext.mounted && !isAlreadyClosing) {
-      unawaited(closeSheet(sheetContext));
+      await closeSheet(sheetContext);
     } else if (sheetContext == null &&
         completer != null &&
         !completer.isCompleted) {
@@ -333,12 +572,31 @@ class _JoinPageState extends State<JoinPage> {
   void _scanAgain() {
     if (!mounted) return;
     setState(_reset);
-    _scheduleScan();
+  }
+
+  void _retryDirectJoin() {
+    if (!mounted || _isBusy) return;
+    setState(_reset);
+    unawaited(_joinDirect());
+  }
+
+  void _closeJoinFlow() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.pop();
   }
 
   String _messageFor(Object error) {
     if (error is QrValidationException || error is JoinUnavailableException) {
       return error.toString();
+    }
+    if (error is ApiException) {
+      if (error.statusCode == 401 || error.code == 'AUTH_REQUIRED') {
+        return 'Your sign-in session expired. Please sign in again.';
+      }
+      if (error.message.isNotEmpty) return error.message;
+    }
+    if (error is FormatException && error.message.isNotEmpty) {
+      return error.message;
     }
     return 'We could not load this queue. Check your connection and try again.';
   }
@@ -352,8 +610,10 @@ class CheckoutBottomSheet extends StatefulWidget {
     required this.currency,
     required this.paymentBrowser,
     required this.paymentApi,
+    required this.allowedHosts,
     required this.onPaid,
     required this.onCancel,
+    this.paymentLinkSource,
   });
 
   static const borderRadius = BorderRadius.vertical(top: Radius.circular(28));
@@ -363,8 +623,10 @@ class CheckoutBottomSheet extends StatefulWidget {
   final String currency;
   final PaymentBrowser paymentBrowser;
   final PaymentApi? paymentApi;
+  final Set<String> allowedHosts;
   final ValueChanged<QueueTicket> onPaid;
   final VoidCallback onCancel;
+  final PaymentLinkSource? paymentLinkSource;
 
   @override
   State<CheckoutBottomSheet> createState() => _CheckoutBottomSheetState();
@@ -373,6 +635,34 @@ class CheckoutBottomSheet extends StatefulWidget {
 class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
   bool _isBusy = false;
   String? _error;
+  StreamSubscription<Uri>? _paymentLinkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _paymentLinkSubscription = widget.paymentLinkSource?.linkStream.listen(
+      _handlePaymentReturn,
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_paymentLinkSubscription?.cancel());
+    super.dispose();
+  }
+
+  void _handlePaymentReturn(Uri uri) {
+    final payment = widget.payment;
+    if (payment.paymentAttemptId.isEmpty) return;
+    PaymentReturn callback;
+    try {
+      callback = PaymentReturn.parse(uri, allowedHosts: widget.allowedHosts);
+    } on PaymentReturnException {
+      return;
+    }
+    if (callback.reference != payment.paymentAttemptId) return;
+    unawaited(_checkPayment());
+  }
 
   Future<void> _openCheckout() async {
     setState(() {
@@ -418,7 +708,13 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
       );
       final ticket = response['ticket'];
       if (ticket is Map<String, dynamic>) {
-        onPaid(QueueTicket.fromJson(ticket));
+        onPaid(
+          queueTicketFromJoinResponse(
+            response,
+            tenantSlug: payment.tenantSlug,
+            locationSlug: payment.locationSlug,
+          ),
+        );
         return;
       }
       if (!mounted) return;
@@ -463,7 +759,12 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
           child: SafeArea(
             top: false,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              padding: const EdgeInsets.fromLTRB(
+                24,
+                GetPrioTheme.bottomSheetTopPadding,
+                24,
+                24,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -473,7 +774,7 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
                       Expanded(
                         child: Text(
                           'Secure checkout',
-                          style: theme.typography.h2.copyWith(fontSize: 28),
+                          style: theme.typography.h2,
                         ),
                       ),
                       Semantics(
@@ -658,6 +959,10 @@ class JoinPreviewContent extends StatelessWidget {
                           : preview.unavailableReason ??
                                 'Queueing is unavailable.',
                     ),
+                    if (preview.queueDetails != null) ...[
+                      const SizedBox(height: 16),
+                      _JoinQueueDetails(details: preview.queueDetails!),
+                    ],
                   ],
                 ),
               ),
@@ -698,6 +1003,41 @@ class JoinPreviewContent extends StatelessWidget {
       if (location.name == preview.locationName) return location;
     }
     return profile.locations.first;
+  }
+}
+
+class _JoinQueueDetails extends StatelessWidget {
+  const _JoinQueueDetails({required this.details});
+
+  final JoinQueueDetails details;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <({String label, String value})>[];
+    if (details.waitingCount != null) {
+      rows.add((label: 'Waiting now', value: '${details.waitingCount}'));
+    }
+    if (details.currentTicketNumber != null) {
+      rows.add((label: 'Now serving', value: details.currentTicketNumber!));
+    }
+    if (details.estimatedWaitMinutes != null) {
+      rows.add((
+        label: 'Estimated wait',
+        value: '${details.estimatedWaitMinutes} min',
+      ));
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        for (var index = 0; index < rows.length; index++) ...[
+          if (index > 0) const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [Text(rows[index].label), Text(rows[index].value)],
+          ),
+        ],
+      ],
+    );
   }
 }
 
@@ -815,9 +1155,18 @@ BoxFit _joinProfileBoxFit(JoinProfileImageFit? value, BoxFit fallback) {
 }
 
 class QrScannerPage extends StatefulWidget {
-  const QrScannerPage({super.key, required this.allowedHosts});
+  const QrScannerPage({
+    super.key,
+    required this.allowedHosts,
+    this.showAppBar = true,
+    this.onPayload,
+    this.onBack,
+  });
 
   final Set<String> allowedHosts;
+  final bool showAppBar;
+  final ValueChanged<QrJoinPayload>? onPayload;
+  final VoidCallback? onBack;
 
   @override
   State<QrScannerPage> createState() => _QrScannerPageState();
@@ -836,68 +1185,62 @@ class _QrScannerPageState extends State<QrScannerPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      headers: [
-        AppBar(
-          title: const Text('Scan QR code'),
-          leading: [
-            GhostButton(
-              onPressed: () => Navigator.of(context).pop(),
-              density: ButtonDensity.icon,
-              child: const Icon(LucideIcons.arrowLeft),
-            ),
-          ],
-        ),
-      ],
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _handleDetect,
-            errorBuilder: _buildCameraError,
-            overlayBuilder: (context, constraints) => Center(
-              child: Container(
-                width: 260,
-                height: 260,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white, width: 3),
-                  borderRadius: BorderRadius.circular(20),
-                ),
+    final body = Stack(
+      fit: StackFit.expand,
+      children: [
+        MobileScanner(
+          controller: _controller,
+          onDetect: _handleDetect,
+          errorBuilder: _buildCameraError,
+          overlayBuilder: (context, constraints) => Center(
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white, width: 3),
+                borderRadius: BorderRadius.circular(20),
               ),
             ),
           ),
-          if (_error != null)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Card(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      DestructiveBadge(child: Text(_error!)),
-                      const SizedBox(height: 12),
-                      GetPrioActionButton.primary(
-                        onPressed: _retry,
-                        child: const Text('Try again'),
-                      ),
-                    ],
-                  ),
-                ),
+        ),
+        if (_error != null)
+          Positioned.fill(child: _InvalidQrScanState(onRetry: _retry)),
+      ],
+    );
+    if (!widget.showAppBar) return body;
+    return ScrollNotificationObserver(
+      child: Scaffold(
+        headers: [
+          ScrollAwareAppBar(
+            title: const Text('Scan to join'),
+            leading: [
+              GhostButton(
+                onPressed: _handleBack,
+                density: ButtonDensity.icon,
+                child: const Icon(LucideIcons.arrowLeft),
               ),
-            ),
+            ],
+          ),
         ],
+        child: body,
       ),
     );
+  }
+
+  void _handleBack() {
+    final onBack = widget.onBack;
+    if (onBack != null) {
+      onBack();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   Widget _buildCameraError(BuildContext context, MobileScannerException error) {
     return _ScannerCameraError(
       permissionDenied:
           error.errorCode == MobileScannerErrorCode.permissionDenied,
-      onBack: () => Navigator.of(context).pop(),
+      onBack: _handleBack,
     );
   }
 
@@ -915,8 +1258,16 @@ class _QrScannerPageState extends State<QrScannerPage> {
       );
       _handled = true;
       _controller.stop();
-      if (mounted) Navigator.of(context).pop(payload);
+      if (mounted) {
+        final onPayload = widget.onPayload;
+        if (onPayload != null) {
+          onPayload(payload);
+        } else {
+          Navigator.of(context).pop(payload);
+        }
+      }
     } on QrValidationException catch (error) {
+      _handled = true;
       _controller.stop();
       if (mounted) setState(() => _error = error.message);
     }
@@ -928,6 +1279,83 @@ class _QrScannerPageState extends State<QrScannerPage> {
       _handled = false;
     });
     _controller.start();
+  }
+}
+
+class _InvalidQrScanState extends StatelessWidget {
+  const _InvalidQrScanState({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      key: const Key('invalid-qr-scan-screen'),
+      color: Theme.of(context).colorScheme.background,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: (constraints.maxHeight - 48).clamp(0, double.infinity),
+                    ),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.asset(
+                              'assets/illustrations/scan-invalid-qr-half-body-transparent-v3.png',
+                              height: 280,
+                              fit: BoxFit.contain,
+                              excludeFromSemantics: true,
+                            ),
+                            const SizedBox(height: 24),
+                            const Text(
+                              'Uh-oh!',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'You seem to have scanned an invalid QR code.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: GetPrioActionButton.primary(
+                    key: const Key('invalid-qr-retry-button'),
+                    onPressed: onRetry,
+                    child: const Text('Try again'),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -27,8 +27,8 @@ class QueueRepository {
     required QueueTicket ticket,
     String? locationSlug,
   }) async {
-    if (ticket.status != TicketStatus.waiting) {
-      throw StateError('Only waiting tickets can be cancelled.');
+    if (!ticket.canBeCancelled) {
+      throw StateError('This ticket can no longer be cancelled.');
     }
     final response = await api.cancelTicket(
       tenantSlug: tenantSlug,
@@ -46,6 +46,8 @@ class QueueRepository {
             status: TicketStatus.cancelled,
             vendorName: ticket.vendorName,
             locationName: ticket.locationName,
+            tenantSlug: ticket.tenantSlug,
+            locationSlug: ticket.locationSlug,
           );
   }
 }
