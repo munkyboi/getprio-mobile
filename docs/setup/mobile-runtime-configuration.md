@@ -7,10 +7,14 @@ The Flutter client is intentionally configured through build-time values. Do not
 ```bash
 flutter run \
   --dart-define=GETPRIO_API_BASE_URL=https://api.example.com \
-  --dart-define=GETPRIO_APPROVED_HOSTS=app.example.com,enterprise.example.com
+  --dart-define=GETPRIO_APPROVED_HOSTS=app.example.com,enterprise.example.com \
+  --dart-define=GETPRIO_APPLE_SIGN_IN_ENABLED=true
 ```
 
 `GETPRIO_API_BASE_URL` is the trusted GetPrio API origin. `GETPRIO_APPROVED_HOSTS` is the comma-separated HTTPS host allowlist used by QR and payment-return parsing. The scanner never opens a scanned URL.
+`GETPRIO_APPLE_SIGN_IN_ENABLED=true` enables the native iOS Apple button only after
+the backend Apple credentials and Apple Developer capability are ready. It should
+remain false or omitted in builds that have not completed that setup.
 
 ### Physical iPhone testing when debug mode disconnects
 

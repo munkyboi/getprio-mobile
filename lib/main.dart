@@ -70,6 +70,10 @@ class GetPrioApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
+    const appleSignInEnabled = bool.fromEnvironment(
+      'GETPRIO_APPLE_SIGN_IN_ENABLED',
+      defaultValue: false,
+    );
     final apiClient = AuthenticatedApiClient(
       baseUrl: baseUrl,
       authRepository: authRepository,
@@ -80,6 +84,7 @@ class GetPrioApp extends StatelessWidget {
       baseUrl: baseUrl,
       authRepository: authRepository,
       api: RestOAuthApi(baseUrl: baseUrl),
+      appleEnabled: appleSignInEnabled,
     );
     final ticketRepository = QueueTicketRepository(
       RestAccountQueueApi(apiClient),
@@ -730,7 +735,8 @@ class _SignInPageState extends State<SignInPage>
                 ),
                 if (!widget.biometricLogin &&
                     shouldShowAppleSignInButton(
-                      enabled: widget.oauthFlow?.enabled == true,
+                      enabled: widget.oauthFlow?.enabled == true &&
+                          widget.oauthFlow?.appleEnabled == true,
                       platform: defaultTargetPlatform,
                     )) ...[
                   const SizedBox(height: 16),

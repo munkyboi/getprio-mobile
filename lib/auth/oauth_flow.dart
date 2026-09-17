@@ -191,12 +191,14 @@ class OAuthFlow {
     required this.baseUrl,
     required this.authRepository,
     required this.api,
+    this.appleEnabled = false,
     OAuthBrowser? browser,
     OAuthLinkSource? links,
   }) : _browser = browser ?? ExternalOAuthBrowser(),
        _links = links ?? AppLinksSource();
 
   final String baseUrl;
+  final bool appleEnabled;
   final AuthRepository authRepository;
   final OAuthApi api;
   final OAuthBrowser _browser;
@@ -257,7 +259,7 @@ class OAuthFlow {
   }
 
   Future<LoginResult> signInWithApple() async {
-    if (!enabled) {
+    if (!enabled || !appleEnabled) {
       throw const OAuthException('Apple sign-in is not available.');
     }
     final state = PkcePair.generate().state;
