@@ -53,31 +53,16 @@ void main() {
     );
   });
 
-  test('shows legacy OAuth buttons on iOS when enabled', () {
-    expect(
-      shouldShowLegacyOAuthButtons(enabled: true, platform: TargetPlatform.iOS),
-      isTrue,
-    );
+  test('shows OAuth buttons on iOS when enabled', () {
+    expect(shouldShowOAuthButtons(enabled: true), isTrue);
   });
 
-  test('shows legacy OAuth buttons on Android when enabled', () {
-    expect(
-      shouldShowLegacyOAuthButtons(
-        enabled: true,
-        platform: TargetPlatform.android,
-      ),
-      isTrue,
-    );
+  test('shows OAuth buttons on Android when enabled', () {
+    expect(shouldShowOAuthButtons(enabled: true), isTrue);
   });
 
-  test('hides legacy OAuth buttons when OAuth is unavailable', () {
-    expect(
-      shouldShowLegacyOAuthButtons(
-        enabled: false,
-        platform: TargetPlatform.android,
-      ),
-      isFalse,
-    );
+  test('hides OAuth buttons when OAuth is unavailable', () {
+    expect(shouldShowOAuthButtons(enabled: false), isFalse);
   });
 
   test('shows Apple sign-in only on iOS when OAuth is configured', () {

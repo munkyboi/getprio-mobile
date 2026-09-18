@@ -65,10 +65,7 @@ class ExternalOAuthBrowser implements OAuthBrowser {
 /// Google and Facebook are available on every platform when the API exposes
 /// OAuth providers. iOS also keeps Sign in with Apple available separately to
 /// satisfy Apple's equivalent-login requirement.
-bool shouldShowLegacyOAuthButtons({
-  required bool enabled,
-  required TargetPlatform platform,
-}) => enabled;
+bool shouldShowOAuthButtons({required bool enabled}) => enabled;
 
 bool shouldShowAppleSignInButton({
   required bool enabled,

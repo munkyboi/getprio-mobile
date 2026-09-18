@@ -81,9 +81,10 @@ If the deployment uses an HTTPS universal link for OAuth, configure the selected
 
 The exact host remains deployment configuration and must match the platform dashboard allowlist.
 
-Google and Facebook remain available on iOS and Android when the corresponding
-providers are enabled by the backend. iOS also offers Sign in with Apple through
-the native authorization sheet to satisfy Apple's equivalent-login requirement.
+Google and Facebook remain available on iOS and Android when OAuth is configured
+with the API base URL; provider failures remain recoverable in the sign-in flow.
+iOS also offers Sign in with Apple through the native authorization sheet to
+satisfy Apple's equivalent-login requirement.
 
 Sign in with Apple is now available on iOS through the native Apple authorization
 sheet. A paid Apple Developer Program membership is required, and the Apple
