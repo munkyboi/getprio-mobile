@@ -1,5 +1,6 @@
 import 'social/vendor_social_widgets.dart';
 import 'social/vendor_social_repository.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flutter/material.dart' show Icons;
 import 'dart:async';
 import 'dart:math';
@@ -12,7 +13,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'auth/auth_models.dart';
 import 'auth/biometric_login.dart';
@@ -621,6 +621,14 @@ class _SignInPageState extends State<SignInPage>
   @override
   Widget build(BuildContext context) {
     final challenge = _challenge;
+    final showOAuthButtons = shouldShowOAuthButtons(
+      enabled: widget.oauthFlow?.enabled == true,
+    );
+    final showAppleButton = shouldShowAppleSignInButton(
+      enabled: widget.oauthFlow?.enabled == true &&
+          widget.oauthFlow?.appleEnabled == true,
+      platform: defaultTargetPlatform,
+    );
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -734,47 +742,39 @@ class _SignInPageState extends State<SignInPage>
                   ),
                 ),
                 if (!widget.biometricLogin &&
-                    shouldShowAppleSignInButton(
-                      enabled: widget.oauthFlow?.enabled == true &&
-                          widget.oauthFlow?.appleEnabled == true,
-                      platform: defaultTargetPlatform,
-                    )) ...[
-                  const SizedBox(height: 16),
-                  const Text('Or continue with', textAlign: TextAlign.center),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: SignInWithAppleButton(
-                      onPressed: _isBusy ? () {} : _signInWithApple,
-                    ),
-                  ),
-                ],
-                if (!widget.biometricLogin &&
-                    shouldShowOAuthButtons(
-                      enabled: widget.oauthFlow?.enabled == true,
-                    )) ...[
+                    (showOAuthButtons || showAppleButton)) ...[
                   const SizedBox(height: 16),
                   const Text('Or continue with', textAlign: TextAlign.center),
                   const SizedBox(height: 8),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: GetPrioActionButton.outline(
+                      if (showOAuthButtons)
+                        _OAuthIconButton(
+                          assetPath: 'assets/auth/google.svg',
+                          label: 'Continue with Google',
                           onPressed: _isBusy
                               ? null
                               : () => _signInWithOAuth('google'),
-                          child: const Text('Google'),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: GetPrioActionButton.outline(
+                      if (showOAuthButtons) const SizedBox(width: 12),
+                      if (showOAuthButtons)
+                        _OAuthIconButton(
+                          assetPath: 'assets/auth/facebook.svg',
+                          label: 'Continue with Facebook',
                           onPressed: _isBusy
                               ? null
                               : () => _signInWithOAuth('facebook'),
-                          child: const Text('Facebook'),
                         ),
-                      ),
+                      if (showOAuthButtons && showAppleButton)
+                        const SizedBox(width: 12),
+                      if (showAppleButton)
+                        _OAuthIconButton(
+                          assetPath: 'assets/auth/apple.svg',
+                          label: 'Continue with Apple',
+                          onPressed: _isBusy ? null : _signInWithApple,
+                        ),
                     ],
                   ),
                 ],
@@ -978,6 +978,38 @@ class _SignInPageState extends State<SignInPage>
     if (error is ApiException && error.message.isNotEmpty) return error.message;
     if (error is FormatException) return error.message;
     return 'We could not sign you in. Check your connection and try again.';
+  }
+}
+
+class _OAuthIconButton extends StatelessWidget {
+  const _OAuthIconButton({
+    required this.assetPath,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String assetPath;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: material.IconButton(
+        onPressed: onPressed,
+        tooltip: label,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+        icon: SvgPicture.asset(
+          assetPath,
+          width: 32,
+          height: 32,
+          excludeFromSemantics: true,
+        ),
+      ),
+    );
   }
 }
 

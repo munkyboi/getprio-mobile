@@ -73,6 +73,7 @@ flutter:
     - assets/onboarding/
     - assets/branding/logo.svg
     - assets/branding/logo-dark.svg
+    - assets/auth/
     - assets/branding/login-biometric-scene.png
     - assets/illustrations/customer-onboarding.png
     - assets/illustrations/hero-queue-scene-transparent.png
