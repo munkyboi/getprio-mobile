@@ -62,8 +62,8 @@ class ExternalOAuthBrowser implements OAuthBrowser {
       launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 
-/// Google and Facebook are available on every platform when the API exposes
-/// OAuth providers. iOS also keeps Sign in with Apple available separately to
+/// Google and Facebook are available on every platform when OAuth is
+/// configured. iOS also keeps Sign in with Apple available separately to
 /// satisfy Apple's equivalent-login requirement.
 bool shouldShowOAuthButtons({required bool enabled}) => enabled;
 
