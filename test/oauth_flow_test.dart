@@ -1,7 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/oauth_flow.dart';
 
+import 'dart:io';
+
 void main() {
+  test('uses an in-app browser for provider sign-in', () {
+    final source = File('lib/auth/oauth_flow.dart').readAsStringSync();
+
+    expect(source, contains('class InAppOAuthBrowser'));
+    expect(source, contains('LaunchMode.inAppBrowserView'));
+    expect(source, isNot(contains('LaunchMode.externalApplication')));
+  });
+
   test('generates an S256 PKCE challenge from the verifier', () {
     final pair = PkcePair.generate();
 
