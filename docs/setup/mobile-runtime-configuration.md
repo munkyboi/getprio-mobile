@@ -73,6 +73,21 @@ native projects. Paid queue joins return through the verified HTTPS
 active payment attempt and always confirms status through the authenticated sync
 endpoint.
 
+The provider-facing OAuth redirect URI is the server callback, not the app
+scheme. Add the exact URI below to the Google OAuth client's **Authorized
+redirect URIs**:
+
+`https://api.getprio.online/api/mobile/auth/oauth/google/callback`
+
+For Facebook, add the corresponding server callback to **Valid OAuth Redirect
+URIs**:
+
+`https://api.getprio.online/api/mobile/auth/oauth/facebook/callback`
+
+Keep `getprio://oauth/callback` configured only as the final server-to-app
+handoff (`MOBILE_OAUTH_REDIRECT_URI`); do not use it as Google's or Facebook's
+provider redirect URI.
+
 If the deployment uses an HTTPS universal link for OAuth, configure the selected host in:
 
 - iOS Associated Domains (`applinks:<approved-host>`)
