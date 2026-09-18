@@ -77,12 +77,12 @@ The provider-facing OAuth redirect URI is the server callback, not the app
 scheme. Add the exact URI below to the Google OAuth client's **Authorized
 redirect URIs**:
 
-`https://api.getprio.online/api/mobile/auth/oauth/google/callback`
+`https://api.getprio.online/api/v1/mobile/auth/oauth/google/callback`
 
 For Facebook, add the corresponding server callback to **Valid OAuth Redirect
 URIs**:
 
-`https://api.getprio.online/api/mobile/auth/oauth/facebook/callback`
+`https://api.getprio.online/api/v1/mobile/auth/oauth/facebook/callback`
 
 Keep `getprio://oauth/callback` configured only as the final server-to-app
 handoff (`MOBILE_OAUTH_REDIRECT_URI`); do not use it as Google's or Facebook's
