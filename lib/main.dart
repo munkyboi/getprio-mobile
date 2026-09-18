@@ -995,15 +995,19 @@ class _OAuthIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
+      enabled: onPressed != null,
       label: label,
-      child: IconButton.outline(
-        icon: SvgPicture.asset(
-          assetPath,
-          width: 32,
-          height: 32,
-          excludeFromSemantics: true,
+      onTap: onPressed,
+      child: ExcludeSemantics(
+        child: IconButton.outline(
+          icon: SvgPicture.asset(
+            assetPath,
+            width: 32,
+            height: 32,
+            excludeFromSemantics: true,
+          ),
+          onPressed: onPressed,
         ),
-        onPressed: onPressed,
       ),
     );
   }

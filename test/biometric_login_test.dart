@@ -1,6 +1,7 @@
 import 'support/memory_onboarding_store.dart';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/auth/remembered_user_store.dart';
@@ -289,6 +290,18 @@ void main() {
     expect(find.bySemanticsLabel('Continue with Google'), findsOneWidget);
     expect(find.bySemanticsLabel('Continue with Facebook'), findsOneWidget);
     expect(find.bySemanticsLabel('Continue with Apple'), findsOneWidget);
+    for (final label in [
+      'Continue with Google',
+      'Continue with Facebook',
+      'Continue with Apple',
+    ]) {
+      final semantics = tester.getSemantics(find.bySemanticsLabel(label));
+      expect(
+        semantics.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+        reason: '$label should expose a tap action',
+      );
+    }
     final icons = tester.widgetList<SvgPicture>(find.byType(SvgPicture));
     expect(icons, hasLength(3));
     for (final icon in icons) {
