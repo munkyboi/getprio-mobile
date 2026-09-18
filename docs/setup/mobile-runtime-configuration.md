@@ -81,9 +81,9 @@ If the deployment uses an HTTPS universal link for OAuth, configure the selected
 
 The exact host remains deployment configuration and must match the platform dashboard allowlist.
 
-For the current iOS App Store release, Google and Facebook buttons remain hidden while
-the Apple provider, equivalent privacy controls, and physical-device callback are
-being verified. Android keeps the existing providers.
+Google and Facebook remain available on iOS and Android when the corresponding
+providers are enabled by the backend. iOS also offers Sign in with Apple through
+the native authorization sheet to satisfy Apple's equivalent-login requirement.
 
 Sign in with Apple is now available on iOS through the native Apple authorization
 sheet. A paid Apple Developer Program membership is required, and the Apple

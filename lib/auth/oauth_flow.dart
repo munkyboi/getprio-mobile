@@ -62,12 +62,13 @@ class ExternalOAuthBrowser implements OAuthBrowser {
       launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 
-/// Legacy Google/Facebook buttons remain available on Android, where Apple’s
-/// equivalent-login requirement does not apply to the iOS submission surface.
+/// Google and Facebook are available on every platform when the API exposes
+/// OAuth providers. iOS also keeps Sign in with Apple available separately to
+/// satisfy Apple's equivalent-login requirement.
 bool shouldShowLegacyOAuthButtons({
   required bool enabled,
   required TargetPlatform platform,
-}) => enabled && platform != TargetPlatform.iOS;
+}) => enabled;
 
 bool shouldShowAppleSignInButton({
   required bool enabled,

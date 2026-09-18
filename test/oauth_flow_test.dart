@@ -53,10 +53,10 @@ void main() {
     );
   });
 
-  test('hides legacy OAuth buttons on iOS', () {
+  test('shows legacy OAuth buttons on iOS when enabled', () {
     expect(
       shouldShowLegacyOAuthButtons(enabled: true, platform: TargetPlatform.iOS),
-      isFalse,
+      isTrue,
     );
   });
 
