@@ -1,6 +1,5 @@
 import 'social/vendor_social_widgets.dart';
 import 'social/vendor_social_repository.dart';
-import 'package:flutter/material.dart' as material;
 import 'package:flutter/material.dart' show Icons;
 import 'dart:async';
 import 'dart:math';
@@ -997,17 +996,14 @@ class _OAuthIconButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: label,
-      child: material.IconButton(
-        onPressed: onPressed,
-        tooltip: label,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+      child: IconButton.outline(
         icon: SvgPicture.asset(
           assetPath,
           width: 32,
           height: 32,
           excludeFromSemantics: true,
         ),
+        onPressed: onPressed,
       ),
     );
   }
