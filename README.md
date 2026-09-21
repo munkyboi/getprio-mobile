@@ -31,3 +31,5 @@ flutter run \
 Firebase, FCM, OAuth callback, verified-host, and backend migration setup is documented in [`docs/setup/mobile-runtime-configuration.md`](docs/setup/mobile-runtime-configuration.md).
 
 Product decisions and implementation contracts are kept in [`CONTEXT.md`](CONTEXT.md) and [`docs/`](docs/).
+
+Sandbox flavor setup is documented in [`docs/setup/sandbox-mobile-runtime-configuration.md`](docs/setup/sandbox-mobile-runtime-configuration.md).

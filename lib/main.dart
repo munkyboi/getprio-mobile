@@ -43,6 +43,7 @@ import 'app_theme.dart';
 import 'loading_skeleton.dart';
 import 'onboarding/onboarding_gate.dart';
 import 'onboarding/onboarding_store.dart';
+import 'mobile_environment.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,15 +61,30 @@ class GetPrioApp extends StatelessWidget {
     AuthRepository? authRepository,
     this.firebaseEnabled = false,
     this.onboardingStore = const InstallationOnboardingStore(),
-  }) : authRepository = authRepository ?? _defaultAuthRepository();
+    MobileEnvironmentConfig? environmentConfig,
+  }) : authRepository = authRepository ??
+           _defaultAuthRepository(
+             environmentConfig ?? MobileEnvironmentConfig.fromCompileTime(),
+           ),
+       environmentConfig =
+           environmentConfig ?? MobileEnvironmentConfig.fromCompileTime();
 
   final AuthRepository authRepository;
   final bool firebaseEnabled;
   final OnboardingStore onboardingStore;
+  final MobileEnvironmentConfig environmentConfig;
 
   @override
   Widget build(BuildContext context) {
-    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
+    final baseUrl = environmentConfig.apiBaseUrl;
+    final configurationError = environmentConfig.configurationError;
+    if (configurationError != null) {
+      return ShadcnApp(
+        title: environmentConfig.appName,
+        debugShowCheckedModeBanner: false,
+        home: _EnvironmentConfigurationError(message: configurationError),
+      );
+    }
     final apiClient = AuthenticatedApiClient(
       baseUrl: baseUrl,
       authRepository: authRepository,
@@ -126,7 +142,7 @@ class GetPrioApp extends StatelessWidget {
             profileRepository: AccountProfileRepository(
               RestAccountProfileApi(apiClient),
             ),
-            allowedHosts: _allowedHosts(),
+            allowedHosts: environmentConfig.approvedHostSet,
             paymentLinkSource: AppPaymentLinkSource(),
             pushCoordinator: pushCoordinator,
             oauthFlow: oauthFlow,
@@ -136,27 +152,30 @@ class GetPrioApp extends StatelessWidget {
     );
   }
 
-  static AuthRepository _defaultAuthRepository() {
-    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
+  static AuthRepository _defaultAuthRepository(
+    MobileEnvironmentConfig environmentConfig,
+  ) {
     return AuthRepository(
-      api: RestAuthApi(baseUrl: baseUrl),
+      api: RestAuthApi(baseUrl: environmentConfig.apiBaseUrl),
       tokenStore: SecureTokenStore(),
       biometricLogin: DeviceBiometricLogin(),
       rememberedUserStore: SecureRememberedUserStore(),
     );
   }
+}
 
-  static Set<String> _allowedHosts() {
-    const configuredHosts = String.fromEnvironment('GETPRIO_APPROVED_HOSTS');
-    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
-    final hosts = configuredHosts
-        .split(',')
-        .map((host) => host.trim().toLowerCase())
-        .where((host) => host.isNotEmpty)
-        .toSet();
-    final baseHost = Uri.tryParse(baseUrl)?.host;
-    if (baseHost != null && baseHost.isNotEmpty) hosts.add(baseHost);
-    return hosts;
+class _EnvironmentConfigurationError extends StatelessWidget {
+  const _EnvironmentConfigurationError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      child: Center(
+        child: Padding(padding: const EdgeInsets.all(24), child: Text(message)),
+      ),
+    );
   }
 }
 

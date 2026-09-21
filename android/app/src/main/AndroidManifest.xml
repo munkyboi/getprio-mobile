@@ -4,7 +4,7 @@
 
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application
-        android:label="getprio_mobile"
+        android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <meta-data
@@ -35,13 +35,13 @@
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="https" android:host="getprio.online" android:pathPrefix="/payment/return"/>
+                <data android:scheme="https" android:host="${getPrioLinkHost}" android:pathPrefix="/payment/return"/>
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="getprio" android:host="payment" android:pathPrefix="/return"/>
+                <data android:scheme="${getPrioAppScheme}" android:host="payment" android:pathPrefix="/return"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
