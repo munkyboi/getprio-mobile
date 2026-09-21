@@ -342,12 +342,16 @@ class ApiException implements Exception {
 }
 
 class RestAuthApi implements AuthApi, CustomerRegistrationApi {
-  RestAuthApi({required String baseUrl, http.Client? client})
-    : _baseUrl = baseUrl.replaceFirst(RegExp(r'/$'), ''),
-      _client = client ?? http.Client();
+  RestAuthApi({
+    required String baseUrl,
+    http.Client? client,
+    this.sandbox = false,
+  }) : _baseUrl = baseUrl.replaceFirst(RegExp(r'/$'), ''),
+       _client = client ?? http.Client();
 
   final String _baseUrl;
   final http.Client _client;
+  final bool sandbox;
 
   @override
   Future<Map<String, dynamic>> registerCustomer({
@@ -357,6 +361,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
     String? phone,
     required String password,
   }) {
+    if (sandbox) return _sandboxAuthUnsupported();
     return _post('/api/auth/register/customer', {
       'name': name,
       'username': username,
@@ -370,6 +375,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
   Future<Map<String, dynamic>> checkUsernameAvailability(
     String username,
   ) async {
+    if (sandbox) throw _sandboxAuthException();
     if (_baseUrl.isEmpty) {
       throw const ApiException(
         0,
@@ -400,6 +406,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
     required String email,
     required String password,
   }) {
+    if (sandbox) return _sandboxAuthUnsupported();
     return _post('/api/auth/register/customer/otp', {
       'name': name,
       'username': username,
@@ -413,6 +420,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
     required String challengeId,
     required String code,
   }) {
+    if (sandbox) return _sandboxAuthUnsupported();
     return _post('/api/auth/register/customer/otp/verify', {
       'challengeId': challengeId,
       'code': code,
@@ -423,6 +431,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
   Future<Map<String, dynamic>> resendCustomerRegistrationCode({
     required String challengeId,
   }) {
+    if (sandbox) return _sandboxAuthUnsupported();
     return _post('/api/auth/register/customer/otp/resend', {
       'challengeId': challengeId,
     }, compatibilityHeader: true);
@@ -430,6 +439,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
 
   @override
   Future<Map<String, dynamic>> requestPasswordReset(String email) {
+    if (sandbox) return _sandboxAuthUnsupported();
     return _post('/api/auth/password-reset/request', {'email': email});
   }
 
@@ -438,17 +448,17 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
     required String identifier,
     required String password,
   }) {
-    return _post('/api/auth/login', {
+    return _post(sandbox ? '/api/mobile/auth/login' : '/api/auth/login', {
       'identifier': identifier,
       'password': password,
-    }, compatibilityHeader: true);
+    }, compatibilityHeader: !sandbox);
   }
 
   @override
   Future<Map<String, dynamic>> refresh(String refreshToken) {
-    return _post('/api/auth/refresh', {
+    return _post(sandbox ? '/api/mobile/auth/refresh' : '/api/auth/refresh', {
       'refreshToken': refreshToken,
-    }, compatibilityHeader: true);
+    }, compatibilityHeader: !sandbox);
   }
 
   @override
@@ -457,6 +467,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
     String? code,
     String? recoveryCode,
   }) {
+    if (sandbox) return _sandboxAuthUnsupported();
     return _post('/api/auth/mfa/verify', {
       'challengeToken': challengeToken,
       ...?(code == null ? null : {'code': code}),
@@ -466,7 +477,19 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
 
   @override
   Future<void> logout(String refreshToken) async {
-    await _post('/api/auth/logout', {'refreshToken': refreshToken});
+    await _post(sandbox ? '/api/mobile/auth/logout' : '/api/auth/logout', {
+      'refreshToken': refreshToken,
+    });
+  }
+
+  ApiException _sandboxAuthException() => const ApiException(
+    403,
+    'SANDBOX_AUTH_UNSUPPORTED',
+    'This authentication flow is unavailable for Sandbox test users.',
+  );
+
+  Future<Map<String, dynamic>> _sandboxAuthUnsupported() async {
+    throw _sandboxAuthException();
   }
 
   Future<Map<String, dynamic>> _post(

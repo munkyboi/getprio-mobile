@@ -30,6 +30,23 @@ The Sandbox Dart runtime rejects an empty, non-HTTPS, production, or otherwise
 different API origin. Keep the defines explicit in local scripts and CI so a
 developer cannot accidentally point a Sandbox binary at production.
 
+## Authentication boundary
+
+Sandbox login, refresh, and logout requests use the versioned private mobile
+routes:
+
+```text
+/api/v1/mobile/auth/login
+/api/v1/mobile/auth/refresh
+/api/v1/mobile/auth/logout
+```
+
+The Sandbox client does not expose customer registration, email verification,
+forgotten-password recovery, OAuth, or MFA flows. It accepts only credentials
+for portal-generated project-scoped Sandbox test users. The corresponding
+backend routes and server-side project, environment, expiry, session, and
+device enforcement must be deployed before real Sandbox credentials can log in.
+
 ## Firebase boundary
 
 The production `android/app/google-services.json` and

@@ -117,7 +117,7 @@ class GetPrioApp extends StatelessWidget {
         : null;
     final lightTheme = GetPrioTheme.light();
     return ShadcnApp(
-      title: 'GetPrio',
+      title: environmentConfig.appName,
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.light,
       background: lightTheme.colorScheme.background,
@@ -143,6 +143,7 @@ class GetPrioApp extends StatelessWidget {
               RestAccountProfileApi(apiClient),
             ),
             allowedHosts: environmentConfig.approvedHostSet,
+            sandbox: environmentConfig.isSandbox,
             paymentLinkSource: AppPaymentLinkSource(),
             pushCoordinator: pushCoordinator,
             oauthFlow: oauthFlow,
@@ -156,7 +157,10 @@ class GetPrioApp extends StatelessWidget {
     MobileEnvironmentConfig environmentConfig,
   ) {
     return AuthRepository(
-      api: RestAuthApi(baseUrl: environmentConfig.apiBaseUrl),
+      api: RestAuthApi(
+        baseUrl: environmentConfig.apiBaseUrl,
+        sandbox: environmentConfig.isSandbox,
+      ),
       tokenStore: SecureTokenStore(),
       biometricLogin: DeviceBiometricLogin(),
       rememberedUserStore: SecureRememberedUserStore(),
@@ -195,6 +199,7 @@ class AuthGate extends StatefulWidget {
     this.paymentLinkSource,
     this.pushCoordinator,
     this.oauthFlow,
+    this.sandbox = false,
   });
 
   final AuthRepository authRepository;
@@ -210,6 +215,7 @@ class AuthGate extends StatefulWidget {
   final PaymentLinkSource? paymentLinkSource;
   final PushCoordinator? pushCoordinator;
   final OAuthFlow? oauthFlow;
+  final bool sandbox;
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -261,6 +267,7 @@ class _AuthGateState extends State<AuthGate> {
         securityRepository: widget.securityRepository,
         profileRepository: widget.profileRepository,
         onUserUpdated: _updateUser,
+        sandbox: widget.sandbox,
         allowedHosts: widget.allowedHosts,
         paymentLinkSource: widget.paymentLinkSource,
         onSignOut: () => unawaited(_signOut()),
@@ -287,6 +294,7 @@ class _AuthGateState extends State<AuthGate> {
             securityRepository: widget.securityRepository,
             profileRepository: widget.profileRepository,
             onUserUpdated: _updateUser,
+            sandbox: widget.sandbox,
             allowedHosts: widget.allowedHosts,
             paymentLinkSource: widget.paymentLinkSource,
             onSignOut: () => unawaited(_signOut()),
@@ -296,12 +304,14 @@ class _AuthGateState extends State<AuthGate> {
           return BiometricLoginPage(
             authRepository: widget.authRepository,
             onAuthenticated: _authenticated,
+            sandbox: widget.sandbox,
           );
         }
         return SignInPage(
           authRepository: widget.authRepository,
           oauthFlow: widget.oauthFlow,
           onAuthenticated: _authenticated,
+          sandbox: widget.sandbox,
         );
       },
     );
@@ -468,10 +478,12 @@ class BiometricLoginPage extends StatefulWidget {
     super.key,
     required this.authRepository,
     required this.onAuthenticated,
+    this.sandbox = false,
   });
 
   final AuthRepository authRepository;
   final ValueChanged<AuthSession> onAuthenticated;
+  final bool sandbox;
 
   @override
   State<BiometricLoginPage> createState() => _BiometricLoginPageState();
@@ -493,6 +505,7 @@ class _BiometricLoginPageState extends State<BiometricLoginPage> {
         onAuthenticated: widget.onAuthenticated,
         rememberedUser: snapshot.data,
         biometricLogin: true,
+        sandbox: widget.sandbox,
       );
     },
   );
@@ -563,6 +576,7 @@ class SignInPage extends StatefulWidget {
     this.oauthFlow,
     this.rememberedUser,
     this.biometricLogin = false,
+    this.sandbox = false,
     required this.onAuthenticated,
   });
 
@@ -570,6 +584,7 @@ class SignInPage extends StatefulWidget {
   final OAuthFlow? oauthFlow;
   final AuthUser? rememberedUser;
   final bool biometricLogin;
+  final bool sandbox;
   final ValueChanged<AuthSession> onAuthenticated;
 
   @override
@@ -654,13 +669,19 @@ class _SignInPageState extends State<SignInPage>
               ),
               const SizedBox(height: 20),
               Text(
-                widget.biometricLogin ? 'Welcome back' : 'Welcome to GetPrio',
+                widget.sandbox
+                    ? 'GetPrio Sandbox'
+                    : widget.biometricLogin
+                    ? 'Welcome back'
+                    : 'Welcome to GetPrio',
                 textAlign: TextAlign.center,
               ).h1(),
               const SizedBox(height: 8),
               Text(
                 challenge == null
-                    ? 'Sign in to manage your queue tickets.'
+                    ? widget.sandbox
+                          ? 'Sign in with your Sandbox test-user credentials.'
+                          : 'Sign in to manage your queue tickets.'
                     : 'Verify your identity to finish signing in.',
                 textAlign: challenge == null
                     ? TextAlign.center
@@ -732,21 +753,23 @@ class _SignInPageState extends State<SignInPage>
                     ),
                   ),
                   const SizedBox(height: 8),
-                ] else ...[
+                ] else if (!widget.sandbox) ...[
                   GetPrioActionButton.outline(
                     onPressed: _isBusy ? null : _openRegister,
                     child: const Text('Create customer account'),
                   ),
                   const SizedBox(height: 8),
                 ],
-                Center(
-                  child: LinkButton(
-                    key: const Key('forgot-password-link'),
-                    onPressed: _isBusy ? null : _openPasswordRecovery,
-                    child: const Text('Forgot password?'),
+                if (!widget.sandbox)
+                  Center(
+                    child: LinkButton(
+                      key: const Key('forgot-password-link'),
+                      onPressed: _isBusy ? null : _openPasswordRecovery,
+                      child: const Text('Forgot password?'),
+                    ),
                   ),
-                ),
-                if (!widget.biometricLogin &&
+                if (!widget.sandbox &&
+                    !widget.biometricLogin &&
                     widget.oauthFlow?.enabled == true) ...[
                   const SizedBox(height: 16),
                   const Text('Or continue with', textAlign: TextAlign.center),
@@ -855,7 +878,11 @@ class _SignInPageState extends State<SignInPage>
         case AuthenticatedSession(:final session):
           widget.onAuthenticated(session);
         case final MfaChallenge challenge:
-          setState(() => _challenge = challenge);
+          if (widget.sandbox) {
+            setState(() => _error = 'Sandbox test users do not use MFA.');
+          } else {
+            setState(() => _challenge = challenge);
+          }
       }
     } catch (error) {
       if (mounted) showFormError(error, _authError(error));
@@ -1619,6 +1646,7 @@ class CustomerShell extends StatefulWidget {
     this.onUserUpdated,
     this.paymentLinkSource,
     this.allowedHosts = const {},
+    this.sandbox = false,
   });
 
   final AuthUser? user;
@@ -1634,6 +1662,7 @@ class CustomerShell extends StatefulWidget {
   final ValueChanged<AuthUser>? onUserUpdated;
   final Set<String> allowedHosts;
   final PaymentLinkSource? paymentLinkSource;
+  final bool sandbox;
 
   @override
   State<CustomerShell> createState() => _CustomerShellState();
@@ -1742,6 +1771,7 @@ class _CustomerShellState extends State<CustomerShell>
                 securityRepository: widget.securityRepository,
                 profileRepository: widget.profileRepository,
                 onUserUpdated: widget.onUserUpdated,
+                sandbox: widget.sandbox,
               ),
             ],
           ),
@@ -5254,6 +5284,7 @@ class AccountPage extends StatefulWidget {
     this.securityRepository,
     this.profileRepository,
     this.onUserUpdated,
+    this.sandbox = false,
   });
 
   final VendorSocialRepository? socialRepository;
@@ -5264,6 +5295,7 @@ class AccountPage extends StatefulWidget {
   final SecurityRepository? securityRepository;
   final AccountProfileRepository? profileRepository;
   final ValueChanged<AuthUser>? onUserUpdated;
+  final bool sandbox;
 
   @override
   State<AccountPage> createState() => _AccountPageState();
@@ -5383,26 +5415,30 @@ class _AccountPageState extends State<AccountPage> {
                     SecuritySection.biometrics,
                   ),
                 ),
-                const Divider(),
-                _AccountAction(
-                  key: const Key('profile-password'),
-                  icon: LucideIcons.lockKeyhole,
-                  title: 'Password',
-                  subtitle: 'Change your account password.',
-                  onPressed: () => _openSecuritySheet(
-                    overlayContext,
-                    SecuritySection.password,
+                if (!widget.sandbox) ...[
+                  const Divider(),
+                  _AccountAction(
+                    key: const Key('profile-password'),
+                    icon: LucideIcons.lockKeyhole,
+                    title: 'Password',
+                    subtitle: 'Change your account password.',
+                    onPressed: () => _openSecuritySheet(
+                      overlayContext,
+                      SecuritySection.password,
+                    ),
                   ),
-                ),
-                const Divider(),
-                _AccountAction(
-                  key: const Key('profile-mfa'),
-                  icon: LucideIcons.shieldCheck,
-                  title: 'MFA Setup',
-                  subtitle: 'Set up an authenticator app and recovery codes.',
-                  onPressed: () =>
-                      _openSecuritySheet(overlayContext, SecuritySection.mfa),
-                ),
+                  const Divider(),
+                  _AccountAction(
+                    key: const Key('profile-mfa'),
+                    icon: LucideIcons.shieldCheck,
+                    title: 'MFA Setup',
+                    subtitle: 'Set up an authenticator app and recovery codes.',
+                    onPressed: () => _openSecuritySheet(
+                      overlayContext,
+                      SecuritySection.mfa,
+                    ),
+                  ),
+                ],
                 const Divider(),
                 _AccountAction(
                   key: const Key('profile-logout'),
