@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "47224988144",
+    "project_id": "getprio-sandbox",
+    "storage_bucket": "getprio-sandbox.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:47224988144:android:c2e325fdb92f0e02e67d35",
+        "android_client_info": {
+          "package_name": "com.getprio.getprioMobile.android.sandbox"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBkMTl234tn_IExq7GLEby5RQWXh5Fai1k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

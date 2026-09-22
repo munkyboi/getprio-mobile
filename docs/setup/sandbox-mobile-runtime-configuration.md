@@ -62,11 +62,18 @@ device enforcement must be deployed before real Sandbox credentials can log in.
 
 The production `android/app/google-services.json` and
 `ios/Runner/GoogleService-Info.plist` are not used by Sandbox builds. Sandbox
-Google services processing is enabled only when the separately provisioned
-`android/app/src/sandbox/google-services.json` exists. Until the GetPrio-owned
-Sandbox Firebase project is provisioned, the app runs without Firebase push
-registration and remains usable for non-push local validation.
+Google services processing is enabled by the separately provisioned
+`android/app/src/sandbox/google-services.json`. The iOS Sandbox target uses
+`ios/Runner/Sandbox/GoogleService-Info.plist`, copied into the app bundle as
+the default `GoogleService-Info.plist` resource for Sandbox configurations.
 
-Do not create placeholder credentials or copy production Firebase files into
-the Sandbox flavor. Provisioning and real push/device verification are separate
-release gates.
+Both apps belong to the `getprio-sandbox` Firebase project:
+
+| Platform | Firebase app ID | Package/bundle ID |
+| --- | --- | --- |
+| Android | `1:47224988144:android:c2e325fdb92f0e02e67d35` | `com.getprio.getprioMobile.android.sandbox` |
+| iOS | `1:47224988144:ios:148ea5282d382205e67d35` | `com.getprio.getprioMobile.ios.sandbox` |
+
+The project is currently on the Firebase Spark plan. Never copy production
+Firebase files into the Sandbox flavor or commit placeholder credentials.
+Provisioning and real push/device verification remain separate release gates.
