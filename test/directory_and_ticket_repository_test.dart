@@ -47,6 +47,42 @@ void main() {
     },
   );
 
+  test('loads and accepts developer ticket invitations', () async {
+    final repository = QueueTicketRepository(
+      FakeInvitationAccountQueueApi(
+        invitations: {
+          'invitations': [
+            {
+              'id': 'ticket-1',
+              'ticket_number': 'QUEUE-0001',
+              'display_label': 'Johnny',
+              'status': 'waiting',
+              'profile': {'queue_name': 'Sandbox queue'},
+            },
+          ],
+        },
+        acceptedTicket: {
+          'ticket': {
+            'id': 'ticket-1',
+            'ticket_number': 'QUEUE-0001',
+            'status': 'waiting',
+            'display_label': 'Johnny',
+            'profile': {'queue_name': 'Sandbox queue'},
+          },
+        },
+      ),
+    );
+
+    expect(
+      (await repository.loadInvitations()).single.queueName,
+      'Sandbox queue',
+    );
+    expect(
+      (await repository.acceptInvitation('ticket-1'))?.ticketNumber,
+      'QUEUE-0001',
+    );
+  });
+
   test('directory hides vendors without queue capability', () async {
     final repository = DirectoryRepository(
       FakeDirectoryApi(
@@ -160,6 +196,24 @@ class FakeAccountQueueApi implements AccountQueueApi {
 
   @override
   Future<Map<String, dynamic>> loadOverview() async => overview;
+}
+
+class FakeInvitationAccountQueueApi extends FakeAccountQueueApi
+    implements AccountTicketInvitationApi {
+  FakeInvitationAccountQueueApi({
+    required this.invitations,
+    required this.acceptedTicket,
+  }) : super(overview: const {'tickets': []}, history: const {'items': []});
+
+  final Map<String, dynamic> invitations;
+  final Map<String, dynamic> acceptedTicket;
+
+  @override
+  Future<Map<String, dynamic>> loadInvitations() async => invitations;
+
+  @override
+  Future<Map<String, dynamic>> acceptInvitation(String ticketId) async =>
+      acceptedTicket;
 }
 
 class FakeDirectoryApi implements DirectoryApi {

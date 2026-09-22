@@ -92,34 +92,55 @@ class QueueTicket {
 
   factory QueueTicket.fromJson(Map<String, dynamic> json) {
     final status = TicketStatus.parse(json['status']);
-    final rawPosition = _asInt(json['position']);
-    final rawWait = _asInt(json['estimatedWaitMinutes']);
+    final rawPosition = _asInt(json['position'] ?? json['queue_position']);
+    final rawWait = _asInt(
+      json['estimatedWaitMinutes'] ?? json['estimated_wait_minutes'],
+    );
+    final profile = _asMap(json['profile']);
     return QueueTicket(
       id: _asString(json['id']) ?? '',
-      lookupCode: _asString(json['lookupCode']) ?? '',
-      ticketNumber: _asString(json['ticketNumber']),
+      lookupCode: _asString(json['lookupCode'] ?? json['lookup_code']) ?? '',
+      ticketNumber: _asString(json['ticketNumber'] ?? json['ticket_number']),
       customerName:
           _firstNonBlank([
             json['customerDisplayName'] as String?,
             json['customerName'] as String?,
+            json['display_label'] as String?,
           ]) ??
+          _asString(profile?['queue_name']) ??
           'Customer',
       status: status,
       position: status == TicketStatus.waiting ? rawPosition : null,
       estimatedWaitMinutes: status == TicketStatus.waiting ? rawWait : null,
-      joinedAt: _asDate(json['joinedAt'] ?? json['createdAt']),
+      joinedAt: _asDate(
+        json['joinedAt'] ??
+            json['joined_at'] ??
+            json['createdAt'] ??
+            json['issued_at'],
+      ),
       vendorName: _firstNonBlank([
         json['vendorName'] as String?,
         json['tenantName'] as String?,
         json['businessName'] as String?,
+        json['display_label'] as String?,
+        profile?['queue_name'] as String?,
       ]),
-      locationName: json['locationName'] as String?,
+      locationName:
+          json['locationName'] as String? ??
+          profile?['location_name'] as String?,
       tenantSlug:
           json['tenantSlug'] as String? ?? json['vendorSlug'] as String?,
-      locationSlug: json['locationSlug'] as String?,
-      statusReason: json['statusReason'] as String?,
-      carryOverExpiresAt: _asDate(json['carryOverExpiresAt']),
-      customerConfirmedAt: _asDate(json['customerConfirmedAt']),
+      locationSlug:
+          json['locationSlug'] as String? ??
+          profile?['location_slug'] as String?,
+      statusReason:
+          json['statusReason'] as String? ?? json['status_reason'] as String?,
+      carryOverExpiresAt: _asDate(
+        json['carryOverExpiresAt'] ?? json['carry_over_expires_at'],
+      ),
+      customerConfirmedAt: _asDate(
+        json['customerConfirmedAt'] ?? json['customer_confirmed_at'],
+      ),
     );
   }
 

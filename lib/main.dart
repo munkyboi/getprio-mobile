@@ -97,7 +97,10 @@ class GetPrioApp extends StatelessWidget {
       api: RestOAuthApi(baseUrl: baseUrl),
     );
     final ticketRepository = QueueTicketRepository(
-      RestAccountQueueApi(apiClient),
+      RestAccountQueueApi(
+        apiClient,
+        useMobileTicketFeed: environmentConfig.isSandbox,
+      ),
     );
     final pushCoordinator = firebaseEnabled
         ? PushCoordinator(
@@ -2131,7 +2134,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _refresh() async {
-    try { await widget.directoryRepository?.social?.loadFavorites(); } catch (_) { if (mounted) showFeedbackToast(context, message: 'Could not refresh favorites.', isError: true); }
+    try {
+      await widget.directoryRepository?.social?.loadFavorites();
+    } catch (_) {
+      if (mounted) {
+        showFeedbackToast(
+          context,
+          message: 'Could not refresh favorites.',
+          isError: true,
+        );
+      }
+    }
     final repository = widget.ticketRepository;
     if (repository == null) return;
     repository.requestRefresh();
@@ -4289,8 +4302,10 @@ class TicketsPage extends StatefulWidget {
 class _TicketsPageState extends State<TicketsPage> {
   late Future<List<QueueTicket>> _tickets;
   List<QueueTicket>? _visibleTickets;
+  List<TicketInvitation>? _visibleInvitations;
   int _loadGeneration = 0;
   String? _cancellingTicketId;
+  String? _acceptingInvitationId;
 
   @override
   void initState() {
@@ -4310,8 +4325,17 @@ class _TicketsPageState extends State<TicketsPage> {
     if (repository == null) return const [];
     final generation = ++_loadGeneration;
     final tickets = await repository.loadAllTickets();
+    List<TicketInvitation> invitations = const [];
+    try {
+      invitations = await repository.loadInvitations();
+    } catch (_) {
+      // An invitation endpoint rollout must not hide ordinary tickets.
+    }
     if (mounted && generation == _loadGeneration) {
-      setState(() => _visibleTickets = tickets);
+      setState(() {
+        _visibleTickets = tickets;
+        _visibleInvitations = invitations;
+      });
     }
     return tickets;
   }
@@ -4350,6 +4374,7 @@ class _TicketsPageState extends State<TicketsPage> {
       builder: (context, snapshot) {
         final tickets =
             _visibleTickets ?? snapshot.data ?? const <QueueTicket>[];
+        final invitations = _visibleInvitations ?? const <TicketInvitation>[];
         final active = tickets.where((ticket) => ticket.isActive).toList();
         final history = tickets.where((ticket) => !ticket.isActive).toList();
         final isInitialLoading =
@@ -4368,6 +4393,12 @@ class _TicketsPageState extends State<TicketsPage> {
               const SizedBox(height: 4),
               const Text('Active and historical queue tickets.'),
               const SizedBox(height: 20),
+              if (invitations.isNotEmpty) ...[
+                const Text('Invitations').h3(),
+                const SizedBox(height: 12),
+                ...invitations.map(_invitationCard),
+                const SizedBox(height: 8),
+              ],
               if (isInitialLoading)
                 const TicketsSkeleton()
               else if (hasInitialError) ...[
@@ -4379,7 +4410,8 @@ class _TicketsPageState extends State<TicketsPage> {
                   onPressed: _reload,
                   child: const Text('Try again'),
                 ),
-              ] else if (snapshot.data?.isEmpty ?? true)
+              ] else if ((snapshot.data?.isEmpty ?? true) &&
+                  invitations.isEmpty)
                 Card(
                   child: Column(
                     children: [
@@ -4412,6 +4444,62 @@ class _TicketsPageState extends State<TicketsPage> {
         );
       },
     );
+  }
+
+  Widget _invitationCard(TicketInvitation invitation) {
+    final accepting = _acceptingInvitationId == invitation.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        key: ValueKey('ticket-invitation-${invitation.id}'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Queue ticket invitation').h3(),
+            const SizedBox(height: 8),
+            Text(invitation.queueName),
+            if (invitation.displayLabel != null) ...[
+              const SizedBox(height: 4),
+              Text(invitation.displayLabel!),
+            ],
+            if (invitation.ticketNumber != null) ...[
+              const SizedBox(height: 4),
+              Text('Ticket #${invitation.ticketNumber}'),
+            ],
+            const SizedBox(height: 16),
+            GetPrioActionButton.primary(
+              onPressed: accepting ? null : () => _acceptInvitation(invitation),
+              child: Text(accepting ? 'Accepting...' : 'Accept ticket'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _acceptInvitation(TicketInvitation invitation) async {
+    final repository = widget.ticketRepository;
+    if (repository == null) return;
+    setState(() => _acceptingInvitationId = invitation.id);
+    try {
+      final ticket = await repository.acceptInvitation(invitation.id);
+      if (!mounted) return;
+      if (ticket == null) {
+        throw StateError('The invitation could not be accepted.');
+      }
+      repository.requestRefresh();
+      showFeedbackToast(context, message: 'Ticket accepted.');
+    } catch (_) {
+      if (mounted) {
+        showFeedbackToast(
+          context,
+          message: 'Could not accept this ticket invitation.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _acceptingInvitationId = null);
+    }
   }
 
   Widget _activeTicketCard(QueueTicket ticket) {
