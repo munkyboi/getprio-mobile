@@ -456,17 +456,17 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
     required String identifier,
     required String password,
   }) {
-    return _post('/api/auth/login', {
+    return _post(sandbox ? '/api/mobile/auth/login' : '/api/auth/login', {
       'identifier': identifier,
       'password': password,
-    }, compatibilityHeader: true);
+    }, compatibilityHeader: !sandbox);
   }
 
   @override
   Future<Map<String, dynamic>> refresh(String refreshToken) {
-    return _post('/api/auth/refresh', {
+    return _post(sandbox ? '/api/mobile/auth/refresh' : '/api/auth/refresh', {
       'refreshToken': refreshToken,
-    }, compatibilityHeader: true);
+    }, compatibilityHeader: !sandbox);
   }
 
   @override
@@ -485,7 +485,9 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
 
   @override
   Future<void> logout(String refreshToken) async {
-    await _post('/api/auth/logout', {'refreshToken': refreshToken});
+    await _post(sandbox ? '/api/mobile/auth/logout' : '/api/auth/logout', {
+      'refreshToken': refreshToken,
+    });
   }
 
   ApiException _sandboxAuthException() => const ApiException(

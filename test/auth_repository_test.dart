@@ -161,7 +161,7 @@ void main() {
   });
 
   test(
-    'sandbox password auth uses the bearer-compatible auth endpoints',
+    'sandbox password auth uses the dedicated mobile auth endpoints',
     () async {
       final paths = <String>[];
       final compatibilityHeaders = <String, String?>{};
@@ -189,13 +189,13 @@ void main() {
       await api.logout('sandbox-refresh');
 
       expect(paths, [
-        '/api/v1/auth/login',
-        '/api/v1/auth/refresh',
-        '/api/v1/auth/logout',
+        '/api/v1/mobile/auth/login',
+        '/api/v1/mobile/auth/refresh',
+        '/api/v1/mobile/auth/logout',
       ]);
-      expect(compatibilityHeaders['/api/v1/auth/login'], 'bearer-v1');
-      expect(compatibilityHeaders['/api/v1/auth/refresh'], 'bearer-v1');
-      expect(compatibilityHeaders['/api/v1/auth/logout'], isNull);
+      expect(compatibilityHeaders['/api/v1/mobile/auth/login'], isNull);
+      expect(compatibilityHeaders['/api/v1/mobile/auth/refresh'], isNull);
+      expect(compatibilityHeaders['/api/v1/mobile/auth/logout'], isNull);
     },
   );
 
