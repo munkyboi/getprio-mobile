@@ -266,6 +266,11 @@ void main() {
   testWidgets('login resizes for the keyboard and keeps fields scrollable', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() {
+      tester.binding.setSurfaceSize(null);
+      tester.view.resetViewInsets();
+    });
     await tester.pumpWidget(
       ShadcnApp(
         home: SignInPage(authRepository: repository, onAuthenticated: (_) {}),
@@ -277,9 +282,24 @@ void main() {
     expect(scaffold.resizeToAvoidBottomInset, isTrue);
     expect(find.byType(SingleChildScrollView), findsOneWidget);
 
-    await tester.ensureVisible(find.byKey(const Key('sign-in-password')));
     await tester.tap(find.byKey(const Key('sign-in-password')));
     await tester.pump();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await tester.pump();
+    await tester.pumpAndSettle();
+    final fieldRect = tester.getRect(find.byKey(const Key('sign-in-password')));
+    final keyboardMediaQuery = tester.widget<MediaQuery>(
+      find
+          .byWidgetPredicate(
+            (widget) =>
+                widget is MediaQuery && widget.data.viewInsets.bottom > 0,
+          )
+          .first,
+    );
+    final keyboardTop =
+        keyboardMediaQuery.data.size.height -
+        keyboardMediaQuery.data.viewInsets.bottom;
+    expect(fieldRect.bottom, lessThanOrEqualTo(keyboardTop - 24));
     expect(FocusManager.instance.primaryFocus, isNotNull);
   });
 

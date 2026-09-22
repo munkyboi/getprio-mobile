@@ -939,10 +939,34 @@ class _SignInPageState extends State<SignInPage>
     void ensureVisible() {
       final fieldContext = formValidation.keyFor(controller).currentContext;
       if (!mounted || fieldContext == null || !fieldContext.mounted) return;
-      Scrollable.ensureVisible(
-        fieldContext,
+      final fieldRenderObject = fieldContext.findRenderObject();
+      final scrollable = Scrollable.maybeOf(fieldContext);
+      if (fieldRenderObject is! RenderBox ||
+          !fieldRenderObject.hasSize ||
+          scrollable == null) {
+        return;
+      }
+
+      final fieldTop = fieldRenderObject.localToGlobal(Offset.zero).dy;
+      final fieldBottom = fieldTop + fieldRenderObject.size.height;
+      final viewInsets = MediaQuery.viewInsetsOf(context);
+      final keyboardTop = MediaQuery.sizeOf(context).height - viewInsets.bottom;
+      const safeGap = 24.0;
+      final scrollDelta = fieldBottom > keyboardTop - safeGap
+          ? fieldBottom - (keyboardTop - safeGap)
+          : fieldTop < safeGap
+          ? fieldTop - safeGap
+          : 0.0;
+      if (scrollDelta == 0) return;
+
+      final position = scrollable.position;
+      final target = (position.pixels + scrollDelta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      position.animateTo(
+        target,
         duration: const Duration(milliseconds: 200),
-        alignment: .15,
         curve: Curves.easeOut,
       );
     }
