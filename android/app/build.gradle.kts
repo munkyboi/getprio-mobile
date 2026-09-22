@@ -28,14 +28,49 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["getPrioLinkHost"] = "getprio.online"
+        manifestPlaceholders["getPrioAppScheme"] = "getprio"
+    }
+
+    flavorDimensions += "environment"
+
+    productFlavors {
+        create("production") {
+            dimension = "environment"
+            applicationId = "com.getprio.getprio_mobile"
+            resValue("string", "app_name", "getprio_mobile")
+            manifestPlaceholders["getPrioLinkHost"] = "getprio.online"
+            manifestPlaceholders["getPrioAppScheme"] = "getprio"
+        }
+
+        create("sandbox") {
+            dimension = "environment"
+            applicationId = "com.getprio.getprioMobile.android.sandbox"
+            resValue("string", "app_name", "GetPrio Sandbox")
+            manifestPlaceholders["getPrioLinkHost"] = "sandbox.getprio.online"
+            manifestPlaceholders["getPrioAppScheme"] = "getprio-sandbox"
+        }
+
+        // Sandbox Firebase configuration is intentionally absent until the
+        // GetPrio-owned project is provisioned. Never fall back to production
+        // google-services.json for a sandbox variant.
     }
 
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Signing with the debug keys for now, so
+            // `flutter run --flavor production --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+    }
+}
+
+tasks.matching {
+    it.name.startsWith("processSandbox") && it.name.endsWith("GoogleServices")
+}.configureEach {
+    onlyIf {
+        file("src/sandbox/google-services.json").exists()
     }
 }
 

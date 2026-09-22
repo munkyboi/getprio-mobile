@@ -159,6 +159,7 @@ class AuthenticatedApiClient {
         response.statusCode,
         decoded?['code'] as String?,
         decoded?['message'] as String? ?? 'The request could not be completed.',
+        correlationId: decoded?['correlationId'] as String?,
       );
     }
     return decoded ?? <String, dynamic>{};

@@ -125,6 +125,7 @@ class RestOAuthApi implements OAuthApi {
         response.statusCode,
         body['code'] as String?,
         body['message'] as String? ?? 'OAuth sign-in could not be completed.',
+        correlationId: body['correlationId'] as String?,
       );
     }
     return body;
