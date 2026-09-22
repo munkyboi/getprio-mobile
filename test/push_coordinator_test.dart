@@ -118,6 +118,7 @@ void main() {
         'This Sandbox account already has two active devices.',
       );
     final errors = <Object>[];
+    final surfaced = Completer<Object>();
     final coordinator = PushCoordinator(
       messaging: messaging,
       api: api,
@@ -126,14 +127,31 @@ void main() {
       appVersion: '1.0.0',
       locale: 'en-PH',
     );
-    final subscription = coordinator.registrationErrors.listen(errors.add);
+    final subscription = coordinator.registrationErrors.listen((error) {
+      errors.add(error);
+      if (!surfaced.isCompleted) surfaced.complete(error);
+    });
 
     await coordinator.initialize();
     await coordinator.flush();
+    await surfaced.future;
 
     expect(errors, hasLength(1));
-    expect(errors.single, isA<ApiException>());
+    expect(
+      errors.single,
+      isA<ApiException>().having(
+        (error) => error.code,
+        'code',
+        'SANDBOX_DEVICE_LIMIT',
+      ),
+    );
+    expect(api.registrationCount, 0);
     expect(api.registration, isNull);
+
+    api.registerError = null;
+    await coordinator.retryRegistration();
+    expect(api.registrationCount, 1);
+    expect(api.registration?.token, 'fcm-1');
 
     await subscription.cancel();
     await coordinator.dispose();

@@ -134,6 +134,7 @@ class PushCoordinator {
   Future<void> _pending = Future.value();
   Timer? _registrationRetryTimer;
   String? _installationId;
+  String? _lastToken;
   int _sessionGeneration = 0;
 
   Stream<Object> get registrationErrors => _registrationErrorController.stream;
@@ -158,6 +159,7 @@ class PushCoordinator {
     }
     final token = await messaging.getToken();
     if (token != null && token.isNotEmpty) {
+      _lastToken = token;
       await _registerToken(token, sessionGeneration);
     }
     return true;
@@ -167,6 +169,7 @@ class PushCoordinator {
     final installationId = _installationId;
     _sessionGeneration++;
     _installationId = null;
+    _lastToken = null;
     _registrationRetryTimer?.cancel();
     _registrationRetryTimer = null;
     final tokenSubscription = _tokenSubscription;
@@ -196,7 +199,14 @@ class PushCoordinator {
     await _registrationErrorController.close();
   }
 
+  Future<void> retryRegistration() async {
+    final token = _lastToken;
+    if (token == null || _installationId == null) return;
+    await _registerToken(token, _sessionGeneration);
+  }
+
   Future<void> _registerToken(String token, int sessionGeneration) async {
+    _lastToken = token;
     try {
       await _enqueue(() async {
         final installationId = _installationId;

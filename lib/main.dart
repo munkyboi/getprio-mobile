@@ -346,7 +346,9 @@ class _AuthGateState extends State<AuthGate> {
     if (error.code == 'SANDBOX_DEVICE_LIMIT') {
       showFeedbackToast(
         context,
-        message: 'This Sandbox account already has two active devices. Sign out of another device to enable notifications here.',
+        message: error.message.isNotEmpty
+            ? error.message
+            : 'This Sandbox account already has two active devices. Sign out of another device to enable notifications here.',
         isError: true,
       );
     }

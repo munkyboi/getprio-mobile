@@ -331,14 +331,21 @@ class AuthRepository {
 }
 
 class ApiException implements Exception {
-  const ApiException(this.statusCode, this.code, this.message);
+  const ApiException(
+    this.statusCode,
+    this.code,
+    this.message, {
+    this.correlationId,
+  });
 
   final int statusCode;
   final String? code;
   final String message;
+  final String? correlationId;
 
   @override
-  String toString() => 'ApiException($statusCode, $code, $message)';
+  String toString() =>
+      'ApiException($statusCode, $code, $message, $correlationId)';
 }
 
 class RestAuthApi implements AuthApi, CustomerRegistrationApi {
@@ -394,6 +401,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
         response.statusCode,
         decoded?['code'] as String?,
         decoded?['message'] as String? ?? 'The request could not be completed.',
+        correlationId: decoded?['correlationId'] as String?,
       );
     }
     return decoded ?? <String, dynamic>{};
@@ -519,6 +527,7 @@ class RestAuthApi implements AuthApi, CustomerRegistrationApi {
         response.statusCode,
         decoded?['code'] as String?,
         decoded?['message'] as String? ?? 'The request could not be completed.',
+        correlationId: decoded?['correlationId'] as String?,
       );
     }
     return decoded ?? <String, dynamic>{};
