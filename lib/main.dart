@@ -1,6 +1,8 @@
 import 'social/vendor_social_widgets.dart';
 import 'social/vendor_social_repository.dart';
+
 import 'package:flutter/material.dart' show Icons;
+
 import 'dart:async';
 import 'dart:math';
 
@@ -62,7 +64,8 @@ class GetPrioApp extends StatelessWidget {
     this.firebaseEnabled = false,
     this.onboardingStore = const InstallationOnboardingStore(),
     MobileEnvironmentConfig? environmentConfig,
-  }) : authRepository = authRepository ??
+  }) : authRepository =
+           authRepository ??
            _defaultAuthRepository(
              environmentConfig ?? MobileEnvironmentConfig.fromCompileTime(),
            ),
@@ -444,6 +447,7 @@ class _LabeledTextField extends StatelessWidget {
     this.focusNode,
     this.keyboardType,
     this.obscureText = false,
+    this.onTap,
     this.onChanged,
     this.supportingText,
     this.supportingTextColor,
@@ -458,6 +462,7 @@ class _LabeledTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final TextInputType? keyboardType;
   final bool obscureText;
+  final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
   final String? supportingText;
   final Color? supportingTextColor;
@@ -485,6 +490,7 @@ class _LabeledTextField extends StatelessWidget {
       placeholder: Text(placeholder),
       keyboardType: keyboardType,
       obscureText: obscureText,
+      onTap: onTap,
       onChanged: onChanged,
       inputFormatters: inputFormatters,
       maxLength: maxLength,
@@ -659,6 +665,7 @@ class _SignInPageState extends State<SignInPage>
   String? _error;
   bool _isBusy = false;
   bool _useRecoveryCode = false;
+  Timer? _keepFieldVisibleTimer;
   @override
   void initState() {
     super.initState();
@@ -694,6 +701,7 @@ class _SignInPageState extends State<SignInPage>
 
   @override
   void dispose() {
+    _keepFieldVisibleTimer?.cancel();
     _identifierController.dispose();
     _passwordController.dispose();
     _mfaController.dispose();
@@ -704,205 +712,248 @@ class _SignInPageState extends State<SignInPage>
   @override
   Widget build(BuildContext context) {
     final challenge = _challenge;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const AspectRatio(
-                aspectRatio: 3 / 2,
-                child: Image(
-                  image: AssetImage(
-                    'assets/branding/login-biometric-scene.png',
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+              24,
+              24,
+              24,
+              24 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const AspectRatio(
+                    aspectRatio: 3 / 2,
+                    child: Image(
+                      image: AssetImage(
+                        'assets/branding/login-biometric-scene.png',
+                      ),
+                      fit: BoxFit.contain,
+                      semanticLabel:
+                          'GetPrio customers waiting and checking in',
+                    ),
                   ),
-                  fit: BoxFit.contain,
-                  semanticLabel: 'GetPrio customers waiting and checking in',
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                widget.sandbox
-                    ? 'GetPrio Sandbox'
-                    : widget.biometricLogin
-                    ? 'Welcome back'
-                    : 'Welcome to GetPrio',
-                textAlign: TextAlign.center,
-              ).h1(),
-              const SizedBox(height: 8),
-              Text(
-                challenge == null
-                    ? widget.sandbox
-                          ? 'Sign in with your Sandbox test-user credentials.'
-                          : 'Sign in to manage your queue tickets.'
-                    : 'Verify your identity to finish signing in.',
-                textAlign: challenge == null
-                    ? TextAlign.center
-                    : TextAlign.start,
-              ),
-              const SizedBox(height: 24),
-              if (challenge == null) ...[
-                if (widget.biometricLogin && widget.rememberedUser != null) ...[
-                  _RememberedLoginProfile(user: widget.rememberedUser!),
                   const SizedBox(height: 20),
-                ] else
-                  _LabeledTextField(
-                    inputKey: const Key('sign-in-identifier'),
-                    controller: _identifierController,
-                    label: 'Email or username',
-                    placeholder: 'you@example.com or username',
-                    keyboardType: TextInputType.emailAddress,
+                  Text(
+                    widget.sandbox
+                        ? 'GetPrio Sandbox'
+                        : widget.biometricLogin
+                        ? 'Welcome back'
+                        : 'Welcome to GetPrio',
+                    textAlign: TextAlign.center,
+                  ).h1(),
+                  const SizedBox(height: 8),
+                  Text(
+                    challenge == null
+                        ? widget.sandbox
+                              ? 'Sign in with your Sandbox test-user credentials.'
+                              : 'Sign in to manage your queue tickets.'
+                        : 'Verify your identity to finish signing in.',
+                    textAlign: challenge == null
+                        ? TextAlign.center
+                        : TextAlign.start,
                   ),
-                const SizedBox(height: 12),
-                _LabeledTextField(
-                  inputKey: const Key('sign-in-password'),
-                  controller: _passwordController,
-                  label: 'Password',
-                  placeholder: 'Enter your password',
-                  obscureText: true,
-                ),
-                const SizedBox(height: 20),
-                GetPrioActionButton.primary(
-                  key: const Key('sign-in-button'),
-                  onPressed: _isBusy ? null : _signIn,
-                  child: Text(_isBusy ? 'Signing in...' : 'Sign in'),
-                ),
-                const SizedBox(height: 8),
-                if (widget.biometricLogin) ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          defaultTargetPlatform == TargetPlatform.iOS
+                  const SizedBox(height: 24),
+                  if (challenge == null) ...[
+                    if (widget.biometricLogin &&
+                        widget.rememberedUser != null) ...[
+                      _RememberedLoginProfile(user: widget.rememberedUser!),
+                      const SizedBox(height: 20),
+                    ] else
+                      _LabeledTextField(
+                        inputKey: const Key('sign-in-identifier'),
+                        controller: _identifierController,
+                        label: 'Email or username',
+                        placeholder: 'you@example.com or username',
+                        keyboardType: TextInputType.emailAddress,
+                        onTap: () => _keepFieldVisible(_identifierController),
+                      ),
+                    const SizedBox(height: 12),
+                    _LabeledTextField(
+                      inputKey: const Key('sign-in-password'),
+                      controller: _passwordController,
+                      label: 'Password',
+                      placeholder: 'Enter your password',
+                      obscureText: true,
+                      onTap: () => _keepFieldVisible(_passwordController),
+                    ),
+                    const SizedBox(height: 20),
+                    GetPrioActionButton.primary(
+                      key: const Key('sign-in-button'),
+                      onPressed: _isBusy ? null : _signIn,
+                      child: Text(_isBusy ? 'Signing in...' : 'Sign in'),
+                    ),
+                    const SizedBox(height: 8),
+                    if (widget.biometricLogin) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Expanded(child: Divider()),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              defaultTargetPlatform == TargetPlatform.iOS
+                                  ? 'Sign in with Face ID'
+                                  : 'Sign in with biometrics',
+                            ),
+                          ),
+                          const Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: Semantics(
+                          label: defaultTargetPlatform == TargetPlatform.iOS
                               ? 'Sign in with Face ID'
                               : 'Sign in with biometrics',
-                        ),
-                      ),
-                      const Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Semantics(
-                      label: defaultTargetPlatform == TargetPlatform.iOS
-                          ? 'Sign in with Face ID'
-                          : 'Sign in with biometrics',
-                      child: IconButton.outline(
-                        key: const Key('biometric-login-icon'),
-                        onPressed: _isBusy ? null : _signInWithBiometrics,
-                        icon: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Icon(
-                            defaultTargetPlatform == TargetPlatform.iOS
-                                ? LucideIcons.scanFace
-                                : LucideIcons.fingerprint,
-                            size: 32,
+                          child: IconButton.outline(
+                            key: const Key('biometric-login-icon'),
+                            onPressed: _isBusy ? null : _signInWithBiometrics,
+                            icon: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Icon(
+                                defaultTargetPlatform == TargetPlatform.iOS
+                                    ? LucideIcons.scanFace
+                                    : LucideIcons.fingerprint,
+                                size: 32,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ] else if (!widget.sandbox) ...[
-                  GetPrioActionButton.outline(
-                    onPressed: _isBusy ? null : _openRegister,
-                    child: const Text('Create customer account'),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                if (!widget.sandbox)
-                  Center(
-                    child: LinkButton(
-                      key: const Key('forgot-password-link'),
-                      onPressed: _isBusy ? null : _openPasswordRecovery,
-                      child: const Text('Forgot password?'),
-                    ),
-                  ),
-                if (!widget.sandbox &&
-                    !widget.biometricLogin &&
-                    widget.oauthFlow?.enabled == true) ...[
-                  const SizedBox(height: 16),
-                  const Text('Or continue with', textAlign: TextAlign.center),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GetPrioActionButton.outline(
-                          onPressed: _isBusy
-                              ? null
-                              : () => _signInWithOAuth('google'),
-                          child: const Text('Google'),
+                      const SizedBox(height: 8),
+                    ] else if (!widget.sandbox) ...[
+                      GetPrioActionButton.outline(
+                        onPressed: _isBusy ? null : _openRegister,
+                        child: const Text('Create customer account'),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (!widget.sandbox)
+                      Center(
+                        child: LinkButton(
+                          key: const Key('forgot-password-link'),
+                          onPressed: _isBusy ? null : _openPasswordRecovery,
+                          child: const Text('Forgot password?'),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: GetPrioActionButton.outline(
-                          onPressed: _isBusy
-                              ? null
-                              : () => _signInWithOAuth('facebook'),
-                          child: const Text('Facebook'),
-                        ),
+                    if (!widget.sandbox &&
+                        !widget.biometricLogin &&
+                        widget.oauthFlow?.enabled == true) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Or continue with',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GetPrioActionButton.outline(
+                              onPressed: _isBusy
+                                  ? null
+                                  : () => _signInWithOAuth('google'),
+                              child: const Text('Google'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: GetPrioActionButton.outline(
+                              onPressed: _isBusy
+                                  ? null
+                                  : () => _signInWithOAuth('facebook'),
+                              child: const Text('Facebook'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
+                  ] else ...[
+                    if (_useRecoveryCode)
+                      _LabeledTextField(
+                        inputKey: const Key('mfa-recovery-code'),
+                        controller: _recoveryController,
+                        label: 'Recovery code',
+                        placeholder: 'Enter a recovery code',
+                        onTap: () => _keepFieldVisible(_recoveryController),
+                      )
+                    else
+                      _LabeledTextField(
+                        inputKey: const Key('mfa-code'),
+                        controller: _mfaController,
+                        label: 'Authenticator code',
+                        placeholder: 'Enter your 6-digit code',
+                        keyboardType: TextInputType.number,
+                        onTap: () => _keepFieldVisible(_mfaController),
+                      ),
+                    const SizedBox(height: 12),
+                    GetPrioActionButton.primary(
+                      key: const Key('verify-mfa-button'),
+                      onPressed: _isBusy ? null : () => _verifyMfa(challenge),
+                      child: Text(
+                        _isBusy ? 'Verifying...' : 'Verify and continue',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    GetPrioActionButton.outline(
+                      onPressed: _isBusy
+                          ? null
+                          : () => setState(
+                              () => _useRecoveryCode = !_useRecoveryCode,
+                            ),
+                      child: Text(
+                        _useRecoveryCode
+                            ? 'Use authenticator code'
+                            : 'Use a recovery code',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    GetPrioActionButton.outline(
+                      onPressed: _isBusy
+                          ? null
+                          : () => setState(() => _challenge = null),
+                      child: const Text('Back to sign in'),
+                    ),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    DestructiveBadge(child: Text(_error!)),
+                  ],
                 ],
-              ] else ...[
-                if (_useRecoveryCode)
-                  _LabeledTextField(
-                    inputKey: const Key('mfa-recovery-code'),
-                    controller: _recoveryController,
-                    label: 'Recovery code',
-                    placeholder: 'Enter a recovery code',
-                  )
-                else
-                  _LabeledTextField(
-                    inputKey: const Key('mfa-code'),
-                    controller: _mfaController,
-                    label: 'Authenticator code',
-                    placeholder: 'Enter your 6-digit code',
-                    keyboardType: TextInputType.number,
-                  ),
-                const SizedBox(height: 12),
-                GetPrioActionButton.primary(
-                  key: const Key('verify-mfa-button'),
-                  onPressed: _isBusy ? null : () => _verifyMfa(challenge),
-                  child: Text(_isBusy ? 'Verifying...' : 'Verify and continue'),
-                ),
-                const SizedBox(height: 8),
-                GetPrioActionButton.outline(
-                  onPressed: _isBusy
-                      ? null
-                      : () => setState(
-                          () => _useRecoveryCode = !_useRecoveryCode,
-                        ),
-                  child: Text(
-                    _useRecoveryCode
-                        ? 'Use authenticator code'
-                        : 'Use a recovery code',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                GetPrioActionButton.outline(
-                  onPressed: _isBusy
-                      ? null
-                      : () => setState(() => _challenge = null),
-                  child: const Text('Back to sign in'),
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                DestructiveBadge(child: Text(_error!)),
-              ],
-            ],
+              ),
+            ),
           ),
         ),
       ),
     );
+  }
+
+  void _keepFieldVisible(TextEditingController controller) {
+    void ensureVisible() {
+      final fieldContext = formValidation.keyFor(controller).currentContext;
+      if (!mounted || fieldContext == null || !fieldContext.mounted) return;
+      Scrollable.ensureVisible(
+        fieldContext,
+        duration: const Duration(milliseconds: 200),
+        alignment: .15,
+        curve: Curves.easeOut,
+      );
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ensureVisible();
+      _keepFieldVisibleTimer?.cancel();
+      _keepFieldVisibleTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) ensureVisible();
+      });
+    });
   }
 
   Future<void> _signIn() async {
@@ -1838,10 +1889,17 @@ class _CustomerShellState extends State<CustomerShell>
   void _openFavoriteVendor(VendorSummary vendor) {
     final repository = widget.directoryRepository;
     if (repository == null) return;
-    Navigator.of(context).push(SwipeBackPageRoute<void>(builder: (_) => VendorDetailPage(
-      vendor: vendor, repository: repository, queueRepository: widget.queueRepository,
-      onJoinLocation: (location) => unawaited(_openVendorJoin(vendor, location.slug)),
-    )));
+    Navigator.of(context).push(
+      SwipeBackPageRoute<void>(
+        builder: (_) => VendorDetailPage(
+          vendor: vendor,
+          repository: repository,
+          queueRepository: widget.queueRepository,
+          onJoinLocation: (location) =>
+              unawaited(_openVendorJoin(vendor, location.slug)),
+        ),
+      ),
+    );
   }
 
   Future<void> _openJoin() async {
@@ -2123,7 +2181,12 @@ class _HomePageState extends State<HomePage> {
             const Divider(),
             const SizedBox(height: 20),
             const Text('Favorites').h3(),
-            DrawerOverlay(child: FavoritesList(repository: repository, onOpen: widget.onOpenVendor)),
+            DrawerOverlay(
+              child: FavoritesList(
+                repository: repository,
+                onOpen: widget.onOpenVendor,
+              ),
+            ),
           ],
         ],
       ),
@@ -2131,7 +2194,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _refresh() async {
-    try { await widget.directoryRepository?.social?.loadFavorites(); } catch (_) { if (mounted) showFeedbackToast(context, message: 'Could not refresh favorites.', isError: true); }
+    try {
+      await widget.directoryRepository?.social?.loadFavorites();
+    } catch (_) {
+      if (mounted)
+        showFeedbackToast(
+          context,
+          message: 'Could not refresh favorites.',
+          isError: true,
+        );
+    }
     final repository = widget.ticketRepository;
     if (repository == null) return;
     repository.requestRefresh();
@@ -2623,7 +2695,10 @@ class _VendorCard extends StatelessWidget {
 }
 
 class _VendorDirectoryRating extends StatefulWidget {
-  const _VendorDirectoryRating({required this.vendor, required this.repository});
+  const _VendorDirectoryRating({
+    required this.vendor,
+    required this.repository,
+  });
 
   final VendorSummary vendor;
   final DirectoryRepository repository;
@@ -2642,7 +2717,10 @@ class _VendorDirectoryRatingState extends State<_VendorDirectoryRating> {
   }
 
   void _load() {
-    _rating = widget.repository.social?.reviews(widget.vendor.slug, pageSize: 1);
+    _rating = widget.repository.social?.reviews(
+      widget.vendor.slug,
+      pageSize: 1,
+    );
   }
 
   @override
@@ -2667,8 +2745,8 @@ class _VendorDirectoryRatingState extends State<_VendorDirectoryRating> {
         label: rated
             ? '${rating.average.toStringAsFixed(1)} out of 5 stars'
             : rating == null
-                ? 'Rating unavailable'
-                : 'Not yet rated',
+            ? 'Rating unavailable'
+            : 'Not yet rated',
         excludeSemantics: true,
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -3302,35 +3380,39 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
           ),
           children: [widget.surface],
         ),
-        if (widget.socialRepository case final repository?) Positioned(
-          top: MediaQuery.paddingOf(context).top + 12,
-          right: 20,
-          child: AnimatedBuilder(
-            animation: _scrollController,
-            child: VendorSocialHeader(repository: repository, vendor: widget.vendor),
-            builder: (context, child) {
-              final scrollOffset = _scrollController.hasClients
-                  ? _scrollController.offset
-                  : 0.0;
-              final progress = (scrollOffset / 100).clamp(0.0, 1.0);
-              final slide = Curves.easeIn.transform(progress);
-              return IgnorePointer(
-                ignoring: progress >= 1,
-                child: ExcludeSemantics(
-                  excluding: progress >= 1,
-                  child: Transform.translate(
-                    offset: Offset(20 * slide, 0),
-                    child: FractionalTranslation(
-                      key: const Key('vendor-social-parallax'),
-                      translation: Offset(slide, 0),
-                      child: child,
+        if (widget.socialRepository case final repository?)
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 12,
+            right: 20,
+            child: AnimatedBuilder(
+              animation: _scrollController,
+              child: VendorSocialHeader(
+                repository: repository,
+                vendor: widget.vendor,
+              ),
+              builder: (context, child) {
+                final scrollOffset = _scrollController.hasClients
+                    ? _scrollController.offset
+                    : 0.0;
+                final progress = (scrollOffset / 100).clamp(0.0, 1.0);
+                final slide = Curves.easeIn.transform(progress);
+                return IgnorePointer(
+                  ignoring: progress >= 1,
+                  child: ExcludeSemantics(
+                    excluding: progress >= 1,
+                    child: Transform.translate(
+                      offset: Offset(20 * slide, 0),
+                      child: FractionalTranslation(
+                        key: const Key('vendor-social-parallax'),
+                        translation: Offset(slide, 0),
+                        child: child,
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
         Positioned(
           top: MediaQuery.paddingOf(context).top + 12,
           left: 20,
@@ -4850,9 +4932,16 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(ticket.vendorName ?? 'Queue ticket'),
-                          if (ticket.status == TicketStatus.served && widget.directoryRepository?.social != null) ...[
+                          if (ticket.status == TicketStatus.served &&
+                              widget.directoryRepository?.social != null) ...[
                             const SizedBox(height: 16),
-                            TicketReviewAction(key: ValueKey('review-${ticket.lookupCode}'), repository: widget.directoryRepository!.social!, ticket: ticket, prompt: widget.ticket.status != TicketStatus.served),
+                            TicketReviewAction(
+                              key: ValueKey('review-${ticket.lookupCode}'),
+                              repository: widget.directoryRepository!.social!,
+                              ticket: ticket,
+                              prompt:
+                                  widget.ticket.status != TicketStatus.served,
+                            ),
                           ],
                           if (ticket.locationName != null) ...[
                             const SizedBox(height: 2),
@@ -5436,7 +5525,16 @@ class _AccountPageState extends State<AccountPage> {
                 const Text('Account').h3(),
                 const SizedBox(height: 8),
                 if (widget.socialRepository case final repository?) ...[
-                  _AccountAction(icon: LucideIcons.heart, title: 'Favorites', subtitle: 'Manage your favorite vendors.', onPressed: () => showFavoritesSheet(overlayContext, repository, onOpen: widget.onOpenVendor)),
+                  _AccountAction(
+                    icon: LucideIcons.heart,
+                    title: 'Favorites',
+                    subtitle: 'Manage your favorite vendors.',
+                    onPressed: () => showFavoritesSheet(
+                      overlayContext,
+                      repository,
+                      onOpen: widget.onOpenVendor,
+                    ),
+                  ),
                   const Divider(),
                 ],
                 _AccountAction(
@@ -5488,10 +5586,8 @@ class _AccountPageState extends State<AccountPage> {
                     icon: LucideIcons.shieldCheck,
                     title: 'MFA Setup',
                     subtitle: 'Set up an authenticator app and recovery codes.',
-                    onPressed: () => _openSecuritySheet(
-                      overlayContext,
-                      SecuritySection.mfa,
-                    ),
+                    onPressed: () =>
+                        _openSecuritySheet(overlayContext, SecuritySection.mfa),
                   ),
                 ],
                 const Divider(),

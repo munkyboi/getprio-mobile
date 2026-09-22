@@ -263,6 +263,26 @@ void main() {
     expect(find.byType(PasswordRecoveryPage), findsOneWidget);
   });
 
+  testWidgets('login resizes for the keyboard and keeps fields scrollable', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: SignInPage(authRepository: repository, onAuthenticated: (_) {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+    expect(scaffold.resizeToAvoidBottomInset, isTrue);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('sign-in-password')));
+    await tester.tap(find.byKey(const Key('sign-in-password')));
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus, isNotNull);
+  });
+
   for (final example in [
     (display: 'Marky', full: 'Mark Smith', expected: 'Marky'),
     (display: null, full: 'Mark Smith', expected: 'Mark S***h'),
