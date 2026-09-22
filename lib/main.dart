@@ -226,11 +226,22 @@ class _AuthGateState extends State<AuthGate> {
   AuthSession? _session;
   bool _pushStarted = false;
   bool _showBiometricLogin = false;
+  StreamSubscription<Object>? _pushRegistrationErrorSubscription;
 
   @override
   void initState() {
     super.initState();
     _restore = _prepareLogin();
+    _pushRegistrationErrorSubscription = widget
+        .pushCoordinator
+        ?.registrationErrors
+        .listen(_handlePushRegistrationError);
+  }
+
+  @override
+  void dispose() {
+    _pushRegistrationErrorSubscription?.cancel();
+    super.dispose();
   }
 
   Future<AuthSession?> _prepareLogin() async {
@@ -327,6 +338,17 @@ class _AuthGateState extends State<AuthGate> {
       _pushStarted = false;
       debugPrint('[push] initialization failed: $error');
       // Push is best effort and must never block queue actions.
+    }
+  }
+
+  void _handlePushRegistrationError(Object error) {
+    if (!mounted || error is! ApiException) return;
+    if (error.code == 'SANDBOX_DEVICE_LIMIT') {
+      showFeedbackToast(
+        context,
+        message: 'This Sandbox account already has two active devices. Sign out of another device to enable notifications here.',
+        isError: true,
+      );
     }
   }
 
