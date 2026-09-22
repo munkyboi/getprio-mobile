@@ -61,12 +61,17 @@ device enforcement must be deployed before real Sandbox credentials can log in.
 ## Firebase boundary
 
 The production `android/app/google-services.json` and
-`ios/Runner/GoogleService-Info.plist` are not used by Sandbox builds. Sandbox
-Google services processing is enabled only when the separately provisioned
-`android/app/src/sandbox/google-services.json` exists. Until the GetPrio-owned
-Sandbox Firebase project is provisioned, the app runs without Firebase push
-registration and remains usable for non-push local validation.
+`ios/Runner/GoogleService-Info.plist` are not used by Sandbox builds. The
+Sandbox Firebase application identifiers are compiled from
+`lib/push/firebase_options.dart`, and the separately provisioned native files
+may be kept locally at `android/app/src/sandbox/google-services.json` and
+`ios/Runner/Sandbox/GoogleService-Info.plist` for native tooling. Those raw
+files are ignored by Git; never copy production Firebase files into the
+Sandbox flavor.
 
-Do not create placeholder credentials or copy production Firebase files into
-the Sandbox flavor. Provisioning and real push/device verification are separate
-release gates.
+The backend must also have the `FCM_SANDBOX_PROJECT_ID`,
+`FCM_SANDBOX_CLIENT_EMAIL`, and `FCM_SANDBOX_PRIVATE_KEY` deployment secrets.
+The deployment workflow keeps those credentials separate from production and
+routes Sandbox ticket notifications through the `getprio-sandbox` Firebase
+project. Provisioning, deployment, and real push/device verification remain
+separate release gates.

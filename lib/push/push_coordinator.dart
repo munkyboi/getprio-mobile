@@ -7,8 +7,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../auth/auth_repository.dart';
+import '../mobile_environment.dart';
 import '../queue/auth_queue_api.dart';
 import 'foreground_notification_presenter.dart';
+import 'firebase_options.dart';
 
 enum PushPermission { authorized, provisional, denied }
 
@@ -395,9 +397,17 @@ PushSignal? _tryParseSignal(Map<String, dynamic> data) {
   }
 }
 
-Future<bool> initializeFirebase() async {
+Future<bool> initializeFirebase({
+  GetPrioEnvironment environment = GetPrioEnvironment.production,
+}) async {
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: environment == GetPrioEnvironment.sandbox
+          ? (defaultTargetPlatform == TargetPlatform.android
+                ? sandboxFirebaseOptionsAndroid
+                : sandboxFirebaseOptionsIos)
+          : null,
+    );
     return true;
   } on FirebaseException catch (error) {
     // Missing platform Firebase configuration is a setup state, not a reason

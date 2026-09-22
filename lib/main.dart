@@ -50,11 +50,19 @@ import 'mobile_environment.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  final firebaseEnabled = await initializeFirebase();
+  final environmentConfig = MobileEnvironmentConfig.fromCompileTime();
+  final firebaseEnabled = await initializeFirebase(
+    environment: environmentConfig.environment,
+  );
   if (firebaseEnabled) {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
-  runApp(GetPrioApp(firebaseEnabled: firebaseEnabled));
+  runApp(
+    GetPrioApp(
+      firebaseEnabled: firebaseEnabled,
+      environmentConfig: environmentConfig,
+    ),
+  );
 }
 
 class GetPrioApp extends StatelessWidget {
@@ -100,7 +108,7 @@ class GetPrioApp extends StatelessWidget {
       api: RestOAuthApi(baseUrl: baseUrl),
     );
     final ticketRepository = QueueTicketRepository(
-      RestAccountQueueApi(apiClient),
+      RestAccountQueueApi(apiClient, sandbox: environmentConfig.isSandbox),
     );
     final pushCoordinator = firebaseEnabled
         ? PushCoordinator(
@@ -2221,12 +2229,13 @@ class _HomePageState extends State<HomePage> {
     try {
       await widget.directoryRepository?.social?.loadFavorites();
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         showFeedbackToast(
           context,
           message: 'Could not refresh favorites.',
           isError: true,
         );
+      }
     }
     final repository = widget.ticketRepository;
     if (repository == null) return;
