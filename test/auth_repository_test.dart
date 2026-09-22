@@ -160,36 +160,44 @@ void main() {
     expect(result.message, 'Username is available.');
   });
 
-  test('sandbox auth uses the dedicated mobile authentication realm', () async {
-    final paths = <String>[];
-    final api = RestAuthApi(
-      baseUrl: 'https://sandbox-api.example.test',
-      sandbox: true,
-      client: MockClient((request) async {
-        paths.add(request.url.path);
-        expect(request.headers.containsKey('X-Auth-Compatibility'), isFalse);
-        return http.Response(
-          jsonEncode(
-            authenticatedJson(
-              token: 'sandbox-access',
-              refreshToken: 'sandbox-refresh',
+  test(
+    'sandbox password auth uses the bearer-compatible auth endpoints',
+    () async {
+      final paths = <String>[];
+      final compatibilityHeaders = <String, String?>{};
+      final api = RestAuthApi(
+        baseUrl: 'https://sandbox-api.example.test',
+        sandbox: true,
+        client: MockClient((request) async {
+          paths.add(request.url.path);
+          compatibilityHeaders[request.url.path] =
+              request.headers['x-auth-compatibility'];
+          return http.Response(
+            jsonEncode(
+              authenticatedJson(
+                token: 'sandbox-access',
+                refreshToken: 'sandbox-refresh',
+              ),
             ),
-          ),
-          200,
-        );
-      }),
-    );
+            200,
+          );
+        }),
+      );
 
-    await api.login(identifier: 'test-abc@sandbox.invalid', password: 'once');
-    await api.refresh('sandbox-refresh');
-    await api.logout('sandbox-refresh');
+      await api.login(identifier: 'test-abc@sandbox.invalid', password: 'once');
+      await api.refresh('sandbox-refresh');
+      await api.logout('sandbox-refresh');
 
-    expect(paths, [
-      '/api/v1/mobile/auth/login',
-      '/api/v1/mobile/auth/refresh',
-      '/api/v1/mobile/auth/logout',
-    ]);
-  });
+      expect(paths, [
+        '/api/v1/auth/login',
+        '/api/v1/auth/refresh',
+        '/api/v1/auth/logout',
+      ]);
+      expect(compatibilityHeaders['/api/v1/auth/login'], 'bearer-v1');
+      expect(compatibilityHeaders['/api/v1/auth/refresh'], 'bearer-v1');
+      expect(compatibilityHeaders['/api/v1/auth/logout'], isNull);
+    },
+  );
 
   test('sandbox auth rejects production account flows locally', () async {
     final api = RestAuthApi(
