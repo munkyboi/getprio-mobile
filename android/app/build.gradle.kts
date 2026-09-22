@@ -51,9 +51,8 @@ android {
             manifestPlaceholders["getPrioAppScheme"] = "getprio-sandbox"
         }
 
-        // Sandbox Firebase configuration is intentionally absent until the
-        // GetPrio-owned project is provisioned. Never fall back to production
-        // google-services.json for a sandbox variant.
+        // Sandbox uses its own google-services.json. Never fall back to the
+        // production file for a sandbox variant.
     }
 
     buildTypes {
