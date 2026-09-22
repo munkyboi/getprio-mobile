@@ -35,6 +35,14 @@ android {
     flavorDimensions += "environment"
 
     productFlavors {
+        create("production") {
+            dimension = "environment"
+            applicationId = "com.getprio.getprio_mobile"
+            resValue("string", "app_name", "getprio_mobile")
+            manifestPlaceholders["getPrioLinkHost"] = "getprio.online"
+            manifestPlaceholders["getPrioAppScheme"] = "getprio"
+        }
+
         create("sandbox") {
             dimension = "environment"
             applicationId = "com.getprio.getprioMobile.android.sandbox"
@@ -51,7 +59,8 @@ android {
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Signing with the debug keys for now, so
+            // `flutter run --flavor production --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

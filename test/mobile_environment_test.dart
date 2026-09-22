@@ -9,10 +9,7 @@ void main() {
       approvedHosts: 'sandbox.getprio.online',
     );
 
-    expect(
-      config.configurationError,
-      contains('sandbox-api.getprio.online'),
-    );
+    expect(config.configurationError, contains('sandbox-api.getprio.online'));
   });
 
   test('sandbox config accepts the sandbox API origin', () {
@@ -56,5 +53,33 @@ void main() {
     );
 
     expect(config.configurationError, contains('production or sandbox'));
+  });
+
+  test('sandbox flavor infers safe defaults without Dart defines', () {
+    final config = MobileEnvironmentConfig.fromValues(
+      rawEnvironment: '',
+      rawFlavor: 'sandbox',
+      apiBaseUrl: '',
+      approvedHosts: '',
+    );
+
+    expect(config.environment, GetPrioEnvironment.sandbox);
+    expect(config.apiBaseUrl, 'https://sandbox-api.getprio.online');
+    expect(config.approvedHostSet, contains('sandbox-api.getprio.online'));
+    expect(config.configurationError, isNull);
+  });
+
+  test('sandbox flavor rejects an explicit production environment', () {
+    final config = MobileEnvironmentConfig.fromValues(
+      rawEnvironment: 'production',
+      rawFlavor: 'sandbox',
+      apiBaseUrl: '',
+      approvedHosts: '',
+    );
+
+    expect(
+      config.configurationError,
+      contains('match the selected build flavor'),
+    );
   });
 }

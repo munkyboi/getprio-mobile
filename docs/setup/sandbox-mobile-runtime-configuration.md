@@ -26,6 +26,17 @@ flutter run \
   --dart-define=GETPRIO_APPROVED_HOSTS=sandbox.getprio.online
 ```
 
+Android production builds use the explicit production flavor so adding the
+Sandbox dimension does not remove the existing production artifact:
+
+```bash
+flutter run \
+  --flavor production \
+  --dart-define=GETPRIO_ENVIRONMENT=production \
+  --dart-define=GETPRIO_API_BASE_URL=https://api.getprio.online \
+  --dart-define=GETPRIO_APPROVED_HOSTS=getprio.online
+```
+
 The Sandbox Dart runtime rejects an empty, non-HTTPS, production, or otherwise
 different API origin. Keep the defines explicit in local scripts and CI so a
 developer cannot accidentally point a Sandbox binary at production.

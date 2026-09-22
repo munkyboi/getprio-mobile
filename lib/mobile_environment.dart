@@ -16,22 +16,38 @@ class MobileEnvironmentConfig {
   final String apiBaseUrl;
   final String approvedHosts;
 
-  factory MobileEnvironmentConfig.fromCompileTime() {
-    const rawEnvironment = String.fromEnvironment(
-      'GETPRIO_ENVIRONMENT',
-      defaultValue: 'production',
-    );
-    const apiBaseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
-    const approvedHosts = String.fromEnvironment('GETPRIO_APPROVED_HOSTS');
+  factory MobileEnvironmentConfig.fromCompileTime() =>
+      MobileEnvironmentConfig.fromValues(
+        rawEnvironment: const String.fromEnvironment('GETPRIO_ENVIRONMENT'),
+        rawFlavor: const String.fromEnvironment('FLUTTER_APP_FLAVOR'),
+        apiBaseUrl: const String.fromEnvironment('GETPRIO_API_BASE_URL'),
+        approvedHosts: const String.fromEnvironment('GETPRIO_APPROVED_HOSTS'),
+      );
+
+  factory MobileEnvironmentConfig.fromValues({
+    required String rawEnvironment,
+    required String rawFlavor,
+    required String apiBaseUrl,
+    required String approvedHosts,
+  }) {
+    final sandboxFlavor = rawFlavor == 'sandbox';
+    final environment = switch (rawEnvironment) {
+      '' when sandboxFlavor => GetPrioEnvironment.sandbox,
+      '' => GetPrioEnvironment.production,
+      'production' when sandboxFlavor => GetPrioEnvironment.unknown,
+      'production' => GetPrioEnvironment.production,
+      'sandbox' => GetPrioEnvironment.sandbox,
+      _ => GetPrioEnvironment.unknown,
+    };
 
     return MobileEnvironmentConfig(
-      environment: switch (rawEnvironment) {
-        'production' => GetPrioEnvironment.production,
-        'sandbox' => GetPrioEnvironment.sandbox,
-        _ => GetPrioEnvironment.unknown,
-      },
-      apiBaseUrl: apiBaseUrl,
-      approvedHosts: approvedHosts,
+      environment: environment,
+      apiBaseUrl: apiBaseUrl.isEmpty && sandboxFlavor
+          ? 'https://$sandboxApiHost'
+          : apiBaseUrl,
+      approvedHosts: approvedHosts.isEmpty && sandboxFlavor
+          ? sandboxApiHost
+          : approvedHosts,
     );
   }
 
@@ -54,7 +70,7 @@ class MobileEnvironmentConfig {
 
   String? get configurationError {
     if (environment == GetPrioEnvironment.unknown) {
-      return 'GETPRIO_ENVIRONMENT must be production or sandbox.';
+      return 'GETPRIO_ENVIRONMENT must be production or sandbox and match the selected build flavor.';
     }
 
     if (apiBaseUrl.isEmpty) {

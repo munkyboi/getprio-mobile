@@ -226,6 +226,7 @@ class _AuthGateState extends State<AuthGate> {
   AuthSession? _session;
   bool _pushStarted = false;
   bool _showBiometricLogin = false;
+  bool _pushRegistrationDialogVisible = false;
   StreamSubscription<Object>? _pushRegistrationErrorSubscription;
 
   @override
@@ -341,16 +342,46 @@ class _AuthGateState extends State<AuthGate> {
     }
   }
 
-  void _handlePushRegistrationError(Object error) {
-    if (!mounted || error is! ApiException) return;
-    if (error.code == 'SANDBOX_DEVICE_LIMIT') {
-      showFeedbackToast(
-        context,
-        message: error.message.isNotEmpty
-            ? error.message
-            : 'This Sandbox account already has two active devices. Sign out of another device to enable notifications here.',
-        isError: true,
-      );
+  Future<void> _handlePushRegistrationError(Object error) async {
+    if (!mounted ||
+        error is! ApiException ||
+        error.code != 'SANDBOX_DEVICE_LIMIT' ||
+        _pushRegistrationDialogVisible) {
+      return;
+    }
+    _pushRegistrationDialogVisible = true;
+    final retry = await showOverlay<bool>(
+      context,
+      const DialogConfiguration(),
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('sandbox-device-limit-dialog'),
+        leading: const Icon(LucideIcons.bellOff),
+        title: const Text('Notifications unavailable'),
+        content: const Text(
+          'This Sandbox account already has two active devices. Sign out of another device, then retry notifications here.',
+        ),
+        actions: [
+          GetPrioActionButton.outline(
+            key: const Key('sandbox-device-limit-later'),
+            onPressed: () => closeOverlay(dialogContext, false),
+            child: const Text('Later'),
+          ),
+          GetPrioActionButton.primary(
+            key: const Key('sandbox-device-limit-retry'),
+            onPressed: () => closeOverlay(dialogContext, true),
+            child: const Text('Retry notifications'),
+          ),
+        ],
+      ),
+    ).future;
+    if (!mounted) return;
+    _pushRegistrationDialogVisible = false;
+    if (retry == true) {
+      try {
+        await widget.pushCoordinator?.retryRegistration();
+      } catch (_) {
+        // Push retry is best effort and must not block queue actions.
+      }
     }
   }
 
