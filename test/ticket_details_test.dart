@@ -70,6 +70,8 @@ void main() {
             'status': 'waiting',
             'position': 2,
             'estimatedWaitMinutes': 10,
+            'queueLength': 4,
+            'queueUpdatedAt': '2026-09-02T03:45:00Z',
             'joinedAt': '2026-09-02T03:42:00Z',
           },
         },
@@ -93,6 +95,12 @@ void main() {
     expect(find.text('City Clinic'), findsOneWidget);
     expect(find.text('AH002'), findsWidgets);
     expect(find.text('WAITING'), findsOneWidget);
+    expect(find.text('Position'), findsOneWidget);
+    expect(find.text('#2'), findsOneWidget);
+    expect(find.text('Estimated wait'), findsWidgets);
+    expect(find.text('10 min'), findsWidgets);
+    expect(find.text('Queue length'), findsOneWidget);
+    expect(find.text('4 waiting'), findsOneWidget);
     expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
     expect(find.text('A0C18AF'), findsOneWidget);
     await tester.fling(

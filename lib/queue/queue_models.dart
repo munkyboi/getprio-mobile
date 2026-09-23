@@ -49,6 +49,8 @@ class QueueTicket {
     this.verificationCode,
     this.position,
     this.estimatedWaitMinutes,
+    this.queueLength,
+    this.queueUpdatedAt,
     this.joinedAt,
     this.vendorName,
     this.locationName,
@@ -67,6 +69,8 @@ class QueueTicket {
   final String? verificationCode;
   final int? position;
   final int? estimatedWaitMinutes;
+  final int? queueLength;
+  final DateTime? queueUpdatedAt;
   final DateTime? joinedAt;
   final String? vendorName;
   final String? locationName;
@@ -96,6 +100,7 @@ class QueueTicket {
     final status = TicketStatus.parse(json['status']);
     final rawPosition = _asInt(json['position']);
     final rawWait = _asInt(json['estimatedWaitMinutes']);
+    final rawQueueLength = _asInt(json['queueLength']);
     return QueueTicket(
       id: _asString(json['id']) ?? '',
       lookupCode: _asString(json['lookupCode']) ?? '',
@@ -110,6 +115,8 @@ class QueueTicket {
       verificationCode: _asString(json['verificationCode']),
       position: status == TicketStatus.waiting ? rawPosition : null,
       estimatedWaitMinutes: status == TicketStatus.waiting ? rawWait : null,
+      queueLength: status == TicketStatus.waiting ? rawQueueLength : null,
+      queueUpdatedAt: _asDate(json['queueUpdatedAt']),
       joinedAt: _asDate(json['joinedAt'] ?? json['createdAt']),
       vendorName: _firstNonBlank([
         json['vendorName'] as String?,
@@ -142,6 +149,8 @@ class QueueTicket {
       verificationCode: verificationCode ?? this.verificationCode,
       position: position,
       estimatedWaitMinutes: estimatedWaitMinutes,
+      queueLength: queueLength,
+      queueUpdatedAt: queueUpdatedAt,
       joinedAt: joinedAt,
       vendorName: vendorName ?? this.vendorName,
       locationName: locationName ?? this.locationName,

@@ -157,6 +157,10 @@ Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
         profileJson['tenantSlug'],
     'locationName': profileJson['location_name'],
     'locationSlug': profileJson['location_slug'],
+    'position': (ticket['queue_position'] as Map?)?['position'],
+    'estimatedWaitMinutes': ticket['estimated_wait_minutes'],
+    'queueLength': ticket['queue_length'],
+    'queueUpdatedAt': ticket['queue_updated_at'],
     'joinedAt': ticket['issued_at'],
     'updatedAt': ticket['updated_at'],
   };
