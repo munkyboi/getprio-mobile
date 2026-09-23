@@ -1958,9 +1958,11 @@ class _CustomerShellState extends State<CustomerShell>
     final repository = widget.ticketRepository;
     if (repository == null) return;
     _ticketRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && repository.hasActiveTickets) {
-        repository.requestRefresh();
-      }
+      if (!mounted) return;
+      if (repository.hasActiveTickets) repository.requestRefresh();
+      // Push delivery is best-effort. Keep checking pending invitations while
+      // the app is foregrounded so a missed invitation push is recoverable.
+      unawaited(_presentTicketInvitation());
     });
   }
 
