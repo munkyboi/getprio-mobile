@@ -5,10 +5,30 @@ import 'package:getprio_mobile/push/push_coordinator.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  testWidgets(
+    'pending developer ticket invitation opens the prompt after app startup',
+    (tester) async {
+      final api = _InvitationApi();
+
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: CustomerShell(
+            ticketRepository: QueueTicketRepository(api),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('ticket-invitation-prompt')), findsOneWidget);
+      expect(find.textContaining('Ticket #QUEUE-0001.'), findsOneWidget);
+    },
+  );
+
   testWidgets('developer ticket invitation push opens the invitation prompt', (
     tester,
   ) async {
     final api = _InvitationApi();
+    api.includeInvitation = false;
     final pushSignal = ValueNotifier<PushSignal?>(null);
     addTearDown(pushSignal.dispose);
 
@@ -22,6 +42,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    api.includeInvitation = true;
     pushSignal.value = const PushSignal(
       eventType: 'developer_ticket_invitation',
       notificationId: 'notification-1',
@@ -48,6 +69,8 @@ void main() {
 }
 
 class _InvitationApi implements AccountQueueApi, TicketInvitationApi {
+  bool includeInvitation = true;
+
   @override
   Future<Map<String, dynamic>> loadHistory({
     required int page,
@@ -61,7 +84,7 @@ class _InvitationApi implements AccountQueueApi, TicketInvitationApi {
 
   @override
   Future<Map<String, dynamic>> loadInvitations() async => {
-    'invitations': [_ticket()],
+    'invitations': includeInvitation ? [_ticket()] : const [],
   };
 
   @override
