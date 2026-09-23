@@ -89,6 +89,7 @@ class GetPrioApp extends StatelessWidget {
     final ticketRepository = QueueTicketRepository(
       RestAccountQueueApi(apiClient),
     );
+    final pushSignal = ValueNotifier<PushSignal?>(null);
     final pushCoordinator = firebaseEnabled
         ? PushCoordinator(
             messaging: FirebaseMessagingPort(),
@@ -102,7 +103,10 @@ class GetPrioApp extends StatelessWidget {
               defaultValue: '1.0.1',
             ),
             locale: 'en-PH',
-            onSignal: (_) async => ticketRepository.requestRefresh(),
+            onSignal: (signal) async {
+              ticketRepository.requestRefresh();
+              pushSignal.value = signal;
+            },
           )
         : null;
     final lightTheme = GetPrioTheme.light();
@@ -135,6 +139,7 @@ class GetPrioApp extends StatelessWidget {
             allowedHosts: _allowedHosts(),
             paymentLinkSource: AppPaymentLinkSource(),
             pushCoordinator: pushCoordinator,
+            pushSignal: pushSignal,
             oauthFlow: oauthFlow,
           ),
         ),
@@ -181,6 +186,7 @@ class AuthGate extends StatefulWidget {
     required this.allowedHosts,
     this.paymentLinkSource,
     this.pushCoordinator,
+    this.pushSignal,
     this.oauthFlow,
   });
 
@@ -196,6 +202,7 @@ class AuthGate extends StatefulWidget {
   final Set<String> allowedHosts;
   final PaymentLinkSource? paymentLinkSource;
   final PushCoordinator? pushCoordinator;
+  final ValueNotifier<PushSignal?>? pushSignal;
   final OAuthFlow? oauthFlow;
 
   @override
@@ -250,6 +257,7 @@ class _AuthGateState extends State<AuthGate> {
         onUserUpdated: _updateUser,
         allowedHosts: widget.allowedHosts,
         paymentLinkSource: widget.paymentLinkSource,
+        pushSignal: widget.pushSignal,
         onSignOut: () => unawaited(_signOut()),
       );
     }
@@ -276,6 +284,7 @@ class _AuthGateState extends State<AuthGate> {
             onUserUpdated: _updateUser,
             allowedHosts: widget.allowedHosts,
             paymentLinkSource: widget.paymentLinkSource,
+            pushSignal: widget.pushSignal,
             onSignOut: () => unawaited(_signOut()),
           );
         }
@@ -1679,6 +1688,7 @@ class CustomerShell extends StatefulWidget {
     this.profileRepository,
     this.onUserUpdated,
     this.paymentLinkSource,
+    this.pushSignal,
     this.allowedHosts = const {},
   });
 
@@ -1695,6 +1705,7 @@ class CustomerShell extends StatefulWidget {
   final ValueChanged<AuthUser>? onUserUpdated;
   final Set<String> allowedHosts;
   final PaymentLinkSource? paymentLinkSource;
+  final ValueNotifier<PushSignal?>? pushSignal;
 
   @override
   State<CustomerShell> createState() => _CustomerShellState();
@@ -1710,6 +1721,7 @@ class _CustomerShellState extends State<CustomerShell>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.ticketRepository?.servedTicket.addListener(_promptServedTicket);
+    widget.pushSignal?.addListener(_handlePushSignal);
     _startTicketRefreshFallback();
   }
 
@@ -1718,6 +1730,7 @@ class _CustomerShellState extends State<CustomerShell>
     WidgetsBinding.instance.removeObserver(this);
     _ticketRefreshTimer?.cancel();
     widget.ticketRepository?.servedTicket.removeListener(_promptServedTicket);
+    widget.pushSignal?.removeListener(_handlePushSignal);
     super.dispose();
   }
 
@@ -1740,6 +1753,86 @@ class _CustomerShellState extends State<CustomerShell>
       if (!mounted) return;
       await promptVendorRating(context, social, ticket);
     });
+  }
+
+  String? _lastInvitationNotificationId;
+
+  void _handlePushSignal() {
+    final signal = widget.pushSignal?.value;
+    if (!mounted ||
+        signal == null ||
+        signal.eventType != 'developer_ticket_invitation' ||
+        signal.notificationId == _lastInvitationNotificationId) {
+      return;
+    }
+    _lastInvitationNotificationId = signal.notificationId;
+    _selectDestination(CustomerDestination.tickets);
+    unawaited(_presentTicketInvitation(signal));
+  }
+
+  Future<void> _presentTicketInvitation(PushSignal signal) async {
+    final repository = widget.ticketRepository;
+    if (repository == null) return;
+    final invitations = await repository.loadPendingInvitations();
+    if (!mounted || invitations.isEmpty) return;
+
+    TicketInvitation invitation = invitations.first;
+    for (final candidate in invitations) {
+      if (candidate.id == signal.ticketRef ||
+          candidate.ticket.ticketNumber == signal.ticketRef) {
+        invitation = candidate;
+        break;
+      }
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    await showOverlay<bool>(
+      context,
+      DialogConfiguration(),
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('ticket-invitation-prompt'),
+        leading: const Icon(LucideIcons.ticket),
+        title: const Text('New ticket invitation'),
+        content: Text(
+          invitation.ticket.locationName == null
+              ? '${invitation.ticket.vendorName ?? 'A queue'} created ticket '
+                    '#${invitation.ticket.ticketNumber ?? invitation.ticket.lookupCode}. '
+                    'Would you like to add it to your tickets?'
+              : '${invitation.ticket.vendorName ?? 'A queue'} · '
+                    '${invitation.ticket.locationName}\n'
+                    'Ticket #${invitation.ticket.ticketNumber ?? invitation.ticket.lookupCode}. '
+                    'Would you like to add it to your tickets?',
+        ),
+        actions: [
+          GetPrioActionButton.outline(
+            onPressed: () => closeOverlay(dialogContext, false),
+            child: const Text('Not now'),
+          ),
+          GetPrioActionButton.primary(
+            onPressed: () async {
+              try {
+                await repository.acceptInvitation(invitation.id);
+                if (!dialogContext.mounted) return;
+                closeOverlay(dialogContext, true);
+                if (mounted) {
+                  showFeedbackToast(context, message: 'Ticket accepted.');
+                }
+              } catch (_) {
+                if (mounted) {
+                  showFeedbackToast(
+                    context,
+                    message: 'Could not accept ticket invitation.',
+                    isError: true,
+                  );
+                }
+              }
+            },
+            child: const Text('Accept ticket'),
+          ),
+        ],
+      ),
+    ).future;
   }
 
   void _startTicketRefreshFallback() {
