@@ -5,6 +5,7 @@ import 'package:getprio_mobile/account/ticket_repository.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/loading_skeleton.dart';
 import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/push/push_coordinator.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
@@ -59,11 +60,67 @@ void main() {
 
     api.ticketStatus = 'called';
     api.customerConfirmed = true;
-    await tester.pump(const Duration(seconds: 31));
+    await tester.pump(const Duration(minutes: 4, seconds: 59));
+    expect(api.overviewCalls, initialOverviewCalls);
+
+    await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
     expect(api.overviewCalls, greaterThan(initialOverviewCalls));
     expect(find.text('CONFIRMED'), findsOneWidget);
+  });
+
+  testWidgets('queue movement push signals refresh all account ticket surfaces', (
+    tester,
+  ) async {
+    final api = _PollingAccountQueueApi();
+    final repository = QueueTicketRepository(api);
+    final pushSignal = ValueNotifier<PushSignal?>(null);
+    addTearDown(pushSignal.dispose);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: CustomerShell(
+          ticketRepository: repository,
+          pushSignal: pushSignal,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final initialOverviewCalls = api.overviewCalls;
+    api.ticketStatus = 'called';
+    api.customerConfirmed = true;
+    pushSignal.value = const PushSignal(
+      eventType: 'developer_queue_moved',
+      notificationId: 'queue-movement-1',
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.overviewCalls, greaterThan(initialOverviewCalls));
+    expect(find.text('CONFIRMED'), findsOneWidget);
+  });
+
+  testWidgets('refreshes the Tickets screen after five minutes', (
+    tester,
+  ) async {
+    final api = _PollingAccountQueueApi();
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: CustomerShell(ticketRepository: QueueTicketRepository(api)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Tickets'));
+    await tester.pumpAndSettle();
+
+    final initialHistoryCalls = api.historyCalls;
+    expect(initialHistoryCalls, greaterThanOrEqualTo(1));
+
+    await tester.pump(const Duration(minutes: 5, seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(api.historyCalls, greaterThan(initialHistoryCalls));
   });
 
   testWidgets('background ticket refresh keeps the history scroll position', (
@@ -166,6 +223,7 @@ class _CountingAccountQueueApi implements AccountQueueApi {
 
 class _PollingAccountQueueApi implements AccountQueueApi {
   int overviewCalls = 0;
+  int historyCalls = 0;
   String ticketStatus = 'waiting';
   bool customerConfirmed = false;
 
@@ -194,7 +252,10 @@ class _PollingAccountQueueApi implements AccountQueueApi {
   Future<Map<String, dynamic>> loadHistory({
     required int page,
     required int limit,
-  }) async => const {'items': []};
+  }) async {
+    historyCalls++;
+    return const {'items': []};
+  }
 }
 
 class _SilentRefreshAccountQueueApi implements AccountQueueApi {

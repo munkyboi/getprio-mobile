@@ -32,6 +32,7 @@ import 'directory/directory_repository.dart';
 import 'directory/vendor_contact.dart';
 import 'feedback_toast.dart';
 import 'form_validation.dart';
+import 'keyboard_avoidance.dart';
 import 'navigation/customer_navigation_bar.dart';
 import 'navigation/scroll_aware_app_bar.dart';
 import 'navigation/swipe_back_page_route.dart';
@@ -129,7 +130,6 @@ class GetPrioApp extends StatelessWidget {
             ),
             locale: 'en-PH',
             onSignal: (signal) async {
-              ticketRepository.requestRefresh();
               pushSignal.value = signal;
             },
           )
@@ -473,7 +473,6 @@ class _LabeledTextField extends StatelessWidget {
     this.focusNode,
     this.keyboardType,
     this.obscureText = false,
-    this.onTap,
     this.onChanged,
     this.supportingText,
     this.supportingTextColor,
@@ -488,7 +487,6 @@ class _LabeledTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final TextInputType? keyboardType;
   final bool obscureText;
-  final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
   final String? supportingText;
   final Color? supportingTextColor;
@@ -508,20 +506,22 @@ class _LabeledTextField extends StatelessWidget {
       }
       return true;
     });
-    final input = TextField(
-      key: inputKey,
-      enabled: inputEnabled,
-      controller: controller,
+    final input = KeyboardAwareField(
       focusNode: focusNode,
-      placeholder: Text(placeholder),
-      keyboardType: keyboardType,
-      obscureText: obscureText,
-      onTap: onTap,
-      onChanged: onChanged,
-      inputFormatters: inputFormatters,
-      maxLength: maxLength,
-      onEditingComplete: _dismissKeyboard,
-      onTapOutside: (_) => _dismissKeyboard(),
+      builder: (context, keyboardFocusNode) => TextField(
+        key: inputKey,
+        enabled: inputEnabled,
+        controller: controller,
+        focusNode: keyboardFocusNode,
+        placeholder: Text(placeholder),
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+        onChanged: onChanged,
+        inputFormatters: inputFormatters,
+        maxLength: maxLength,
+        onEditingComplete: _dismissKeyboard,
+        onTapOutside: (_) => _dismissKeyboard(),
+      ),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -691,7 +691,6 @@ class _SignInPageState extends State<SignInPage>
   String? _error;
   bool _isBusy = false;
   bool _useRecoveryCode = false;
-  Timer? _keepFieldVisibleTimer;
   @override
   void initState() {
     super.initState();
@@ -727,7 +726,6 @@ class _SignInPageState extends State<SignInPage>
 
   @override
   void dispose() {
-    _keepFieldVisibleTimer?.cancel();
     _identifierController.dispose();
     _passwordController.dispose();
     _mfaController.dispose();
@@ -742,14 +740,9 @@ class _SignInPageState extends State<SignInPage>
       resizeToAvoidBottomInset: true,
       child: SafeArea(
         child: Center(
-          child: SingleChildScrollView(
+          child: KeyboardAwareScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(
-              24,
-              24,
-              24,
-              24 + MediaQuery.viewInsetsOf(context).bottom,
-            ),
+            padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
@@ -799,7 +792,6 @@ class _SignInPageState extends State<SignInPage>
                         label: 'Email or username',
                         placeholder: 'you@example.com or username',
                         keyboardType: TextInputType.emailAddress,
-                        onTap: () => _keepFieldVisible(_identifierController),
                       ),
                     const SizedBox(height: 12),
                     _LabeledTextField(
@@ -808,7 +800,6 @@ class _SignInPageState extends State<SignInPage>
                       label: 'Password',
                       placeholder: 'Enter your password',
                       obscureText: true,
-                      onTap: () => _keepFieldVisible(_passwordController),
                     ),
                     const SizedBox(height: 20),
                     GetPrioActionButton.primary(
@@ -908,7 +899,6 @@ class _SignInPageState extends State<SignInPage>
                         controller: _recoveryController,
                         label: 'Recovery code',
                         placeholder: 'Enter a recovery code',
-                        onTap: () => _keepFieldVisible(_recoveryController),
                       )
                     else
                       _LabeledTextField(
@@ -917,7 +907,6 @@ class _SignInPageState extends State<SignInPage>
                         label: 'Authenticator code',
                         placeholder: 'Enter your 6-digit code',
                         keyboardType: TextInputType.number,
-                        onTap: () => _keepFieldVisible(_mfaController),
                       ),
                     const SizedBox(height: 12),
                     GetPrioActionButton.primary(
@@ -959,51 +948,6 @@ class _SignInPageState extends State<SignInPage>
         ),
       ),
     );
-  }
-
-  void _keepFieldVisible(TextEditingController controller) {
-    void ensureVisible() {
-      final fieldContext = formValidation.keyFor(controller).currentContext;
-      if (!mounted || fieldContext == null || !fieldContext.mounted) return;
-      final fieldRenderObject = fieldContext.findRenderObject();
-      final scrollable = Scrollable.maybeOf(fieldContext);
-      if (fieldRenderObject is! RenderBox ||
-          !fieldRenderObject.hasSize ||
-          scrollable == null) {
-        return;
-      }
-
-      final fieldTop = fieldRenderObject.localToGlobal(Offset.zero).dy;
-      final fieldBottom = fieldTop + fieldRenderObject.size.height;
-      final viewInsets = MediaQuery.viewInsetsOf(context);
-      final keyboardTop = MediaQuery.sizeOf(context).height - viewInsets.bottom;
-      const safeGap = 24.0;
-      final scrollDelta = fieldBottom > keyboardTop - safeGap
-          ? fieldBottom - (keyboardTop - safeGap)
-          : fieldTop < safeGap
-          ? fieldTop - safeGap
-          : 0.0;
-      if (scrollDelta == 0) return;
-
-      final position = scrollable.position;
-      final target = (position.pixels + scrollDelta).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      position.animateTo(
-        target,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ensureVisible();
-      _keepFieldVisibleTimer?.cancel();
-      _keepFieldVisibleTimer = Timer(const Duration(milliseconds: 250), () {
-        if (mounted) ensureVisible();
-      });
-    });
   }
 
   Future<void> _signIn() async {
@@ -1212,7 +1156,7 @@ class _RegisterPageState extends State<RegisterPage>
             ],
           ),
         ],
-        child: SingleChildScrollView(
+        child: KeyboardAwareScrollView(
           padding: const EdgeInsets.all(24),
           child: challenge == null
               ? _buildRegistrationForm(context)
@@ -1728,7 +1672,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage>
             ],
           ),
         ],
-        child: SingleChildScrollView(
+        child: KeyboardAwareScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1832,6 +1776,7 @@ class _CustomerShellState extends State<CustomerShell>
     with WidgetsBindingObserver {
   CustomerDestination _selectedDestination = CustomerDestination.home;
   Timer? _ticketRefreshTimer;
+  Timer? _invitationRefreshTimer;
 
   @override
   void initState() {
@@ -1840,6 +1785,7 @@ class _CustomerShellState extends State<CustomerShell>
     widget.ticketRepository?.servedTicket.addListener(_promptServedTicket);
     widget.pushSignal?.addListener(_handlePushSignal);
     _startTicketRefreshFallback();
+    _startInvitationRefreshFallback();
     _loadPendingInvitationAfterFrame();
   }
 
@@ -1847,6 +1793,7 @@ class _CustomerShellState extends State<CustomerShell>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticketRefreshTimer?.cancel();
+    _invitationRefreshTimer?.cancel();
     widget.ticketRepository?.servedTicket.removeListener(_promptServedTicket);
     widget.pushSignal?.removeListener(_handlePushSignal);
     super.dispose();
@@ -1857,10 +1804,13 @@ class _CustomerShellState extends State<CustomerShell>
     if (state == AppLifecycleState.resumed) {
       widget.ticketRepository?.requestRefresh();
       _startTicketRefreshFallback();
+      _startInvitationRefreshFallback();
       _loadPendingInvitationAfterFrame();
     } else {
       _ticketRefreshTimer?.cancel();
       _ticketRefreshTimer = null;
+      _invitationRefreshTimer?.cancel();
+      _invitationRefreshTimer = null;
     }
   }
 
@@ -1886,9 +1836,12 @@ class _CustomerShellState extends State<CustomerShell>
 
   void _handlePushSignal() {
     final signal = widget.pushSignal?.value;
-    if (!mounted ||
-        signal == null ||
-        signal.eventType != 'developer_ticket_invitation' ||
+    if (!mounted || signal == null) {
+      return;
+    }
+
+    widget.ticketRepository?.requestRefresh();
+    if (signal.eventType != 'developer_ticket_invitation' ||
         signal.notificationId == _lastInvitationNotificationId) {
       return;
     }
@@ -2054,9 +2007,17 @@ class _CustomerShellState extends State<CustomerShell>
     _ticketRefreshTimer?.cancel();
     final repository = widget.ticketRepository;
     if (repository == null) return;
-    _ticketRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _ticketRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       if (!mounted) return;
       if (repository.hasActiveTickets) repository.requestRefresh();
+    });
+  }
+
+  void _startInvitationRefreshFallback() {
+    _invitationRefreshTimer?.cancel();
+    if (widget.ticketRepository == null) return;
+    _invitationRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
       // Push delivery is best-effort. Keep checking pending invitations while
       // the app is foregrounded so a missed invitation push is recoverable.
       unawaited(_presentTicketInvitation());
@@ -2726,17 +2687,20 @@ class _ExplorePageState extends State<ExplorePage> {
       child: ListView(
         key: const Key('explore-page'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + keyboardInsetOf(context)),
         children: [
           const Text('Explore vendors').h2(),
           const SizedBox(height: 4),
           const Text('Browse vendors with queueing available.'),
           const SizedBox(height: 20),
-          TextField(
-            key: const Key('vendor-search-field'),
-            placeholder: const Text('Search vendors'),
-            features: const [InputFeature.leading(Icon(LucideIcons.search))],
-            onChanged: (value) => setState(() => _query = value.trim()),
+          KeyboardAwareField(
+            builder: (context, focusNode) => TextField(
+              key: const Key('vendor-search-field'),
+              focusNode: focusNode,
+              placeholder: const Text('Search vendors'),
+              features: const [InputFeature.leading(Icon(LucideIcons.search))],
+              onChanged: (value) => setState(() => _query = value.trim()),
+            ),
           ),
           const SizedBox(height: 20),
           if (directoryRepository == null)
@@ -3976,12 +3940,12 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
       ),
       child: SafeArea(
         top: false,
-        child: SingleChildScrollView(
+        child: KeyboardAwareScrollView(
           padding: EdgeInsets.fromLTRB(
             24,
             GetPrioTheme.bottomSheetTopPadding,
             24,
-            24 + MediaQuery.viewInsetsOf(context).bottom,
+            24,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4042,12 +4006,15 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
               ValidatedField(
                 validation: formValidation,
                 controller: _subject,
-                child: TextField(
-                  key: const Key('vendor-contact-subject'),
-                  enabled: !_busy,
-                  controller: _subject,
-                  placeholder: const Text('What would you like to ask?'),
-                  textInputAction: TextInputAction.next,
+                child: KeyboardAwareField(
+                  builder: (context, focusNode) => TextField(
+                    key: const Key('vendor-contact-subject'),
+                    enabled: !_busy,
+                    controller: _subject,
+                    focusNode: focusNode,
+                    placeholder: const Text('What would you like to ask?'),
+                    textInputAction: TextInputAction.next,
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
@@ -4061,15 +4028,18 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
               ValidatedField(
                 validation: formValidation,
                 controller: _message,
-                child: TextArea(
-                  key: const Key('vendor-contact-message'),
-                  enabled: !_busy,
-                  controller: _message,
-                  placeholder: const Text('Write your message'),
-                  initialHeight: 132,
-                  minHeight: 132,
-                  maxHeight: 220,
-                  textCapitalization: TextCapitalization.sentences,
+                child: KeyboardAwareField(
+                  builder: (context, focusNode) => TextArea(
+                    key: const Key('vendor-contact-message'),
+                    enabled: !_busy,
+                    controller: _message,
+                    focusNode: focusNode,
+                    placeholder: const Text('Write your message'),
+                    initialHeight: 132,
+                    minHeight: 132,
+                    maxHeight: 220,
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
                 ),
               ),
               if (_error != null) ...[
@@ -6443,11 +6413,11 @@ class _ProfileSheetContent extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             24,
             GetPrioTheme.bottomSheetTopPadding,
             24,
-            12,
+            12 + keyboardInsetOf(context),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -6556,7 +6526,7 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
           ? 'Personal info'
           : 'Verify your changes',
       closeLabel: 'Close personal info',
-      child: SingleChildScrollView(
+      child: KeyboardAwareScrollView(
         child: switch (_step) {
           _PersonalInfoStep.form => _buildForm(context),
           _PersonalInfoStep.currentEmailCode => _buildEmailCode(
@@ -7247,7 +7217,7 @@ class _SecurityPageState extends State<SecurityPage>
       SecuritySection.mfa => 'MFA Setup',
       null => 'Privacy and security',
     };
-    final content = SingleChildScrollView(
+    final content = KeyboardAwareScrollView(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
