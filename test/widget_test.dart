@@ -10,7 +10,9 @@ import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/directory/vendor_contact.dart';
 import 'package:getprio_mobile/main.dart';
 import 'package:getprio_mobile/loading_skeleton.dart';
+import 'package:getprio_mobile/mobile_environment.dart';
 import 'package:getprio_mobile/navigation/customer_navigation_bar.dart';
+import 'package:getprio_mobile/onboarding/onboarding_page.dart';
 import 'package:getprio_mobile/queue/join_ui.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:getprio_mobile/queue/queue_repository.dart';
@@ -139,6 +141,27 @@ void main() {
     expect(find.text('you@example.com or username'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Enter your password'), findsOneWidget);
+  });
+
+  testWidgets('Sandbox skips the onboarding screen', (tester) async {
+    await tester.pumpWidget(
+      GetPrioApp(
+        environmentConfig: const MobileEnvironmentConfig(
+          environment: GetPrioEnvironment.sandbox,
+          apiBaseUrl: 'https://sandbox-api.getprio.online',
+          approvedHosts: 'sandbox-api.getprio.online',
+        ),
+        authRepository: AuthRepository(
+          api: UnusedAuthApi(),
+          tokenStore: MemoryTokenStore(),
+        ),
+        onboardingStore: MemoryOnboardingStore(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OnboardingPage), findsNothing);
+    expect(find.text('Email or username'), findsOneWidget);
   });
 
   testWidgets('labels customer registration fields', (tester) async {
