@@ -9,13 +9,9 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
   testWidgets(
-    'scanner back closes the join flow and returns to the launching tab',
+    'scanner back closes the join flow and returns to Home',
     (tester) async {
       await _pumpScannerFlow(tester);
-
-      await tester.tap(find.text('Explore'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('explore-page')), findsOneWidget);
 
       await _openScanner(tester);
 
@@ -32,7 +28,7 @@ void main() {
 
       expect(find.byType(QrScannerPage), findsNothing);
       expect(find.byType(JoinPage), findsNothing);
-      expect(find.byKey(const Key('explore-page')), findsOneWidget);
+      expect(find.byKey(const Key('home-page')), findsOneWidget);
     },
   );
 

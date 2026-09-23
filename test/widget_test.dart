@@ -10,7 +10,7 @@ import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/directory/vendor_contact.dart';
 import 'package:getprio_mobile/main.dart';
 import 'package:getprio_mobile/loading_skeleton.dart';
-import 'package:getprio_mobile/queue/join_repository.dart';
+import 'package:getprio_mobile/navigation/customer_navigation_bar.dart';
 import 'package:getprio_mobile/queue/join_ui.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:getprio_mobile/queue/queue_repository.dart';
@@ -517,6 +517,25 @@ void main() {
     expect(find.byType(QrScannerPage), findsOneWidget);
   });
 
+  testWidgets('keeps Explore visible but disabled in the Sandbox app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+    );
+
+    final explore = tester.widget<NavigationItem>(
+      find.byKey(const ValueKey(CustomerDestination.explore)),
+    );
+    expect(explore.enabled, isFalse);
+
+    await tester.tap(find.text('Explore'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('home-page')), findsOneWidget);
+    expect(find.byKey(const Key('explore-page')), findsNothing);
+  });
+
   testWidgets('centers phone action button content', (tester) async {
     await tester.binding.setSurfaceSize(const Size(375, 667));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -556,16 +575,16 @@ void main() {
     expect(find.text('Join a queue'), findsNothing);
   });
 
-  testWidgets('switches between customer areas', (tester) async {
+  testWidgets('switches to the Tickets area', (tester) async {
     await tester.pumpWidget(
       ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
     );
 
-    await tester.tap(find.text('Explore'));
+    await tester.tap(find.text('Tickets'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Explore vendors'), findsOneWidget);
-    expect(find.byKey(const Key('explore-page')), findsOneWidget);
+    expect(find.byKey(const Key('tickets-page')), findsOneWidget);
+    expect(find.byKey(const Key('home-page')), findsNothing);
   });
 
   testWidgets('filters the vendor directory by search and category', (
@@ -703,42 +722,6 @@ void main() {
 
       await tester.tap(find.byKey(const Key('vendor-join-queue-button')));
       expect(joinQueueCalls, 1);
-    },
-  );
-
-  testWidgets(
-    'vendor detail Join Queue opens direct secure checkout without scanning',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 844));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final joinApi = FakeDirectJoinApi();
-
-      await tester.pumpWidget(
-        ShadcnApp(
-          home: CustomerShell(
-            user: AuthUserForTest.user,
-            joinRepository: JoinRepository(joinApi),
-            directoryRepository: DirectoryRepository(FakeDirectoryApi()),
-            allowedHosts: const {'app.getprio.test'},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Explore'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('City Clinic'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('vendor-join-queue-button')));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(QrScannerPage), findsNothing);
-      expect(find.byKey(const Key('direct-join-flow-shell')), findsOneWidget);
-      expect(find.byKey(const Key('checkout-bottom-sheet')), findsOneWidget);
-      expect(find.text('Secure checkout'), findsOneWidget);
-      expect(find.text('PHP 20.00'), findsOneWidget);
-      expect(joinApi.directJoinCalls, 1);
-      expect(joinApi.lastTenantSlug, 'city-clinic');
     },
   );
 
@@ -1215,40 +1198,6 @@ class FakeDirectoryApi implements DirectoryApi {
       },
     ],
   };
-}
-
-class FakeDirectJoinApi implements JoinApi, DirectJoinApi {
-  int directJoinCalls = 0;
-  String? lastTenantSlug;
-
-  @override
-  Future<Map<String, dynamic>> resolve(String locationQrId) async => const {};
-
-  @override
-  Future<Map<String, dynamic>> join({
-    required String locationQrId,
-    required String joinAttemptId,
-    required String customerName,
-  }) async => const {};
-
-  @override
-  Future<Map<String, dynamic>> joinDirect({
-    required String tenantSlug,
-    String? locationSlug,
-    required String joinAttemptId,
-    required String customerName,
-  }) async {
-    directJoinCalls++;
-    lastTenantSlug = tenantSlug;
-    return {
-      'paymentRequired': true,
-      'paymentAttemptId': 'direct-attempt-1',
-      'checkoutUrl': 'https://paymongo.example/checkout/direct',
-      'tenantSlug': tenantSlug,
-      'locationSlug': locationSlug ?? 'main-clinic',
-      'queueFee': {'amountCents': 2000, 'currency': 'PHP'},
-    };
-  }
 }
 
 class FakeVendorContactLauncher implements VendorContactLauncher {

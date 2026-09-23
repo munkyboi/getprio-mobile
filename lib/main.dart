@@ -2108,6 +2108,7 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   void _selectDestination(CustomerDestination destination) {
+    if (destination == CustomerDestination.explore) return;
     setState(() => _selectedDestination = destination);
     if (destination == CustomerDestination.tickets) {
       widget.ticketRepository?.requestRefresh();
