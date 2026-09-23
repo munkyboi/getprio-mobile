@@ -4,6 +4,24 @@ import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
 
 void main() {
+  test('loads and accepts Sandbox ticket invitations', () async {
+    final api = InvitationAccountQueueApi();
+    final repository = QueueTicketRepository(api);
+
+    final invitations = await repository.loadPendingInvitations();
+
+    expect(invitations, hasLength(1));
+    expect(invitations.single.id, 'invitation-1');
+    expect(invitations.single.ticket.vendorName, 'Sandbox profile');
+    expect(invitations.single.ticket.locationName, 'Main queue');
+    expect(invitations.single.ticket.ticketNumber, 'QUEUE-0001');
+
+    final accepted = await repository.acceptInvitation('invitation-1');
+
+    expect(accepted.id, 'invitation-1');
+    expect(api.acceptedId, 'invitation-1');
+  });
+
   test(
     'loads account tickets from the shared overview and history shapes',
     () async {
@@ -160,6 +178,59 @@ class FakeAccountQueueApi implements AccountQueueApi {
 
   @override
   Future<Map<String, dynamic>> loadOverview() async => overview;
+}
+
+class InvitationAccountQueueApi
+    implements AccountQueueApi, TicketInvitationApi {
+  String? acceptedId;
+
+  @override
+  Future<Map<String, dynamic>> loadHistory({
+    required int page,
+    required int limit,
+  }) async => const {'items': []};
+
+  @override
+  Future<Map<String, dynamic>> loadOverview() async => const {'tickets': []};
+
+  @override
+  Future<Map<String, dynamic>> loadInvitations() async => const {
+    'invitations': [
+      {
+        'id': 'invitation-1',
+        'ticket_number': 'QUEUE-0001',
+        'external_reference': 'visit-1',
+        'verification_code': 'AB12CD34',
+        'status': 'waiting',
+        'profile': {
+          'queue_name': 'Sandbox profile',
+          'location_name': 'Main queue',
+          'location_slug': 'main',
+        },
+        'issued_at': '2026-09-23T00:00:00Z',
+      },
+    ],
+  };
+
+  @override
+  Future<Map<String, dynamic>> acceptInvitation(String ticketId) async {
+    acceptedId = ticketId;
+    return const {
+      'ticket': {
+        'id': 'invitation-1',
+        'ticket_number': 'QUEUE-0001',
+        'external_reference': 'visit-1',
+        'verification_code': 'AB12CD34',
+        'status': 'waiting',
+        'profile': {
+          'queue_name': 'Sandbox profile',
+          'location_name': 'Main queue',
+          'location_slug': 'main',
+        },
+        'issued_at': '2026-09-23T00:00:00Z',
+      },
+    };
+  }
 }
 
 class FakeDirectoryApi implements DirectoryApi {
