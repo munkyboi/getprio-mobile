@@ -35,6 +35,7 @@ void main() {
                   'ticket_number': 'A-001',
                   'source': 'developer_api',
                   'display_label': 'A-001',
+                  'verification_code': 'VERIFY-0019',
                   'status': 'served',
                   'profile': {
                     'queue_name': 'Sandbox profile',
@@ -66,6 +67,7 @@ void main() {
       expect(tickets, hasLength(1));
       expect(tickets.single.id, 'developer-ticket-1');
       expect(tickets.single.ticketNumber, 'A-001');
+      expect(tickets.single.verificationCode, 'VERIFY-0019');
       expect(tickets.single.vendorName, 'Sandbox profile');
       expect(tickets.single.locationName, 'Main location');
       expect(tickets.single.status, TicketStatus.served);

@@ -142,6 +142,7 @@ class RestAccountQueueApi implements AccountQueueApi {
       'id': ticket['id'],
       'lookupCode': ticket['external_reference'] ?? ticket['id'],
       'ticketNumber': ticket['ticket_number'],
+      'verificationCode': ticket['verification_code'],
       'customerName': 'Sandbox test user',
       'status': ticket['status'],
       'statusReason': ticket['status_reason'],

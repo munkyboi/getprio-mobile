@@ -4784,57 +4784,69 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
 
   void _handleTicketRepositoryRefresh() {
     if (!mounted) return;
-    final details = _loadDetails();
+    final details = _loadDetails(refreshTicket: true);
     setState(() {
       _details = details;
     });
   }
 
-  Future<_TicketDetailsData> _loadDetails() async {
-    final vendor = await _loadVendor();
+  Future<_TicketDetailsData> _loadDetails({bool refreshTicket = false}) async {
+    var ticket = widget.ticket;
+    if (refreshTicket) {
+      final ticketRepository = widget.ticketRepository;
+      if (ticketRepository != null) {
+        final latestTickets = await ticketRepository.loadAllTickets();
+        for (final latestTicket in latestTickets) {
+          if (latestTicket.id == ticket.id ||
+              latestTicket.lookupCode == ticket.lookupCode) {
+            ticket = latestTicket;
+            break;
+          }
+        }
+      }
+    }
+
+    final vendor = await _loadVendor(ticket);
     final repository = widget.queueRepository;
-    final tenantSlug = widget.ticket.tenantSlug;
-    if (repository == null ||
-        tenantSlug == null ||
-        widget.ticket.lookupCode.isEmpty) {
-      return _TicketDetailsData(ticket: widget.ticket, vendor: vendor);
+    final tenantSlug = ticket.tenantSlug;
+    if (repository == null || tenantSlug == null || ticket.lookupCode.isEmpty) {
+      return _TicketDetailsData(ticket: ticket, vendor: vendor);
     }
 
     final snapshot = await repository.loadQueueSnapshot(
       tenantSlug: tenantSlug,
-      locationSlug: widget.ticket.locationSlug,
-      lookupCode: widget.ticket.lookupCode,
+      locationSlug: ticket.locationSlug,
+      lookupCode: ticket.lookupCode,
     );
-    final ticket =
+    final snapshotTicket =
         snapshot.focusTicket?.copyWith(
-          vendorName: widget.ticket.vendorName,
-          locationName: widget.ticket.locationName,
-          tenantSlug: widget.ticket.tenantSlug,
-          locationSlug: widget.ticket.locationSlug,
+          vendorName: ticket.vendorName,
+          locationName: ticket.locationName,
+          tenantSlug: ticket.tenantSlug,
+          locationSlug: ticket.locationSlug,
         ) ??
-        widget.ticket;
+        ticket;
     return _TicketDetailsData(
-      ticket: ticket,
+      ticket: snapshotTicket,
       snapshot: snapshot,
       vendor: vendor,
     );
   }
 
-  Future<VendorSummary> _loadVendor() async {
+  Future<VendorSummary> _loadVendor(QueueTicket ticket) async {
     final repository = widget.directoryRepository;
-    final tenantSlug = widget.ticket.tenantSlug?.trim();
+    final tenantSlug = ticket.tenantSlug?.trim();
     if (repository == null || tenantSlug == null || tenantSlug.isEmpty) {
-      return _fallbackVendor();
+      return _fallbackVendor(ticket);
     }
     try {
       return await repository.loadVendor(tenantSlug);
     } catch (_) {
-      return _fallbackVendor();
+      return _fallbackVendor(ticket);
     }
   }
 
-  VendorSummary _fallbackVendor() {
-    final ticket = widget.ticket;
+  VendorSummary _fallbackVendor(QueueTicket ticket) {
     final locationName = ticket.locationName;
     return VendorSummary(
       slug: ticket.tenantSlug?.trim().isNotEmpty == true
@@ -4856,7 +4868,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   Future<void> _refresh() async {
-    final details = _loadDetails();
+    final details = _loadDetails(refreshTicket: true);
     setState(() {
       _details = details;
     });
@@ -5054,7 +5066,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                   ),
                                   color: Colors.white,
                                   child: BarcodeWidget(
-                                    data: ticket.lookupCode,
+                                    data:
+                                        ticket.verificationCode ??
+                                        ticket.lookupCode,
                                     barcode: Barcode.code128(),
                                     height: 72,
                                     drawText: false,
@@ -5064,7 +5078,8 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                 const SizedBox(height: 8),
                                 Center(
                                   child: Text(
-                                    ticket.lookupCode,
+                                    ticket.verificationCode ??
+                                        ticket.lookupCode,
                                     style: const TextStyle(
                                       letterSpacing: 2,
                                       fontWeight: FontWeight.w700,
