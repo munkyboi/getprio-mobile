@@ -5815,14 +5815,12 @@ class _AccountPageState extends State<AccountPage> {
   AuthUser? _user;
   bool _avatarBusy = false;
   Future<NotificationSettings?>? _notificationSettingsFuture;
-  Future<List<ApprovedVendor>>? _approvedVendorsFuture;
 
   @override
   void initState() {
     super.initState();
     _user = widget.user;
     _primeNotificationSettings();
-    _primeApprovedVendors();
   }
 
   @override
@@ -5831,10 +5829,6 @@ class _AccountPageState extends State<AccountPage> {
     if (widget.user != oldWidget.user) _user = widget.user;
     if (widget.settingsRepository != oldWidget.settingsRepository) {
       _primeNotificationSettings();
-    }
-    if (widget.approvedVendorStore != oldWidget.approvedVendorStore ||
-        widget.user?.id != oldWidget.user?.id) {
-      _primeApprovedVendors();
     }
   }
 
@@ -5917,6 +5911,19 @@ class _AccountPageState extends State<AccountPage> {
                   onPressed: () => _openPersonalInfoSheet(overlayContext),
                 ),
                 const Divider(),
+                const SizedBox(height: 20),
+                const Text('Settings').h3(),
+                const SizedBox(height: 8),
+                if (widget.sandbox && widget.approvedVendorStore != null) ...[
+                  _AccountAction(
+                    key: const Key('profile-approved-vendors'),
+                    icon: LucideIcons.store,
+                    title: 'Approved Vendors',
+                    subtitle: 'Manage vendors whose invitations are accepted automatically.',
+                    onPressed: () => _openApprovedVendorsSheet(overlayContext),
+                  ),
+                  const Divider(),
+                ],
                 _AccountAction(
                   key: const Key('profile-notifications'),
                   icon: LucideIcons.bell,
@@ -5927,17 +5934,6 @@ class _AccountPageState extends State<AccountPage> {
                   onPressed: () => _openNotificationsSheet(overlayContext),
                 ),
                 const Divider(),
-                if (widget.sandbox && widget.approvedVendorStore != null) ...[
-                  const Text('Approved vendors').h3(),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Ticket invitations from these vendors are accepted automatically.',
-                  ),
-                  const SizedBox(height: 8),
-                  _approvedVendorsContent(overlayContext),
-                  const Divider(),
-                ],
-                const SizedBox(height: 20),
                 const Text('Security').h3(),
                 const SizedBox(height: 8),
                 _AccountAction(
@@ -6044,112 +6040,29 @@ class _AccountPageState extends State<AccountPage> {
     if (mounted) _primeNotificationSettings();
   }
 
+  Future<void> _openApprovedVendorsSheet(BuildContext context) async {
+    final store = widget.approvedVendorStore;
+    final accountId = _user?.id ?? widget.user?.id;
+    if (store == null || accountId == null) return;
+    await openDrawerOverlay<void>(
+      context: context,
+      position: OverlayPosition.bottom,
+      expands: false,
+      transformBackdrop: false,
+      builder: (sheetContext) => SocialSheet(
+        key: const Key('profile-approved-vendors-sheet'),
+        title: 'Approved Vendors',
+        topPadding: GetPrioTheme.bottomSheetTopPadding,
+        headerSpacing: 8,
+        child: _ApprovedVendorsList(accountId: accountId, store: store),
+      ),
+    ).future;
+  }
+
   void _primeNotificationSettings() {
     _notificationSettingsFuture = widget.settingsRepository == null
         ? null
         : _loadNotificationSettings();
-  }
-
-  void _primeApprovedVendors() {
-    final store = widget.approvedVendorStore;
-    final accountId = widget.user?.id;
-    _approvedVendorsFuture =
-        widget.sandbox && store != null && accountId != null
-        ? store.load(accountId)
-        : null;
-  }
-
-  Widget _approvedVendorsContent(BuildContext context) {
-    final future = _approvedVendorsFuture;
-    if (future == null) return const SizedBox.shrink();
-    return FutureBuilder<List<ApprovedVendor>>(
-      future: future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Text('Loading approved vendors...');
-        }
-        final vendors = snapshot.data ?? const <ApprovedVendor>[];
-        if (vendors.isEmpty) {
-          return const Text(
-            'No vendors are approved for automatic acceptance.',
-          );
-        }
-        return Card(
-          key: const Key('approved-vendors-list'),
-          child: Column(
-            children: [
-              for (var index = 0; index < vendors.length; index++) ...[
-                if (index > 0) const Divider(),
-                Row(
-                  key: ValueKey('approved-vendor-${vendors[index].key}'),
-                  children: [
-                    Expanded(child: Text(vendors[index].name)),
-                    GhostButton(
-                      key: ValueKey(
-                        'remove-approved-vendor-${vendors[index].key}',
-                      ),
-                      density: ButtonDensity.icon,
-                      onPressed: () =>
-                          _confirmRemoveApprovedVendor(context, vendors[index]),
-                      child: const Icon(LucideIcons.trash2),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _confirmRemoveApprovedVendor(
-    BuildContext context,
-    ApprovedVendor vendor,
-  ) async {
-    final confirmed = await showOverlay<bool>(
-      context,
-      const DialogConfiguration(),
-      builder: (dialogContext) => AlertDialog(
-        key: const Key('approved-vendor-remove-dialog'),
-        leading: const Icon(LucideIcons.trash2),
-        title: const Text('Remove approved vendor?'),
-        content: Text(
-          'New ticket invitations from ${vendor.name} will ask before being added again.',
-        ),
-        actions: [
-          GetPrioActionButton.outline(
-            key: const Key('approved-vendor-remove-cancel'),
-            onPressed: () => closeOverlay(dialogContext, false),
-            child: const Text('Keep vendor'),
-          ),
-          GetPrioActionButton.destructive(
-            key: const Key('approved-vendor-remove-confirm'),
-            onPressed: () => closeOverlay(dialogContext, true),
-            child: const Text('Remove vendor'),
-          ),
-        ],
-      ),
-    ).future;
-    if (confirmed != true || !mounted) return;
-    final store = widget.approvedVendorStore;
-    final accountId = _user?.id ?? widget.user?.id;
-    if (store == null || accountId == null) return;
-    final feedbackContext = context;
-    try {
-      await store.remove(accountId, vendor.key);
-      if (!feedbackContext.mounted) return;
-      setState(() => _primeApprovedVendors());
-      showFeedbackToast(feedbackContext, message: 'Approved vendor removed.');
-    } catch (_) {
-      if (feedbackContext.mounted) {
-        showFeedbackToast(
-          feedbackContext,
-          message: 'Could not remove approved vendor.',
-          isError: true,
-        );
-      }
-    }
   }
 
   Future<NotificationSettings?> _loadNotificationSettings() async {
@@ -6279,6 +6192,135 @@ class _AccountPageState extends State<AccountPage> {
       ),
     ).future;
     if (confirmed == true && mounted) onSignOut();
+  }
+}
+
+class _ApprovedVendorsList extends StatefulWidget {
+  const _ApprovedVendorsList({required this.accountId, required this.store});
+
+  final String accountId;
+  final ApprovedVendorStore store;
+
+  @override
+  State<_ApprovedVendorsList> createState() => _ApprovedVendorsListState();
+}
+
+class _ApprovedVendorsListState extends State<_ApprovedVendorsList> {
+  List<ApprovedVendor>? _vendors;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final vendors = await widget.store.load(widget.accountId);
+      if (!mounted) return;
+      setState(() {
+        _vendors = vendors;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_vendors == null) {
+      return _error == null
+          ? const Center(child: Text('Loading approved vendors…'))
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Could not load approved vendors.'),
+                GhostButton(onPressed: _load, child: const Text('Try again')),
+              ],
+            );
+    }
+    final vendors = _vendors!;
+    if (vendors.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Text('No vendors are approved for automatic acceptance.'),
+      );
+    }
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          for (final vendor in vendors) ...[
+            Row(
+              key: ValueKey('approved-vendor-${vendor.key}'),
+              children: [
+                Expanded(child: Text(vendor.name).h4()),
+                GhostButton(
+                  key: ValueKey('remove-approved-vendor-${vendor.key}'),
+                  density: ButtonDensity.icon,
+                  onPressed: () => _confirmRemove(context, vendor),
+                  child: const Icon(
+                    LucideIcons.trash2,
+                    semanticLabel: 'Remove approved vendor',
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmRemove(
+    BuildContext context,
+    ApprovedVendor vendor,
+  ) async {
+    final confirmed = await showOverlay<bool>(
+      context,
+      const DialogConfiguration(),
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('approved-vendor-remove-dialog'),
+        leading: const Icon(LucideIcons.trash2),
+        title: const Text('Remove approved vendor?'),
+        content: Text(
+          'New ticket invitations from ${vendor.name} will ask before being added again.',
+        ),
+        actions: [
+          GetPrioActionButton.outline(
+            key: const Key('approved-vendor-remove-cancel'),
+            onPressed: () => closeOverlay(dialogContext, false),
+            child: const Text('Keep vendor'),
+          ),
+          GetPrioActionButton.destructive(
+            key: const Key('approved-vendor-remove-confirm'),
+            onPressed: () => closeOverlay(dialogContext, true),
+            child: const Text('Remove vendor'),
+          ),
+        ],
+      ),
+    ).future;
+    if (confirmed != true || !mounted) return;
+    final feedbackContext = context;
+    try {
+      await widget.store.remove(widget.accountId, vendor.key);
+      if (!feedbackContext.mounted) return;
+      final vendors = await widget.store.load(widget.accountId);
+      if (!feedbackContext.mounted) return;
+      setState(() => _vendors = vendors);
+      showFeedbackToast(feedbackContext, message: 'Approved vendor removed.');
+    } catch (_) {
+      if (feedbackContext.mounted) {
+        showFeedbackToast(
+          feedbackContext,
+          message: 'Could not remove approved vendor.',
+          isError: true,
+        );
+      }
+    }
   }
 }
 
