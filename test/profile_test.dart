@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:getprio_mobile/account/approved_vendor_store.dart';
 import 'package:getprio_mobile/account/account_settings_repository.dart';
 import 'package:getprio_mobile/account/phone_formatting.dart';
 import 'package:getprio_mobile/account/profile_repository.dart';
@@ -216,6 +217,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(settingsApi.lastQueueAlerts, isFalse);
     expect(find.text('Notification preferences saved.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('shows approved vendors and confirms before removing one', (
+    tester,
+  ) async {
+    final store = MemoryApprovedVendorStore();
+    await store.add(
+      'user-1',
+      const ApprovedVendor(key: 'slug:acme', name: 'Acme Clinic'),
+    );
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: AccountPage(
+          user: FakeAccountProfileApi().user,
+          sandbox: true,
+          approvedVendorStore: store,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approved vendors'), findsOneWidget);
+    expect(find.text('Acme Clinic'), findsOneWidget);
+    final remove = find.byKey(
+      const ValueKey('remove-approved-vendor-slug:acme'),
+    );
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('approved-vendor-remove-dialog')),
+      findsOneWidget,
+    );
+    expect(await store.load('user-1'), hasLength(1));
+
+    await tester.tap(find.byKey(const Key('approved-vendor-remove-cancel')));
+    await tester.pumpAndSettle();
+    expect(await store.load('user-1'), hasLength(1));
+
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('approved-vendor-remove-confirm')));
+    await tester.pumpAndSettle();
+    expect(await store.load('user-1'), isEmpty);
+    expect(
+      find.text('No vendors are approved for automatic acceptance.'),
+      findsOneWidget,
+    );
     await tester.pump(const Duration(seconds: 4));
   });
 
@@ -559,4 +608,28 @@ class FakeProfileSecurityApi implements SecurityApi {
     String? code,
     String? recoveryCode,
   }) async {}
+}
+
+class MemoryApprovedVendorStore implements ApprovedVendorStore {
+  final Map<String, List<ApprovedVendor>> values = {};
+
+  @override
+  Future<List<ApprovedVendor>> load(String accountId) async => [
+    ...values[accountId] ?? const <ApprovedVendor>[],
+  ];
+
+  @override
+  Future<void> add(String accountId, ApprovedVendor vendor) async {
+    final current = [...await load(accountId)];
+    current.removeWhere((item) => item.key == vendor.key);
+    current.add(vendor);
+    values[accountId] = current;
+  }
+
+  @override
+  Future<void> remove(String accountId, String vendorKey) async {
+    values[accountId] = (await load(accountId))
+        .where((item) => item.key != vendorKey)
+        .toList(growable: false);
+  }
 }

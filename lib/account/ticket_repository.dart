@@ -150,6 +150,11 @@ Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
     'status': ticket['status'],
     'statusReason': ticket['status_reason'],
     'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
+    'tenantSlug':
+        ticket['tenant_slug'] ??
+        ticket['tenantSlug'] ??
+        profileJson['tenant_slug'] ??
+        profileJson['tenantSlug'],
     'locationName': profileJson['location_name'],
     'locationSlug': profileJson['location_slug'],
     'joinedAt': ticket['issued_at'],
