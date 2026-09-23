@@ -26,6 +26,21 @@ flutter run \
   --dart-define=GETPRIO_APPROVED_HOSTS=sandbox.getprio.online
 ```
 
+For physical devices running iOS 26, use Profile mode for device validation:
+
+```bash
+flutter run \
+  --profile \
+  --flavor sandbox \
+  --dart-define=GETPRIO_ENVIRONMENT=sandbox \
+  --dart-define=GETPRIO_API_BASE_URL=https://sandbox-api.getprio.online \
+  --dart-define=GETPRIO_APPROVED_HOSTS=sandbox.getprio.online
+```
+
+Flutter debug/JIT launches can terminate with `EXC_BAD_ACCESS`/`SIGBUS` on
+physical iOS 26 devices. Profile and release builds use AOT and avoid that
+toolchain failure; this is not a Sandbox biometric or API configuration issue.
+
 Android production builds use the explicit production flavor so adding the
 Sandbox dimension does not remove the existing production artifact:
 
