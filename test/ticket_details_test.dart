@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
@@ -69,6 +70,8 @@ void main() {
             'status': 'waiting',
             'position': 2,
             'estimatedWaitMinutes': 10,
+            'queueLength': 4,
+            'queueUpdatedAt': '2026-09-02T03:45:00Z',
             'joinedAt': '2026-09-02T03:42:00Z',
           },
         },
@@ -92,6 +95,12 @@ void main() {
     expect(find.text('City Clinic'), findsOneWidget);
     expect(find.text('AH002'), findsWidgets);
     expect(find.text('WAITING'), findsOneWidget);
+    expect(find.text('Position'), findsOneWidget);
+    expect(find.text('#2'), findsOneWidget);
+    expect(find.text('Estimated wait'), findsWidgets);
+    expect(find.text('10 min'), findsWidgets);
+    expect(find.text('Queue length'), findsOneWidget);
+    expect(find.text('4 waiting'), findsOneWidget);
     expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
     expect(find.text('A0C18AF'), findsOneWidget);
     await tester.fling(
@@ -357,6 +366,51 @@ void main() {
     expect(queueApi.loadCalls, 2);
   });
 
+  testWidgets('refreshes Sandbox ticket details from the account repository', (
+    tester,
+  ) async {
+    final api = _ChangingSandboxAccountQueueApi();
+    final ticketRepository = QueueTicketRepository(api);
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson({
+            'id': 'developer-ticket-1',
+            'lookupCode': 'QUEUE1-0019',
+            'ticketNumber': 'QUEUE1-0019',
+            'verificationCode': 'VERIFY-0019',
+            'vendorName': 'Sandbox profile',
+            'locationName': 'Main location',
+            'status': 'waiting',
+          }),
+          ticketRepository: ticketRepository,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('WAITING'), findsOneWidget);
+    final barcode = tester.widget<BarcodeWidget>(
+      find.descendant(
+        of: find.byKey(const Key('ticket-details-barcode')),
+        matching: find.byType(BarcodeWidget),
+      ),
+    );
+    expect(String.fromCharCodes(barcode.data), 'VERIFY-0019');
+    expect(find.text('VERIFY-0019'), findsOneWidget);
+
+    api.status = 'called';
+    ticketRepository.requestRefresh();
+    await tester.pumpAndSettle();
+
+    expect(find.text('CALLED'), findsOneWidget);
+    expect(
+      find.text('Your ticket was called. Proceed to the vendor.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('restores the ticket details surface without a vendor hero', (
     tester,
   ) async {
@@ -469,6 +523,37 @@ class FakeAccountQueueApi implements AccountQueueApi {
         'createdAt': '2026-09-02T03:42:00Z',
       },
     ],
+  };
+}
+
+class _ChangingSandboxAccountQueueApi implements AccountQueueApi {
+  String status = 'waiting';
+
+  @override
+  Future<Map<String, dynamic>> loadHistory({
+    required int page,
+    required int limit,
+  }) async => {
+    'tickets': status == 'waiting'
+        ? const <Map<String, dynamic>>[]
+        : [_ticket()],
+  };
+
+  @override
+  Future<Map<String, dynamic>> loadOverview() async => {
+    'tickets': status == 'waiting'
+        ? [_ticket()]
+        : const <Map<String, dynamic>>[],
+  };
+
+  Map<String, dynamic> _ticket() => {
+    'id': 'developer-ticket-1',
+    'lookupCode': 'QUEUE1-0019',
+    'ticketNumber': 'QUEUE1-0019',
+    'verificationCode': 'VERIFY-0019',
+    'vendorName': 'Sandbox profile',
+    'locationName': 'Main location',
+    'status': status,
   };
 }
 

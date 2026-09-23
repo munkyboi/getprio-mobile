@@ -51,8 +51,9 @@ android {
             manifestPlaceholders["getPrioAppScheme"] = "getprio-sandbox"
         }
 
-        // Sandbox uses its own google-services.json. Never fall back to the
-        // production file for a sandbox variant.
+        // Sandbox Firebase options are supplied by the Flutter runtime. If a
+        // local google-services.json is present, process it for native tooling;
+        // never fall back to the production file for a sandbox variant.
     }
 
     buildTypes {

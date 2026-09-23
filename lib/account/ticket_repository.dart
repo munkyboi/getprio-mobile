@@ -12,41 +12,18 @@ abstract interface class AccountQueueApi {
   });
 }
 
-abstract interface class AccountTicketInvitationApi {
+abstract interface class TicketInvitationApi {
   Future<Map<String, dynamic>> loadInvitations();
 
   Future<Map<String, dynamic>> acceptInvitation(String ticketId);
 }
 
 class TicketInvitation {
-  const TicketInvitation({
-    required this.id,
-    required this.ticketNumber,
-    required this.queueName,
-    required this.status,
-    this.displayLabel,
-    this.externalReference,
-  });
+  const TicketInvitation({required this.ticket});
 
-  final String id;
-  final String? ticketNumber;
-  final String queueName;
-  final String status;
-  final String? displayLabel;
-  final String? externalReference;
+  final QueueTicket ticket;
 
-  factory TicketInvitation.fromJson(Map<String, dynamic> json) {
-    final profile = json['profile'];
-    final profileMap = profile is Map<String, dynamic> ? profile : null;
-    return TicketInvitation(
-      id: '${json['id'] ?? ''}',
-      ticketNumber: json['ticket_number']?.toString(),
-      queueName: profileMap?['queue_name']?.toString() ?? 'Developer queue',
-      status: json['status']?.toString() ?? 'waiting',
-      displayLabel: json['display_label']?.toString(),
-      externalReference: json['external_reference']?.toString(),
-    );
-  }
+  String get id => ticket.id;
 }
 
 class QueueTicketRepository {
@@ -93,6 +70,41 @@ class QueueTicketRepository {
     return tickets;
   }
 
+  Future<List<TicketInvitation>> loadPendingInvitations() async {
+    final invitationApi = api is TicketInvitationApi
+        ? api as TicketInvitationApi
+        : null;
+    if (invitationApi == null) return const [];
+    final rawInvitations = (await invitationApi
+        .loadInvitations())['invitations'];
+    if (rawInvitations is! List) return const [];
+    return rawInvitations
+        .whereType<Map<String, dynamic>>()
+        .map(
+          (invitation) => TicketInvitation(
+            ticket: QueueTicket.fromJson(_accountTicketJson(invitation)),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<QueueTicket> acceptInvitation(String ticketId) async {
+    final invitationApi = api is TicketInvitationApi
+        ? api as TicketInvitationApi
+        : null;
+    if (invitationApi == null) {
+      throw UnsupportedError('Ticket invitations are not available.');
+    }
+    final response = await invitationApi.acceptInvitation(ticketId);
+    final rawTicket = response['ticket'];
+    if (rawTicket is! Map<String, dynamic>) {
+      throw const FormatException('The accepted ticket response is invalid.');
+    }
+    final ticket = QueueTicket.fromJson(_accountTicketJson(rawTicket));
+    requestRefresh();
+    return ticket;
+  }
+
   Future<List<QueueTicket>> loadAllTickets({
     int historyPage = 1,
     int historyLimit = 20,
@@ -114,28 +126,6 @@ class QueueTicketRepository {
     return tickets;
   }
 
-  Future<List<TicketInvitation>> loadInvitations() async {
-    if (api is! AccountTicketInvitationApi) {
-      return const [];
-    }
-    final invitationApi = api as AccountTicketInvitationApi;
-    final response = await invitationApi.loadInvitations();
-    final rawInvitations = response['invitations'];
-    if (rawInvitations is! List) return const [];
-    return rawInvitations
-        .whereType<Map<String, dynamic>>()
-        .map(TicketInvitation.fromJson)
-        .toList(growable: false);
-  }
-
-  Future<QueueTicket?> acceptInvitation(String ticketId) async {
-    if (api is! AccountTicketInvitationApi) return null;
-    final invitationApi = api as AccountTicketInvitationApi;
-    final response = await invitationApi.acceptInvitation(ticketId);
-    final ticket = response['ticket'];
-    return ticket is Map<String, dynamic> ? QueueTicket.fromJson(ticket) : null;
-  }
-
   List<QueueTicket> _ticketsFrom(Map<String, dynamic> response) {
     final rawTickets = response['tickets'] ?? response['items'];
     if (rawTickets is! List) return const [];
@@ -146,21 +136,45 @@ class QueueTicketRepository {
   }
 }
 
-class RestAccountQueueApi
-    implements AccountQueueApi, AccountTicketInvitationApi {
-  RestAccountQueueApi(this.client, {this.useMobileTicketFeed = false});
+Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
+  final profile = ticket['profile'];
+  final profileJson = profile is Map<String, dynamic>
+      ? profile
+      : const <String, dynamic>{};
+  return {
+    'id': ticket['id'],
+    'lookupCode': ticket['external_reference'] ?? ticket['id'],
+    'ticketNumber': ticket['ticket_number'],
+    'verificationCode': ticket['verification_code'],
+    'customerName': 'Sandbox test user',
+    'status': ticket['status'],
+    'statusReason': ticket['status_reason'],
+    'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
+    'tenantSlug':
+        ticket['tenant_slug'] ??
+        ticket['tenantSlug'] ??
+        profileJson['tenant_slug'] ??
+        profileJson['tenantSlug'],
+    'locationName': profileJson['location_name'],
+    'locationSlug': profileJson['location_slug'],
+    'position': (ticket['queue_position'] as Map?)?['position'],
+    'estimatedWaitMinutes': ticket['estimated_wait_minutes'],
+    'queueLength': ticket['queue_length'],
+    'queueUpdatedAt': ticket['queue_updated_at'],
+    'joinedAt': ticket['issued_at'],
+    'updatedAt': ticket['updated_at'],
+  };
+}
+
+class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
+  RestAccountQueueApi(this.client, {this.sandbox = false});
 
   final AuthenticatedApiClient client;
-  final bool useMobileTicketFeed;
+  final bool sandbox;
 
   @override
   Future<Map<String, dynamic>> loadOverview() {
-    if (useMobileTicketFeed) {
-      return client.get(
-        '/api/mobile/tickets',
-        queryParameters: {'view': 'active'},
-      );
-    }
+    if (sandbox) return _loadSandboxTickets(view: 'active');
     return client.get('/api/account/overview');
   }
 
@@ -169,11 +183,8 @@ class RestAccountQueueApi
     required int page,
     required int limit,
   }) {
-    if (useMobileTicketFeed) {
-      return client.get(
-        '/api/mobile/tickets',
-        queryParameters: {'view': 'history'},
-      );
+    if (sandbox) {
+      return _loadSandboxTickets(view: 'history', limit: limit);
     }
     return client.get(
       '/api/account/history',
@@ -182,15 +193,36 @@ class RestAccountQueueApi
   }
 
   @override
-  Future<Map<String, dynamic>> loadInvitations() {
+  Future<Map<String, dynamic>> loadInvitations() async {
+    if (!sandbox) return const {'invitations': <dynamic>[]};
     return client.get('/api/mobile/ticket-invitations');
   }
 
   @override
   Future<Map<String, dynamic>> acceptInvitation(String ticketId) {
-    return client.post(
-      '/api/mobile/ticket-invitations/${Uri.encodeComponent(ticketId)}/accept',
-      const {},
+    if (!sandbox) {
+      throw UnsupportedError(
+        'Ticket invitations are only available in Sandbox.',
+      );
+    }
+    return client.post('/api/mobile/ticket-invitations/$ticketId/accept', {});
+  }
+
+  Future<Map<String, dynamic>> _loadSandboxTickets({
+    required String view,
+    int limit = 20,
+  }) async {
+    final response = await client.get(
+      '/api/mobile/tickets',
+      queryParameters: {'view': view, 'limit': '$limit'},
     );
+    final rawTickets = response['tickets'];
+    if (rawTickets is! List) return const {'tickets': <dynamic>[]};
+    return {
+      'tickets': rawTickets
+          .whereType<Map<String, dynamic>>()
+          .map(_accountTicketJson)
+          .toList(growable: false),
+    };
   }
 }

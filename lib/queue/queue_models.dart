@@ -46,8 +46,11 @@ class QueueTicket {
     required this.ticketNumber,
     required this.customerName,
     required this.status,
+    this.verificationCode,
     this.position,
     this.estimatedWaitMinutes,
+    this.queueLength,
+    this.queueUpdatedAt,
     this.joinedAt,
     this.vendorName,
     this.locationName,
@@ -63,8 +66,11 @@ class QueueTicket {
   final String? ticketNumber;
   final String customerName;
   final TicketStatus status;
+  final String? verificationCode;
   final int? position;
   final int? estimatedWaitMinutes;
+  final int? queueLength;
+  final DateTime? queueUpdatedAt;
   final DateTime? joinedAt;
   final String? vendorName;
   final String? locationName;
@@ -92,59 +98,43 @@ class QueueTicket {
 
   factory QueueTicket.fromJson(Map<String, dynamic> json) {
     final status = TicketStatus.parse(json['status']);
-    final rawPosition = _asInt(json['position'] ?? json['queue_position']);
-    final rawWait = _asInt(
-      json['estimatedWaitMinutes'] ?? json['estimated_wait_minutes'],
-    );
-    final profile = _asMap(json['profile']);
+    final rawPosition = _asInt(json['position']);
+    final rawWait = _asInt(json['estimatedWaitMinutes']);
+    final rawQueueLength = _asInt(json['queueLength']);
     return QueueTicket(
       id: _asString(json['id']) ?? '',
-      lookupCode: _asString(json['lookupCode'] ?? json['lookup_code']) ?? '',
-      ticketNumber: _asString(json['ticketNumber'] ?? json['ticket_number']),
+      lookupCode: _asString(json['lookupCode']) ?? '',
+      ticketNumber: _asString(json['ticketNumber']),
       customerName:
           _firstNonBlank([
             json['customerDisplayName'] as String?,
             json['customerName'] as String?,
-            json['display_label'] as String?,
           ]) ??
-          _asString(profile?['queue_name']) ??
           'Customer',
       status: status,
+      verificationCode: _asString(json['verificationCode']),
       position: status == TicketStatus.waiting ? rawPosition : null,
       estimatedWaitMinutes: status == TicketStatus.waiting ? rawWait : null,
-      joinedAt: _asDate(
-        json['joinedAt'] ??
-            json['joined_at'] ??
-            json['createdAt'] ??
-            json['issued_at'],
-      ),
+      queueLength: status == TicketStatus.waiting ? rawQueueLength : null,
+      queueUpdatedAt: _asDate(json['queueUpdatedAt']),
+      joinedAt: _asDate(json['joinedAt'] ?? json['createdAt']),
       vendorName: _firstNonBlank([
         json['vendorName'] as String?,
         json['tenantName'] as String?,
         json['businessName'] as String?,
-        json['display_label'] as String?,
-        profile?['queue_name'] as String?,
       ]),
-      locationName:
-          json['locationName'] as String? ??
-          profile?['location_name'] as String?,
+      locationName: json['locationName'] as String?,
       tenantSlug:
           json['tenantSlug'] as String? ?? json['vendorSlug'] as String?,
-      locationSlug:
-          json['locationSlug'] as String? ??
-          profile?['location_slug'] as String?,
-      statusReason:
-          json['statusReason'] as String? ?? json['status_reason'] as String?,
-      carryOverExpiresAt: _asDate(
-        json['carryOverExpiresAt'] ?? json['carry_over_expires_at'],
-      ),
-      customerConfirmedAt: _asDate(
-        json['customerConfirmedAt'] ?? json['customer_confirmed_at'],
-      ),
+      locationSlug: json['locationSlug'] as String?,
+      statusReason: json['statusReason'] as String?,
+      carryOverExpiresAt: _asDate(json['carryOverExpiresAt']),
+      customerConfirmedAt: _asDate(json['customerConfirmedAt']),
     );
   }
 
   QueueTicket copyWith({
+    String? verificationCode,
     String? vendorName,
     String? locationName,
     String? tenantSlug,
@@ -156,8 +146,11 @@ class QueueTicket {
       ticketNumber: ticketNumber,
       customerName: customerName,
       status: status,
+      verificationCode: verificationCode ?? this.verificationCode,
       position: position,
       estimatedWaitMinutes: estimatedWaitMinutes,
+      queueLength: queueLength,
+      queueUpdatedAt: queueUpdatedAt,
       joinedAt: joinedAt,
       vendorName: vendorName ?? this.vendorName,
       locationName: locationName ?? this.locationName,
