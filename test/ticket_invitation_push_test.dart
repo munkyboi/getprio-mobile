@@ -105,6 +105,35 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
+  testWidgets('invitation approval checkbox wraps within the prompt', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: CustomerShell(
+          user: const AuthUser(id: 'customer-1', email: 'customer@example.com'),
+          sandbox: true,
+          approvedVendorStore: MemoryApprovedVendorStore(),
+          ticketRepository: QueueTicketRepository(_InvitationApi()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final promptRect = tester.getRect(
+      find.byKey(const Key('ticket-invitation-prompt')),
+    );
+    final labelRect = tester.getRect(
+      find.text('Always accept ticket invitations from this vendor'),
+    );
+
+    expect(labelRect.right, lessThanOrEqualTo(promptRect.right));
+    expect(labelRect.height, greaterThan(20));
+  });
+
   testWidgets('approved vendors auto-accept matching invitations', (
     tester,
   ) async {

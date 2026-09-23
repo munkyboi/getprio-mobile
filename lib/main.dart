@@ -1954,17 +1954,25 @@ class _CustomerShellState extends State<CustomerShell>
                 ),
                 if (canApproveVendor) ...[
                   const SizedBox(height: 16),
-                  Checkbox(
-                    key: const Key('always-accept-ticket-invitations'),
-                    state: alwaysAccept
-                        ? CheckboxState.checked
-                        : CheckboxState.unchecked,
-                    onChanged: (state) => setDialogState(
-                      () => alwaysAccept = state == CheckboxState.checked,
-                    ),
-                    trailing: const Text(
-                      'Always accept ticket invitations from this vendor',
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        key: const Key('always-accept-ticket-invitations'),
+                        state: alwaysAccept
+                            ? CheckboxState.checked
+                            : CheckboxState.unchecked,
+                        onChanged: (state) => setDialogState(
+                          () => alwaysAccept = state == CheckboxState.checked,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Always accept ticket invitations from this vendor',
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],
