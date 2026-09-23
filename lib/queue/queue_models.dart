@@ -46,6 +46,7 @@ class QueueTicket {
     required this.ticketNumber,
     required this.customerName,
     required this.status,
+    this.verificationCode,
     this.position,
     this.estimatedWaitMinutes,
     this.joinedAt,
@@ -63,6 +64,7 @@ class QueueTicket {
   final String? ticketNumber;
   final String customerName;
   final TicketStatus status;
+  final String? verificationCode;
   final int? position;
   final int? estimatedWaitMinutes;
   final DateTime? joinedAt;
@@ -105,6 +107,7 @@ class QueueTicket {
           ]) ??
           'Customer',
       status: status,
+      verificationCode: _asString(json['verificationCode']),
       position: status == TicketStatus.waiting ? rawPosition : null,
       estimatedWaitMinutes: status == TicketStatus.waiting ? rawWait : null,
       joinedAt: _asDate(json['joinedAt'] ?? json['createdAt']),
@@ -124,6 +127,7 @@ class QueueTicket {
   }
 
   QueueTicket copyWith({
+    String? verificationCode,
     String? vendorName,
     String? locationName,
     String? tenantSlug,
@@ -135,6 +139,7 @@ class QueueTicket {
       ticketNumber: ticketNumber,
       customerName: customerName,
       status: status,
+      verificationCode: verificationCode ?? this.verificationCode,
       position: position,
       estimatedWaitMinutes: estimatedWaitMinutes,
       joinedAt: joinedAt,

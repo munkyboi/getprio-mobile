@@ -107,4 +107,44 @@ class RestAccountQueueApi implements AccountQueueApi {
       queryParameters: {'page': '$page', 'limit': '$limit'},
     );
   }
+  Future<Map<String, dynamic>> _loadSandboxTickets({
+    required String view,
+    int limit = 20,
+  }) async {
+    final response = await client.get(
+      '/api/mobile/tickets',
+      queryParameters: {'view': view, 'limit': '$limit'},
+    );
+    final rawTickets = response['tickets'];
+    if (rawTickets is! List) return const {'tickets': <dynamic>[]};
+    return {
+      'tickets': rawTickets
+          .whereType<Map<String, dynamic>>()
+          .map(_sandboxTicketToQueueTicketJson)
+          .toList(growable: false),
+    };
+  }
+
+  Map<String, dynamic> _sandboxTicketToQueueTicketJson(
+    Map<String, dynamic> ticket,
+  ) {
+    final profile = ticket['profile'];
+    final profileJson = profile is Map<String, dynamic>
+        ? profile
+        : const <String, dynamic>{};
+    return {
+      'id': ticket['id'],
+      'lookupCode': ticket['external_reference'] ?? ticket['id'],
+      'ticketNumber': ticket['ticket_number'],
+      'verificationCode': ticket['verification_code'],
+      'customerName': 'Sandbox test user',
+      'status': ticket['status'],
+      'statusReason': ticket['status_reason'],
+      'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
+      'locationName': profileJson['location_name'],
+      'locationSlug': profileJson['location_slug'],
+      'joinedAt': ticket['issued_at'],
+      'updatedAt': ticket['updated_at'],
+    };
+  }
 }
