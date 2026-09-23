@@ -65,6 +65,10 @@ void main() {
       expect(ticket.ticketNumber, 'QUEUE-0001');
       expect(ticket.vendorName, 'Sandbox profile');
       expect(ticket.locationName, 'Sandbox queue');
+      expect(ticket.position, 4);
+      expect(ticket.estimatedWaitMinutes, 20);
+      expect(ticket.queueLength, 6);
+      expect(ticket.queueUpdatedAt, DateTime.parse('2026-09-23T00:05:00.000Z'));
       expect(ticket.status, TicketStatus.waiting);
     },
   );
@@ -458,6 +462,14 @@ class _TicketClaimApi implements JoinApi, TicketClaimApi {
           'location_name': 'Sandbox queue',
           'location_slug': 'main',
         },
+        'queue_position': {
+          'position': 4,
+          'people_ahead': 3,
+          'as_of': '2026-09-23T00:05:00.000Z',
+        },
+        'queue_length': 6,
+        'estimated_wait_minutes': 20,
+        'queue_updated_at': '2026-09-23T00:05:00.000Z',
         'issued_at': '2026-09-23T00:00:00.000Z',
         'updated_at': '2026-09-23T00:00:00.000Z',
       },

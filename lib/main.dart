@@ -5368,6 +5368,18 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                       ? 'Unavailable'
                                       : '${ticket.estimatedWaitMinutes} min',
                                 ),
+                                if (ticket.queueLength != null)
+                                  _TicketDetailRow(
+                                    label: 'Queue length',
+                                    value: '${ticket.queueLength} waiting',
+                                  ),
+                                if (ticket.queueUpdatedAt != null)
+                                  _TicketDetailRow(
+                                    label: 'Last queue update',
+                                    value: _formatTicketDateTime(
+                                      ticket.queueUpdatedAt!,
+                                    ),
+                                  ),
                                 if (ticket.customerFriendlyStatusReason != null)
                                   _TicketDetailRow(
                                     label: 'Note',
