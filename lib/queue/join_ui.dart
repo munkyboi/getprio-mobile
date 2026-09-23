@@ -9,6 +9,7 @@ import '../app_theme.dart';
 import '../form_validation.dart';
 import '../feedback_toast.dart';
 import '../auth/auth_repository.dart';
+import '../keyboard_avoidance.dart';
 import '../navigation/scroll_aware_app_bar.dart';
 import 'join_repository.dart';
 import 'payment_flow.dart';
@@ -92,7 +93,7 @@ class _JoinPageState extends State<JoinPage>
         : resendAt.difference(DateTime.now()).inSeconds + 1;
     final expired = challenge.expiresAt?.isBefore(DateTime.now()) ?? false;
     return Center(
-      child: SingleChildScrollView(
+      child: KeyboardAwareScrollView(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
@@ -108,20 +109,23 @@ class _JoinPageState extends State<JoinPage>
               ValidatedField(
                 validation: formValidation,
                 controller: _otpController,
-                child: TextField(
-                  key: const Key('queue-join-otp'),
-                  controller: _otpController,
-                  enabled: !_isBusy && !expired,
-                  keyboardType: TextInputType.number,
-                  autofillHints: const [AutofillHints.oneTimeCode],
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(6),
-                  ],
-                  onChanged: (value) {
-                    setState(() {});
-                    if (value.length == 6) unawaited(_verifyEmail());
-                  },
+                child: KeyboardAwareField(
+                  builder: (context, focusNode) => TextField(
+                    key: const Key('queue-join-otp'),
+                    controller: _otpController,
+                    focusNode: focusNode,
+                    enabled: !_isBusy && !expired,
+                    keyboardType: TextInputType.number,
+                    autofillHints: const [AutofillHints.oneTimeCode],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    onChanged: (value) {
+                      setState(() {});
+                      if (value.length == 6) unawaited(_verifyEmail());
+                    },
+                  ),
                 ),
               ),
               if (expired)

@@ -6,6 +6,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 import '../feedback_toast.dart';
+import '../keyboard_avoidance.dart';
 import '../queue/queue_models.dart';
 import 'vendor_social_repository.dart';
 
@@ -793,7 +794,7 @@ class _VendorRatingFormState extends State<VendorRatingForm> {
       title: Text('Rate ${widget.ticket.vendorName ?? 'vendor'}'),
       content: SizedBox(
         width: 340,
-        child: SingleChildScrollView(
+        child: KeyboardAwareScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -822,16 +823,19 @@ class _VendorRatingFormState extends State<VendorRatingForm> {
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: comment,
+              KeyboardAwareField(
                 focusNode: _commentFocus,
-                onTapOutside: (_) => _commentFocus.unfocus(),
-                enabled: !busy,
-                maxLines: 5,
-                maxLength: 500,
-                inputFormatters: [LengthLimitingTextInputFormatter(500)],
-                placeholder: const Text('Share your experience (optional)'),
-                onChanged: (_) => setState(() {}),
+                builder: (context, focusNode) => TextField(
+                  controller: comment,
+                  focusNode: focusNode,
+                  onTapOutside: (_) => _commentFocus.unfocus(),
+                  enabled: !busy,
+                  maxLines: 5,
+                  maxLength: 500,
+                  inputFormatters: [LengthLimitingTextInputFormatter(500)],
+                  placeholder: const Text('Share your experience (optional)'),
+                  onChanged: (_) => setState(() {}),
+                ),
               ),
               Text('${comment.text.characters.length}/500'),
               if (error != null) Text(error!),
