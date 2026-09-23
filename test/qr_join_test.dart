@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/queue/auth_queue_api.dart';
 import 'package:getprio_mobile/queue/join_repository.dart';
+import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -45,6 +46,28 @@ void main() {
     expect(payload.vendorSlug, isNull);
     expect(payload.locationSlug, isNull);
   });
+
+  test('recognizes a printed Sandbox ticket verification QR', () {
+    final payload = QrScanPayload.parse('ab12cd34', allowedHosts: hosts);
+
+    expect(payload, isA<QrTicketClaimPayload>());
+    expect((payload as QrTicketClaimPayload).verificationCode, 'AB12CD34');
+  });
+
+  test(
+    'claims a printed Sandbox ticket and maps tenant and location context',
+    () async {
+      final api = _TicketClaimApi();
+      final ticket = await JoinRepository(api)
+          .claimTicket(const QrTicketClaimPayload('AB12CD34'));
+
+      expect(api.lastCode, 'AB12CD34');
+      expect(ticket.ticketNumber, 'QUEUE-0001');
+      expect(ticket.vendorName, 'Sandbox profile');
+      expect(ticket.locationName, 'Sandbox queue');
+      expect(ticket.status, TicketStatus.waiting);
+    },
+  );
 
   test(
     'paid join result exposes checkout URL without claiming a ticket',
@@ -416,6 +439,41 @@ class FakeJoinApi implements JoinApi {
     if (joinError != null) throw joinError!;
     return joinResponse;
   }
+}
+
+class _TicketClaimApi implements JoinApi, TicketClaimApi {
+  String? lastCode;
+
+  @override
+  Future<Map<String, dynamic>> claimTicket(String verificationCode) async {
+    lastCode = verificationCode;
+    return {
+      'ticket': {
+        'id': '123e4567-e89b-42d3-a456-426614174000',
+        'ticket_number': 'QUEUE-0001',
+        'verification_code': 'AB12CD34',
+        'status': 'waiting',
+        'profile': {
+          'queue_name': 'Sandbox profile',
+          'location_name': 'Sandbox queue',
+          'location_slug': 'main',
+        },
+        'issued_at': '2026-09-23T00:00:00.000Z',
+        'updated_at': '2026-09-23T00:00:00.000Z',
+      },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> resolve(String locationQrId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Map<String, dynamic>> join({
+    required String locationQrId,
+    required String joinAttemptId,
+    required String customerName,
+  }) => throw UnimplementedError();
 }
 
 class _NoopAuthApi implements AuthApi {

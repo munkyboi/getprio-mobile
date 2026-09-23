@@ -19,16 +19,16 @@ void main() {
 
       await _openScanner(tester);
 
-      final joinFlowShell = find.byKey(const Key('join-flow-shell'));
-      final gesture = await tester.startGesture(const Offset(5, 320));
-      await gesture.moveBy(const Offset(120, 0));
-      await tester.pump();
-      expect(tester.getTopLeft(joinFlowShell).dx, greaterThan(0));
-      await gesture.up();
-      await tester.pumpAndSettle();
+    final joinFlowShell = find.byKey(const Key('join-flow-shell'));
+    final gesture = await tester.startGesture(const Offset(5, 320));
+    await gesture.moveBy(const Offset(120, 0));
+    await tester.pump();
+    expect(tester.getTopLeft(joinFlowShell).dx, greaterThan(0));
+    await gesture.up();
+    await tester.pumpAndSettle();
 
-      await tester.dragFrom(const Offset(5, 320), const Offset(300, 0));
-      await tester.pumpAndSettle();
+    await tester.dragFrom(const Offset(5, 320), const Offset(300, 0));
+    await tester.pumpAndSettle();
 
       expect(find.byType(QrScannerPage), findsNothing);
       expect(find.byType(JoinPage), findsNothing);
@@ -83,7 +83,11 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.image(const AssetImage('assets/illustrations/scan-invalid-qr-half-body-transparent-v3.png')),
+      find.image(
+        const AssetImage(
+          'assets/illustrations/scan-invalid-qr-half-body-transparent-v3.png',
+        ),
+      ),
       findsOneWidget,
     );
     final retry = find.byKey(const Key('invalid-qr-retry-button'));
@@ -99,12 +103,42 @@ void main() {
     expect(find.byKey(const Key('invalid-qr-scan-screen')), findsNothing);
     expect(find.byType(MobileScanner), findsOneWidget);
     scanner.onDetect!(
-      const BarcodeCapture(barcodes: [Barcode(
-        rawValue: 'https://app.getprio.test/join/acme/main?source=qr&id=123e4567-e89b-42d3-a456-426614174000',
-      )]),
+      const BarcodeCapture(
+        barcodes: [
+          Barcode(
+            rawValue: 'https://app.getprio.test/join/acme/main?source=qr&id=123e4567-e89b-42d3-a456-426614174000',
+          ),
+        ],
+      ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Queue API is not configured for this build.'), findsOneWidget);
+    expect(
+      find.text('Queue API is not configured for this build.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('live vendor QR is shown as invalid without throwing', (
+    tester,
+  ) async {
+    await _pumpScannerFlow(tester);
+    await _openScanner(tester);
+    final scanner = tester.widget<MobileScanner>(find.byType(MobileScanner));
+    scanner.onDetect!(
+      const BarcodeCapture(
+        barcodes: [
+          Barcode(rawValue: 'https://getprio.online/t/live-vendor-ticket'),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('invalid-qr-scan-screen')), findsOneWidget);
+    expect(
+      find.text('You seem to have scanned an invalid QR code.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('successful join opens ticket details with a queue notice', (
