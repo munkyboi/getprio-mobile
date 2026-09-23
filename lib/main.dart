@@ -1829,6 +1829,7 @@ class _CustomerShellState extends State<CustomerShell>
     widget.ticketRepository?.servedTicket.addListener(_promptServedTicket);
     widget.pushSignal?.addListener(_handlePushSignal);
     _startTicketRefreshFallback();
+    _loadPendingInvitationAfterFrame();
   }
 
   @override
@@ -1845,6 +1846,7 @@ class _CustomerShellState extends State<CustomerShell>
     if (state == AppLifecycleState.resumed) {
       widget.ticketRepository?.requestRefresh();
       _startTicketRefreshFallback();
+      _loadPendingInvitationAfterFrame();
     } else {
       _ticketRefreshTimer?.cancel();
       _ticketRefreshTimer = null;
@@ -1862,6 +1864,13 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   String? _lastInvitationNotificationId;
+  final Set<String> _promptedInvitationIds = <String>{};
+
+  void _loadPendingInvitationAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_presentTicketInvitation());
+    });
+  }
 
   void _handlePushSignal() {
     final signal = widget.pushSignal?.value;
@@ -1876,20 +1885,23 @@ class _CustomerShellState extends State<CustomerShell>
     unawaited(_presentTicketInvitation(signal));
   }
 
-  Future<void> _presentTicketInvitation(PushSignal signal) async {
+  Future<void> _presentTicketInvitation([PushSignal? signal]) async {
     final repository = widget.ticketRepository;
     if (repository == null) return;
     final invitations = await repository.loadPendingInvitations();
     if (!mounted || invitations.isEmpty) return;
 
     TicketInvitation invitation = invitations.first;
-    for (final candidate in invitations) {
-      if (candidate.id == signal.ticketRef ||
-          candidate.ticket.ticketNumber == signal.ticketRef) {
-        invitation = candidate;
-        break;
+    if (signal != null) {
+      for (final candidate in invitations) {
+        if (candidate.id == signal.ticketRef ||
+            candidate.ticket.ticketNumber == signal.ticketRef) {
+          invitation = candidate;
+          break;
+        }
       }
     }
+    if (!_promptedInvitationIds.add(invitation.id)) return;
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
 
