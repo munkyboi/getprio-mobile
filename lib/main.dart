@@ -4405,14 +4405,17 @@ class TicketsPage extends StatefulWidget {
 class _TicketsPageState extends State<TicketsPage> {
   late Future<List<QueueTicket>> _tickets;
   List<QueueTicket>? _visibleTickets;
+  List<TicketInvitation>? _visibleInvitations;
   int _loadGeneration = 0;
   String? _cancellingTicketId;
+  String? _acceptingInvitationId;
 
   @override
   void initState() {
     super.initState();
     widget.ticketRepository?.refreshVersion.addListener(_reload);
     _tickets = _loadTickets();
+    unawaited(_loadInvitations());
   }
 
   @override
@@ -4432,9 +4435,23 @@ class _TicketsPageState extends State<TicketsPage> {
     return tickets;
   }
 
+  Future<List<TicketInvitation>> _loadInvitations() async {
+    final repository = widget.ticketRepository;
+    if (repository == null) return const [];
+    try {
+      final invitations = await repository.loadPendingInvitations();
+      if (mounted) setState(() => _visibleInvitations = invitations);
+      return invitations;
+    } catch (_) {
+      if (mounted) setState(() => _visibleInvitations = const []);
+      return const [];
+    }
+  }
+
   void _reload() {
     if (!mounted) return;
     final tickets = _loadTickets();
+    unawaited(_loadInvitations());
     setState(() {
       _cancellingTicketId = null;
       _tickets = tickets;
@@ -4484,6 +4501,10 @@ class _TicketsPageState extends State<TicketsPage> {
               const SizedBox(height: 4),
               const Text('Active and historical queue tickets.'),
               const SizedBox(height: 20),
+              if (_visibleInvitations?.isNotEmpty == true) ...[
+                _ticketInvitationCard(_visibleInvitations!),
+                const SizedBox(height: 24),
+              ],
               if (isInitialLoading)
                 const TicketsSkeleton()
               else if (hasInitialError) ...[
@@ -4495,7 +4516,7 @@ class _TicketsPageState extends State<TicketsPage> {
                   onPressed: _reload,
                   child: const Text('Try again'),
                 ),
-              ] else if (snapshot.data?.isEmpty ?? true)
+              ] else if (tickets.isEmpty)
                 Card(
                   child: Column(
                     children: [
@@ -4528,6 +4549,103 @@ class _TicketsPageState extends State<TicketsPage> {
         );
       },
     );
+  }
+
+  Widget _ticketInvitationCard(List<TicketInvitation> invitations) {
+    return Card(
+      key: const Key('ticket-invitations'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('New ticket invitation').h3(),
+          const SizedBox(height: 6),
+          const Text(
+            'A queue ticket was created for your GetPrio email. Accept it to add it to your tickets.',
+          ),
+          const SizedBox(height: 16),
+          for (var index = 0; index < invitations.length; index++) ...[
+            if (index > 0) const Divider(),
+            _ticketInvitationRow(invitations[index]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _ticketInvitationRow(TicketInvitation invitation) {
+    final ticket = invitation.ticket;
+    final isAccepting = _acceptingInvitationId == invitation.id;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(ticket.vendorName ?? 'Queue ticket').h4(),
+        if (ticket.locationName != null) ...[
+          const SizedBox(height: 4),
+          Text(ticket.locationName!),
+        ],
+        const SizedBox(height: 4),
+        Text('Ticket #${ticket.ticketNumber ?? ticket.lookupCode}'),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: GetPrioActionButton.primary(
+                key: ValueKey('accept-ticket-invitation-${invitation.id}'),
+                onPressed: isAccepting
+                    ? null
+                    : () => _acceptInvitation(invitation),
+                child: Text(isAccepting ? 'Accepting...' : 'Accept ticket'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: GetPrioActionButton.outline(
+                onPressed: isAccepting
+                    ? null
+                    : () => setState(
+                        () => _visibleInvitations = _visibleInvitations
+                            ?.where((item) => item.id != invitation.id)
+                            .toList(growable: false),
+                      ),
+                child: const Text('Not now'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _acceptInvitation(TicketInvitation invitation) async {
+    final repository = widget.ticketRepository;
+    if (repository == null) return;
+    setState(() => _acceptingInvitationId = invitation.id);
+    try {
+      final acceptedTicket = await repository.acceptInvitation(invitation.id);
+      if (mounted) {
+        setState(() {
+          _acceptingInvitationId = null;
+          _visibleInvitations = _visibleInvitations
+              ?.where((item) => item.id != invitation.id)
+              .toList(growable: false);
+          final currentTickets = _visibleTickets ?? const <QueueTicket>[];
+          _visibleTickets = [
+            acceptedTicket,
+            ...currentTickets.where((ticket) => ticket.id != acceptedTicket.id),
+          ];
+        });
+        showFeedbackToast(context, message: 'Ticket accepted.');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _acceptingInvitationId = null);
+        showFeedbackToast(
+          context,
+          message: 'Could not accept ticket invitation.',
+          isError: true,
+        );
+      }
+    }
   }
 
   Widget _activeTicketCard(QueueTicket ticket) {

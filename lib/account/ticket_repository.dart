@@ -12,6 +12,20 @@ abstract interface class AccountQueueApi {
   });
 }
 
+abstract interface class TicketInvitationApi {
+  Future<Map<String, dynamic>> loadInvitations();
+
+  Future<Map<String, dynamic>> acceptInvitation(String ticketId);
+}
+
+class TicketInvitation {
+  const TicketInvitation({required this.ticket});
+
+  final QueueTicket ticket;
+
+  String get id => ticket.id;
+}
+
 class QueueTicketRepository {
   QueueTicketRepository(this.api);
 
@@ -56,6 +70,41 @@ class QueueTicketRepository {
     return tickets;
   }
 
+  Future<List<TicketInvitation>> loadPendingInvitations() async {
+    final invitationApi = api is TicketInvitationApi
+        ? api as TicketInvitationApi
+        : null;
+    if (invitationApi == null) return const [];
+    final rawInvitations = (await invitationApi
+        .loadInvitations())['invitations'];
+    if (rawInvitations is! List) return const [];
+    return rawInvitations
+        .whereType<Map<String, dynamic>>()
+        .map(
+          (invitation) => TicketInvitation(
+            ticket: QueueTicket.fromJson(_accountTicketJson(invitation)),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<QueueTicket> acceptInvitation(String ticketId) async {
+    final invitationApi = api is TicketInvitationApi
+        ? api as TicketInvitationApi
+        : null;
+    if (invitationApi == null) {
+      throw UnsupportedError('Ticket invitations are not available.');
+    }
+    final response = await invitationApi.acceptInvitation(ticketId);
+    final rawTicket = response['ticket'];
+    if (rawTicket is! Map<String, dynamic>) {
+      throw const FormatException('The accepted ticket response is invalid.');
+    }
+    final ticket = QueueTicket.fromJson(_accountTicketJson(rawTicket));
+    requestRefresh();
+    return ticket;
+  }
+
   Future<List<QueueTicket>> loadAllTickets({
     int historyPage = 1,
     int historyLimit = 20,
@@ -87,7 +136,28 @@ class QueueTicketRepository {
   }
 }
 
-class RestAccountQueueApi implements AccountQueueApi {
+Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
+  final profile = ticket['profile'];
+  final profileJson = profile is Map<String, dynamic>
+      ? profile
+      : const <String, dynamic>{};
+  return {
+    'id': ticket['id'],
+    'lookupCode': ticket['external_reference'] ?? ticket['id'],
+    'ticketNumber': ticket['ticket_number'],
+    'verificationCode': ticket['verification_code'],
+    'customerName': 'Sandbox test user',
+    'status': ticket['status'],
+    'statusReason': ticket['status_reason'],
+    'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
+    'locationName': profileJson['location_name'],
+    'locationSlug': profileJson['location_slug'],
+    'joinedAt': ticket['issued_at'],
+    'updatedAt': ticket['updated_at'],
+  };
+}
+
+class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
   RestAccountQueueApi(this.client, {this.sandbox = false});
 
   final AuthenticatedApiClient client;
@@ -113,6 +183,22 @@ class RestAccountQueueApi implements AccountQueueApi {
     );
   }
 
+  @override
+  Future<Map<String, dynamic>> loadInvitations() async {
+    if (!sandbox) return const {'invitations': <dynamic>[]};
+    return client.get('/api/mobile/ticket-invitations');
+  }
+
+  @override
+  Future<Map<String, dynamic>> acceptInvitation(String ticketId) {
+    if (!sandbox) {
+      throw UnsupportedError(
+        'Ticket invitations are only available in Sandbox.',
+      );
+    }
+    return client.post('/api/mobile/ticket-invitations/$ticketId/accept', {});
+  }
+
   Future<Map<String, dynamic>> _loadSandboxTickets({
     required String view,
     int limit = 20,
@@ -126,31 +212,8 @@ class RestAccountQueueApi implements AccountQueueApi {
     return {
       'tickets': rawTickets
           .whereType<Map<String, dynamic>>()
-          .map(_sandboxTicketToQueueTicketJson)
+          .map(_accountTicketJson)
           .toList(growable: false),
-    };
-  }
-
-  Map<String, dynamic> _sandboxTicketToQueueTicketJson(
-    Map<String, dynamic> ticket,
-  ) {
-    final profile = ticket['profile'];
-    final profileJson = profile is Map<String, dynamic>
-        ? profile
-        : const <String, dynamic>{};
-    return {
-      'id': ticket['id'],
-      'lookupCode': ticket['external_reference'] ?? ticket['id'],
-      'ticketNumber': ticket['ticket_number'],
-      'verificationCode': ticket['verification_code'],
-      'customerName': 'Sandbox test user',
-      'status': ticket['status'],
-      'statusReason': ticket['status_reason'],
-      'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
-      'locationName': profileJson['location_name'],
-      'locationSlug': profileJson['location_slug'],
-      'joinedAt': ticket['issued_at'],
-      'updatedAt': ticket['updated_at'],
     };
   }
 }
