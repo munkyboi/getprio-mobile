@@ -130,7 +130,6 @@ class GetPrioApp extends StatelessWidget {
             ),
             locale: 'en-PH',
             onSignal: (signal) async {
-              ticketRepository.requestRefresh();
               pushSignal.value = signal;
             },
           )
@@ -1837,9 +1836,12 @@ class _CustomerShellState extends State<CustomerShell>
 
   void _handlePushSignal() {
     final signal = widget.pushSignal?.value;
-    if (!mounted ||
-        signal == null ||
-        signal.eventType != 'developer_ticket_invitation' ||
+    if (!mounted || signal == null) {
+      return;
+    }
+
+    widget.ticketRepository?.requestRefresh();
+    if (signal.eventType != 'developer_ticket_invitation' ||
         signal.notificationId == _lastInvitationNotificationId) {
       return;
     }
