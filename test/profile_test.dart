@@ -239,7 +239,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Approved vendors'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Approved Vendors'), findsOneWidget);
+    expect(find.text('Acme Clinic'), findsNothing);
+    await tester.tap(find.byKey(const Key('profile-approved-vendors')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('profile-approved-vendors-sheet')),
+      findsOneWidget,
+    );
     expect(find.text('Acme Clinic'), findsOneWidget);
     final remove = find.byKey(
       const ValueKey('remove-approved-vendor-slug:acme'),
@@ -263,6 +271,10 @@ void main() {
     expect(await store.load('user-1'), isEmpty);
     expect(
       find.text('No vendors are approved for automatic acceptance.'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('profile-approved-vendors-sheet')),
       findsOneWidget,
     );
     await tester.pump(const Duration(seconds: 4));
@@ -378,6 +390,12 @@ void main() {
             )
             .first,
       );
+      await tester.drag(
+        find.byKey(const Key('account-page')),
+        const Offset(0, -240),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(action);
       await tester.tap(action);
       await tester.pumpAndSettle();
       final sheet = find.byKey(ValueKey('profile-${section.name}-sheet'));
