@@ -135,6 +135,30 @@ class GetPrioApp extends StatelessWidget {
           )
         : null;
     final lightTheme = GetPrioTheme.light();
+    final authGate = AuthGate(
+      authRepository: authRepository,
+      joinRepository: joinRepository,
+      paymentApi: paymentApi,
+      ticketRepository: ticketRepository,
+      queueRepository: QueueRepository(RestQueueApi(apiClient)),
+      directoryRepository: DirectoryRepository(
+        RestDirectoryApi(apiClient),
+      ),
+      settingsRepository: AccountSettingsRepository(
+        RestAccountSettingsApi(apiClient),
+      ),
+      securityRepository: SecurityRepository(RestSecurityApi(apiClient)),
+      profileRepository: AccountProfileRepository(
+        RestAccountProfileApi(apiClient),
+      ),
+      allowedHosts: environmentConfig.approvedHostSet,
+      sandbox: environmentConfig.isSandbox,
+      paymentLinkSource: AppPaymentLinkSource(),
+      pushCoordinator: pushCoordinator,
+      pushSignal: pushSignal,
+      oauthFlow: oauthFlow,
+      approvedVendorStore: approvedVendorStore,
+    );
     return ShadcnApp(
       title: environmentConfig.appName,
       debugShowCheckedModeBanner: false,
@@ -142,34 +166,13 @@ class GetPrioApp extends StatelessWidget {
       background: lightTheme.colorScheme.background,
       theme: lightTheme,
       home: GetPrioTheme.wrap(
-        OnboardingGate(
-          store: onboardingStore,
-          loading: const SplashLoadingScreen(),
-          child: AuthGate(
-            authRepository: authRepository,
-            joinRepository: joinRepository,
-            paymentApi: paymentApi,
-            ticketRepository: ticketRepository,
-            queueRepository: QueueRepository(RestQueueApi(apiClient)),
-            directoryRepository: DirectoryRepository(
-              RestDirectoryApi(apiClient),
-            ),
-            settingsRepository: AccountSettingsRepository(
-              RestAccountSettingsApi(apiClient),
-            ),
-            securityRepository: SecurityRepository(RestSecurityApi(apiClient)),
-            profileRepository: AccountProfileRepository(
-              RestAccountProfileApi(apiClient),
-            ),
-            allowedHosts: environmentConfig.approvedHostSet,
-            sandbox: environmentConfig.isSandbox,
-            paymentLinkSource: AppPaymentLinkSource(),
-            pushCoordinator: pushCoordinator,
-            pushSignal: pushSignal,
-            oauthFlow: oauthFlow,
-            approvedVendorStore: approvedVendorStore,
-          ),
-        ),
+        environmentConfig.isSandbox
+            ? authGate
+            : OnboardingGate(
+                store: onboardingStore,
+                loading: const SplashLoadingScreen(),
+                child: authGate,
+              ),
       ),
     );
   }
