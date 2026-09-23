@@ -66,6 +66,29 @@ void main() {
     expect(find.byKey(const Key('ticket-invitation-prompt')), findsNothing);
     expect(find.byKey(const Key('ticket-invitations')), findsOneWidget);
   });
+
+  testWidgets(
+    'pending invitation is discovered while the app remains in the foreground',
+    (tester) async {
+      final api = _InvitationApi()..includeInvitation = false;
+
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: CustomerShell(
+            ticketRepository: QueueTicketRepository(api),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      api.includeInvitation = true;
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('ticket-invitation-prompt')), findsOneWidget);
+      expect(find.textContaining('Ticket #QUEUE-0001.'), findsOneWidget);
+    },
+  );
 }
 
 class _InvitationApi implements AccountQueueApi, TicketInvitationApi {
