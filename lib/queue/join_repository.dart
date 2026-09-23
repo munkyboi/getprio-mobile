@@ -4,7 +4,7 @@ import '../auth/auth_repository.dart';
 import 'auth_queue_api.dart';
 import 'queue_models.dart';
 
-class QrJoinPayload {
+class QrJoinPayload extends QrScanPayload {
   const QrJoinPayload({
     required this.locationQrId,
     required this.host,
@@ -310,6 +310,24 @@ String? _joinPlainText(String? html) {
   return lines.isEmpty ? null : lines.join('\n');
 }
 
+abstract class QrScanPayload {
+  const QrScanPayload();
+
+  static QrScanPayload parse(String raw, {required Set<String> allowedHosts}) {
+    final normalized = raw.trim();
+    if (RegExp(r'^[a-f0-9]{8}$', caseSensitive: false).hasMatch(normalized)) {
+      return QrTicketClaimPayload(normalized.toUpperCase());
+    }
+    return QrJoinPayload.parse(normalized, allowedHosts: allowedHosts);
+  }
+}
+
+class QrTicketClaimPayload extends QrScanPayload {
+  const QrTicketClaimPayload(this.verificationCode);
+
+  final String verificationCode;
+}
+
 abstract interface class JoinApi {
   Future<Map<String, dynamic>> resolve(String locationQrId);
 
@@ -318,6 +336,10 @@ abstract interface class JoinApi {
     required String joinAttemptId,
     required String customerName,
   });
+}
+
+abstract interface class TicketClaimApi {
+  Future<Map<String, dynamic>> claimTicket(String verificationCode);
 }
 
 abstract interface class DirectJoinApi {
@@ -413,6 +435,23 @@ class JoinRepository {
 
   Future<JoinPreview> resolve(QrJoinPayload payload) async {
     return JoinPreview.fromJson(await api.resolve(payload.locationQrId));
+  }
+
+  Future<QueueTicket> claimTicket(QrTicketClaimPayload payload) async {
+    final claimApi = api is TicketClaimApi ? api as TicketClaimApi : null;
+    if (claimApi == null) {
+      throw const ApiException(
+        501,
+        'TICKET_CLAIM_UNAVAILABLE',
+        'Printed ticket QR claims are not configured for this build.',
+      );
+    }
+    final response = await claimApi.claimTicket(payload.verificationCode);
+    final ticket = response['ticket'];
+    if (ticket is! Map<String, dynamic>) {
+      throw const FormatException('The ticket QR response is incomplete.');
+    }
+    return QueueTicket.fromJson(_claimTicketJson(ticket));
   }
 
   Future<JoinResult> join({
@@ -671,7 +710,8 @@ bool _isQueueUnavailableApiCode(String? code) {
           code.startsWith('SUBSCRIPTION_'));
 }
 
-class RestJoinApi implements JoinApi, DirectJoinApi, JoinOtpApi {
+class RestJoinApi
+    implements JoinApi, DirectJoinApi, JoinOtpApi, TicketClaimApi {
   RestJoinApi(this.client);
 
   final AuthenticatedApiClient client;
@@ -721,6 +761,13 @@ class RestJoinApi implements JoinApi, DirectJoinApi, JoinOtpApi {
   }
 
   @override
+  Future<Map<String, dynamic>> claimTicket(String verificationCode) {
+    return client.post('/api/mobile/ticket-claims', {
+      'verification_code': verificationCode.trim().toUpperCase(),
+    });
+  }
+
+  @override
   Future<Map<String, dynamic>> join({
     required String locationQrId,
     required String joinAttemptId,
@@ -755,4 +802,26 @@ class RestJoinApi implements JoinApi, DirectJoinApi, JoinOtpApi {
       additionalHeaders: {'Idempotency-Key': joinAttemptId},
     );
   }
+}
+
+Map<String, dynamic> _claimTicketJson(Map<String, dynamic> ticket) {
+  final profile = ticket['profile'];
+  final profileJson = profile is Map<String, dynamic>
+      ? profile
+      : const <String, dynamic>{};
+  return {
+    'id': ticket['id'],
+    'lookupCode': ticket['external_reference'] ?? ticket['id'],
+    'ticketNumber': ticket['ticket_number'],
+    'verificationCode': ticket['verification_code'],
+    'customerName': 'Sandbox test user',
+    'status': ticket['status'],
+    'statusReason': ticket['status_reason'],
+    'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
+    'tenantSlug': profileJson['tenant_slug'] ?? profileJson['tenantSlug'],
+    'locationName': profileJson['location_name'],
+    'locationSlug': profileJson['location_slug'],
+    'joinedAt': ticket['issued_at'],
+    'updatedAt': ticket['updated_at'],
+  };
 }

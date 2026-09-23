@@ -46,6 +46,7 @@ class _JoinPageState extends State<JoinPage>
     with FormValidationMixin<JoinPage> {
   final _drawerAnchorKey = GlobalKey();
   QrJoinPayload? _payload;
+  QrTicketClaimPayload? _ticketPayload;
   JoinPreview? _preview;
   JoinedTicket? _joinedTicket;
   PaymentRequired? _payment;
@@ -314,7 +315,11 @@ class _JoinPageState extends State<JoinPage>
                 ),
               ),
               const SizedBox(height: 20),
-              const Text('Could not open this queue').h3(),
+              Text(
+                _ticketPayload == null
+                    ? 'Could not open this queue'
+                    : 'Could not add this ticket',
+              ).h3(),
               const SizedBox(height: 8),
               Text(error),
               const SizedBox(height: 24),
@@ -375,21 +380,42 @@ class _JoinPageState extends State<JoinPage>
     );
   }
 
-  Future<void> _handleScannedPayload(QrJoinPayload payload) async {
+  Future<void> _handleScannedPayload(QrScanPayload payload) async {
     if (!mounted) return;
     final repository = widget.repository;
     if (repository == null) {
       setState(() => _error = 'Queue API is not configured for this build.');
       return;
     }
+    if (payload is QrTicketClaimPayload) {
+      setState(() {
+        _ticketPayload = payload;
+        _payload = null;
+        _preview = null;
+        _error = null;
+        _isBusy = true;
+      });
+      try {
+        final ticket = await repository.claimTicket(payload);
+        if (mounted) _handleJoinResult(JoinedTicket(ticket));
+      } catch (error) {
+        if (mounted) setState(() => _error = _messageFor(error));
+      } finally {
+        if (mounted) setState(() => _isBusy = false);
+      }
+      return;
+    }
+    if (payload is! QrJoinPayload) return;
+    final joinPayload = payload;
     setState(() {
-      _payload = payload;
+      _ticketPayload = null;
+      _payload = joinPayload;
       _preview = null;
       _error = null;
       _isBusy = true;
     });
     try {
-      final preview = await repository.resolve(payload);
+      final preview = await repository.resolve(joinPayload);
       if (mounted) setState(() => _preview = preview);
     } catch (error) {
       if (mounted) setState(() => _error = _messageFor(error));
@@ -563,6 +589,7 @@ class _JoinPageState extends State<JoinPage>
 
   void _reset() {
     _payload = null;
+    _ticketPayload = null;
     _preview = null;
     _joinedTicket = null;
     _payment = null;
@@ -1165,7 +1192,7 @@ class QrScannerPage extends StatefulWidget {
 
   final Set<String> allowedHosts;
   final bool showAppBar;
-  final ValueChanged<QrJoinPayload>? onPayload;
+  final ValueChanged<QrScanPayload>? onPayload;
   final VoidCallback? onBack;
 
   @override
@@ -1252,12 +1279,16 @@ class _QrScannerPageState extends State<QrScannerPage> {
         .firstOrNull;
     if (raw == null) return;
     try {
-      final payload = QrJoinPayload.parse(
+      final payload = QrScanPayload.parse(
         raw,
         allowedHosts: widget.allowedHosts,
       );
       _handled = true;
-      _controller.stop();
+      try {
+        _controller.stop();
+      } catch (_) {
+        // The camera may already have been torn down while the callback ran.
+      }
       if (mounted) {
         final onPayload = widget.onPayload;
         if (onPayload != null) {
@@ -1266,10 +1297,20 @@ class _QrScannerPageState extends State<QrScannerPage> {
           Navigator.of(context).pop(payload);
         }
       }
-    } on QrValidationException catch (error) {
+    } catch (error) {
       _handled = true;
-      _controller.stop();
-      if (mounted) setState(() => _error = error.message);
+      try {
+        _controller.stop();
+      } catch (_) {
+        // The camera may already have been torn down while the callback ran.
+      }
+      if (mounted) {
+        setState(
+          () => _error = error is QrValidationException
+              ? error.message
+              : 'This QR code is not supported.',
+        );
+      }
     }
   }
 
@@ -1302,7 +1343,10 @@ class _InvalidQrScanState extends StatelessWidget {
                   padding: const EdgeInsets.all(24),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight: (constraints.maxHeight - 48).clamp(0, double.infinity),
+                      minHeight: (constraints.maxHeight - 48).clamp(
+                        0,
+                        double.infinity,
+                      ),
                     ),
                     child: Center(
                       child: ConstrainedBox(
