@@ -1832,6 +1832,7 @@ class _CustomerShellState extends State<CustomerShell>
     with WidgetsBindingObserver {
   CustomerDestination _selectedDestination = CustomerDestination.home;
   Timer? _ticketRefreshTimer;
+  Timer? _invitationRefreshTimer;
 
   @override
   void initState() {
@@ -1840,6 +1841,7 @@ class _CustomerShellState extends State<CustomerShell>
     widget.ticketRepository?.servedTicket.addListener(_promptServedTicket);
     widget.pushSignal?.addListener(_handlePushSignal);
     _startTicketRefreshFallback();
+    _startInvitationRefreshFallback();
     _loadPendingInvitationAfterFrame();
   }
 
@@ -1847,6 +1849,7 @@ class _CustomerShellState extends State<CustomerShell>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticketRefreshTimer?.cancel();
+    _invitationRefreshTimer?.cancel();
     widget.ticketRepository?.servedTicket.removeListener(_promptServedTicket);
     widget.pushSignal?.removeListener(_handlePushSignal);
     super.dispose();
@@ -1857,10 +1860,13 @@ class _CustomerShellState extends State<CustomerShell>
     if (state == AppLifecycleState.resumed) {
       widget.ticketRepository?.requestRefresh();
       _startTicketRefreshFallback();
+      _startInvitationRefreshFallback();
       _loadPendingInvitationAfterFrame();
     } else {
       _ticketRefreshTimer?.cancel();
       _ticketRefreshTimer = null;
+      _invitationRefreshTimer?.cancel();
+      _invitationRefreshTimer = null;
     }
   }
 
@@ -2054,9 +2060,17 @@ class _CustomerShellState extends State<CustomerShell>
     _ticketRefreshTimer?.cancel();
     final repository = widget.ticketRepository;
     if (repository == null) return;
-    _ticketRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _ticketRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       if (!mounted) return;
       if (repository.hasActiveTickets) repository.requestRefresh();
+    });
+  }
+
+  void _startInvitationRefreshFallback() {
+    _invitationRefreshTimer?.cancel();
+    if (widget.ticketRepository == null) return;
+    _invitationRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
       // Push delivery is best-effort. Keep checking pending invitations while
       // the app is foregrounded so a missed invitation push is recoverable.
       unawaited(_presentTicketInvitation());
