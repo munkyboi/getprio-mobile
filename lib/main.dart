@@ -24,6 +24,7 @@ import 'auth/password_utils.dart';
 import 'auth/username_utils.dart';
 import 'account/ticket_repository.dart';
 import 'account/account_settings_repository.dart';
+import 'account/approved_vendor_store.dart';
 import 'account/phone_formatting.dart';
 import 'account/profile_repository.dart';
 import 'account/security_repository.dart';
@@ -72,18 +73,21 @@ class GetPrioApp extends StatelessWidget {
     this.firebaseEnabled = false,
     this.onboardingStore = const InstallationOnboardingStore(),
     MobileEnvironmentConfig? environmentConfig,
+    ApprovedVendorStore? approvedVendorStore,
   }) : authRepository =
            authRepository ??
            _defaultAuthRepository(
              environmentConfig ?? MobileEnvironmentConfig.fromCompileTime(),
            ),
        environmentConfig =
-           environmentConfig ?? MobileEnvironmentConfig.fromCompileTime();
+           environmentConfig ?? MobileEnvironmentConfig.fromCompileTime(),
+       approvedVendorStore = approvedVendorStore ?? SecureApprovedVendorStore();
 
   final AuthRepository authRepository;
   final bool firebaseEnabled;
   final OnboardingStore onboardingStore;
   final MobileEnvironmentConfig environmentConfig;
+  final ApprovedVendorStore approvedVendorStore;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +167,7 @@ class GetPrioApp extends StatelessWidget {
             pushCoordinator: pushCoordinator,
             pushSignal: pushSignal,
             oauthFlow: oauthFlow,
+            approvedVendorStore: approvedVendorStore,
           ),
         ),
       ),
@@ -216,6 +221,7 @@ class AuthGate extends StatefulWidget {
     this.pushCoordinator,
     this.pushSignal,
     this.oauthFlow,
+    this.approvedVendorStore,
     this.sandbox = false,
   });
 
@@ -233,6 +239,7 @@ class AuthGate extends StatefulWidget {
   final PushCoordinator? pushCoordinator;
   final ValueNotifier<PushSignal?>? pushSignal;
   final OAuthFlow? oauthFlow;
+  final ApprovedVendorStore? approvedVendorStore;
   final bool sandbox;
 
   @override
@@ -301,6 +308,7 @@ class _AuthGateState extends State<AuthGate> {
         allowedHosts: widget.allowedHosts,
         paymentLinkSource: widget.paymentLinkSource,
         pushSignal: widget.pushSignal,
+        approvedVendorStore: widget.approvedVendorStore,
         onSignOut: () => unawaited(_signOut()),
       );
     }
@@ -329,6 +337,7 @@ class _AuthGateState extends State<AuthGate> {
             allowedHosts: widget.allowedHosts,
             paymentLinkSource: widget.paymentLinkSource,
             pushSignal: widget.pushSignal,
+            approvedVendorStore: widget.approvedVendorStore,
             onSignOut: () => unawaited(_signOut()),
           );
         }
@@ -1793,6 +1802,7 @@ class CustomerShell extends StatefulWidget {
     this.onUserUpdated,
     this.paymentLinkSource,
     this.pushSignal,
+    this.approvedVendorStore,
     this.allowedHosts = const {},
     this.sandbox = false,
   });
@@ -1811,6 +1821,7 @@ class CustomerShell extends StatefulWidget {
   final Set<String> allowedHosts;
   final PaymentLinkSource? paymentLinkSource;
   final ValueNotifier<PushSignal?>? pushSignal;
+  final ApprovedVendorStore? approvedVendorStore;
   final bool sandbox;
 
   @override
@@ -1865,6 +1876,7 @@ class _CustomerShellState extends State<CustomerShell>
 
   String? _lastInvitationNotificationId;
   final Set<String> _promptedInvitationIds = <String>{};
+  final Set<String> _acceptingApprovedInvitationIds = <String>{};
 
   void _loadPendingInvitationAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1888,7 +1900,10 @@ class _CustomerShellState extends State<CustomerShell>
   Future<void> _presentTicketInvitation([PushSignal? signal]) async {
     final repository = widget.ticketRepository;
     if (repository == null) return;
-    final invitations = await repository.loadPendingInvitations();
+    var invitations = await repository.loadPendingInvitations();
+    if (!mounted || invitations.isEmpty) return;
+
+    invitations = await _acceptApprovedInvitations(repository, invitations);
     if (!mounted || invitations.isEmpty) return;
 
     TicketInvitation invitation = invitations.first;
@@ -1908,49 +1923,123 @@ class _CustomerShellState extends State<CustomerShell>
     await showOverlay<bool>(
       context,
       DialogConfiguration(),
-      builder: (dialogContext) => AlertDialog(
-        key: const Key('ticket-invitation-prompt'),
-        leading: const Icon(LucideIcons.ticket),
-        title: const Text('New ticket invitation'),
-        content: Text(
-          invitation.ticket.locationName == null
-              ? '${invitation.ticket.vendorName ?? 'A queue'} created ticket '
-                    '#${invitation.ticket.ticketNumber ?? invitation.ticket.lookupCode}. '
-                    'Would you like to add it to your tickets?'
-              : '${invitation.ticket.vendorName ?? 'A queue'} · '
-                    '${invitation.ticket.locationName}\n'
-                    'Ticket #${invitation.ticket.ticketNumber ?? invitation.ticket.lookupCode}. '
-                    'Would you like to add it to your tickets?',
-        ),
-        actions: [
-          GetPrioActionButton.outline(
-            onPressed: () => closeOverlay(dialogContext, false),
-            child: const Text('Not now'),
+      builder: (dialogContext) {
+        var alwaysAccept = false;
+        final canApproveVendor =
+            widget.sandbox &&
+            widget.approvedVendorStore != null &&
+            widget.user?.id.trim().isNotEmpty == true;
+        final approvedVendor = ApprovedVendor.fromTicket(
+          tenantSlug: invitation.ticket.tenantSlug,
+          vendorName: invitation.ticket.vendorName,
+        );
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            key: const Key('ticket-invitation-prompt'),
+            leading: const Icon(LucideIcons.ticket),
+            title: const Text('New ticket invitation'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  invitation.ticket.locationName == null
+                      ? '${invitation.ticket.vendorName ?? 'A queue'} created ticket '
+                            '#${invitation.ticket.ticketNumber ?? invitation.ticket.lookupCode}. '
+                            'Would you like to add it to your tickets?'
+                      : '${invitation.ticket.vendorName ?? 'A queue'} · '
+                            '${invitation.ticket.locationName}\n'
+                            'Ticket #${invitation.ticket.ticketNumber ?? invitation.ticket.lookupCode}. '
+                            'Would you like to add it to your tickets?',
+                ),
+                if (canApproveVendor) ...[
+                  const SizedBox(height: 16),
+                  Checkbox(
+                    key: const Key('always-accept-ticket-invitations'),
+                    state: alwaysAccept
+                        ? CheckboxState.checked
+                        : CheckboxState.unchecked,
+                    onChanged: (state) => setDialogState(
+                      () => alwaysAccept = state == CheckboxState.checked,
+                    ),
+                    trailing: const Text(
+                      'Always accept ticket invitations from this vendor',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              GetPrioActionButton.outline(
+                onPressed: () => closeOverlay(dialogContext, false),
+                child: const Text('Not now'),
+              ),
+              GetPrioActionButton.primary(
+                onPressed: () async {
+                  try {
+                    await repository.acceptInvitation(invitation.id);
+                    if (alwaysAccept && canApproveVendor) {
+                      await widget.approvedVendorStore!.add(
+                        widget.user!.id,
+                        approvedVendor,
+                      );
+                    }
+                    if (!dialogContext.mounted) return;
+                    closeOverlay(dialogContext, true);
+                    if (mounted) {
+                      showFeedbackToast(context, message: 'Ticket accepted.');
+                    }
+                  } catch (_) {
+                    if (mounted) {
+                      showFeedbackToast(
+                        context,
+                        message: 'Could not accept ticket invitation.',
+                        isError: true,
+                      );
+                    }
+                  }
+                },
+                child: const Text('Accept ticket'),
+              ),
+            ],
           ),
-          GetPrioActionButton.primary(
-            onPressed: () async {
-              try {
-                await repository.acceptInvitation(invitation.id);
-                if (!dialogContext.mounted) return;
-                closeOverlay(dialogContext, true);
-                if (mounted) {
-                  showFeedbackToast(context, message: 'Ticket accepted.');
-                }
-              } catch (_) {
-                if (mounted) {
-                  showFeedbackToast(
-                    context,
-                    message: 'Could not accept ticket invitation.',
-                    isError: true,
-                  );
-                }
-              }
-            },
-            child: const Text('Accept ticket'),
-          ),
-        ],
-      ),
+        );
+      },
     ).future;
+  }
+
+  Future<List<TicketInvitation>> _acceptApprovedInvitations(
+    QueueTicketRepository repository,
+    List<TicketInvitation> invitations,
+  ) async {
+    final store = widget.approvedVendorStore;
+    final accountId = widget.user?.id;
+    if (!widget.sandbox || store == null || accountId == null) {
+      return invitations;
+    }
+    final approved = await store.load(accountId);
+    if (approved.isEmpty) return invitations;
+    final remaining = <TicketInvitation>[];
+    for (final invitation in invitations) {
+      final vendor = ApprovedVendor.fromTicket(
+        tenantSlug: invitation.ticket.tenantSlug,
+        vendorName: invitation.ticket.vendorName,
+      );
+      if (!approved.any((item) => item.key == vendor.key)) {
+        remaining.add(invitation);
+        continue;
+      }
+      if (!_acceptingApprovedInvitationIds.add(invitation.id)) continue;
+      try {
+        await repository.acceptInvitation(invitation.id);
+        repository.requestRefresh();
+      } catch (_) {
+        remaining.add(invitation);
+      } finally {
+        _acceptingApprovedInvitationIds.remove(invitation.id);
+      }
+    }
+    return remaining;
   }
 
   void _startTicketRefreshFallback() {
@@ -2016,6 +2105,7 @@ class _CustomerShellState extends State<CustomerShell>
                 securityRepository: widget.securityRepository,
                 profileRepository: widget.profileRepository,
                 onUserUpdated: widget.onUserUpdated,
+                approvedVendorStore: widget.approvedVendorStore,
                 sandbox: widget.sandbox,
               ),
             ],
@@ -5702,6 +5792,7 @@ class AccountPage extends StatefulWidget {
     this.securityRepository,
     this.profileRepository,
     this.onUserUpdated,
+    this.approvedVendorStore,
     this.sandbox = false,
   });
 
@@ -5713,6 +5804,7 @@ class AccountPage extends StatefulWidget {
   final SecurityRepository? securityRepository;
   final AccountProfileRepository? profileRepository;
   final ValueChanged<AuthUser>? onUserUpdated;
+  final ApprovedVendorStore? approvedVendorStore;
   final bool sandbox;
 
   @override
@@ -5723,12 +5815,14 @@ class _AccountPageState extends State<AccountPage> {
   AuthUser? _user;
   bool _avatarBusy = false;
   Future<NotificationSettings?>? _notificationSettingsFuture;
+  Future<List<ApprovedVendor>>? _approvedVendorsFuture;
 
   @override
   void initState() {
     super.initState();
     _user = widget.user;
     _primeNotificationSettings();
+    _primeApprovedVendors();
   }
 
   @override
@@ -5737,6 +5831,10 @@ class _AccountPageState extends State<AccountPage> {
     if (widget.user != oldWidget.user) _user = widget.user;
     if (widget.settingsRepository != oldWidget.settingsRepository) {
       _primeNotificationSettings();
+    }
+    if (widget.approvedVendorStore != oldWidget.approvedVendorStore ||
+        widget.user?.id != oldWidget.user?.id) {
+      _primeApprovedVendors();
     }
   }
 
@@ -5829,6 +5927,16 @@ class _AccountPageState extends State<AccountPage> {
                   onPressed: () => _openNotificationsSheet(overlayContext),
                 ),
                 const Divider(),
+                if (widget.sandbox && widget.approvedVendorStore != null) ...[
+                  const Text('Approved vendors').h3(),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Ticket invitations from these vendors are accepted automatically.',
+                  ),
+                  const SizedBox(height: 8),
+                  _approvedVendorsContent(overlayContext),
+                  const Divider(),
+                ],
                 const SizedBox(height: 20),
                 const Text('Security').h3(),
                 const SizedBox(height: 8),
@@ -5940,6 +6048,108 @@ class _AccountPageState extends State<AccountPage> {
     _notificationSettingsFuture = widget.settingsRepository == null
         ? null
         : _loadNotificationSettings();
+  }
+
+  void _primeApprovedVendors() {
+    final store = widget.approvedVendorStore;
+    final accountId = widget.user?.id;
+    _approvedVendorsFuture =
+        widget.sandbox && store != null && accountId != null
+        ? store.load(accountId)
+        : null;
+  }
+
+  Widget _approvedVendorsContent(BuildContext context) {
+    final future = _approvedVendorsFuture;
+    if (future == null) return const SizedBox.shrink();
+    return FutureBuilder<List<ApprovedVendor>>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Text('Loading approved vendors...');
+        }
+        final vendors = snapshot.data ?? const <ApprovedVendor>[];
+        if (vendors.isEmpty) {
+          return const Text(
+            'No vendors are approved for automatic acceptance.',
+          );
+        }
+        return Card(
+          key: const Key('approved-vendors-list'),
+          child: Column(
+            children: [
+              for (var index = 0; index < vendors.length; index++) ...[
+                if (index > 0) const Divider(),
+                Row(
+                  key: ValueKey('approved-vendor-${vendors[index].key}'),
+                  children: [
+                    Expanded(child: Text(vendors[index].name)),
+                    GhostButton(
+                      key: ValueKey(
+                        'remove-approved-vendor-${vendors[index].key}',
+                      ),
+                      density: ButtonDensity.icon,
+                      onPressed: () =>
+                          _confirmRemoveApprovedVendor(context, vendors[index]),
+                      child: const Icon(LucideIcons.trash2),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmRemoveApprovedVendor(
+    BuildContext context,
+    ApprovedVendor vendor,
+  ) async {
+    final confirmed = await showOverlay<bool>(
+      context,
+      const DialogConfiguration(),
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('approved-vendor-remove-dialog'),
+        leading: const Icon(LucideIcons.trash2),
+        title: const Text('Remove approved vendor?'),
+        content: Text(
+          'New ticket invitations from ${vendor.name} will ask before being added again.',
+        ),
+        actions: [
+          GetPrioActionButton.outline(
+            key: const Key('approved-vendor-remove-cancel'),
+            onPressed: () => closeOverlay(dialogContext, false),
+            child: const Text('Keep vendor'),
+          ),
+          GetPrioActionButton.destructive(
+            key: const Key('approved-vendor-remove-confirm'),
+            onPressed: () => closeOverlay(dialogContext, true),
+            child: const Text('Remove vendor'),
+          ),
+        ],
+      ),
+    ).future;
+    if (confirmed != true || !mounted) return;
+    final store = widget.approvedVendorStore;
+    final accountId = _user?.id ?? widget.user?.id;
+    if (store == null || accountId == null) return;
+    final feedbackContext = context;
+    try {
+      await store.remove(accountId, vendor.key);
+      if (!feedbackContext.mounted) return;
+      setState(() => _primeApprovedVendors());
+      showFeedbackToast(feedbackContext, message: 'Approved vendor removed.');
+    } catch (_) {
+      if (feedbackContext.mounted) {
+        showFeedbackToast(
+          feedbackContext,
+          message: 'Could not remove approved vendor.',
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<NotificationSettings?> _loadNotificationSettings() async {
