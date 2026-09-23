@@ -34,11 +34,11 @@ void main() {
                   'id': 'developer-ticket-1',
                   'ticket_number': 'A-001',
                   'source': 'developer_api',
-                  'display_label': 'Sandbox queue',
+                  'display_label': 'A-001',
                   'status': 'served',
                   'profile': {
-                    'queue_name': 'Sandbox queue',
-                    'location_name': null,
+                    'queue_name': 'Sandbox profile',
+                    'location_name': 'Main location',
                     'location_slug': 'main',
                   },
                   'issued_at': '2026-09-22T00:00:00.000Z',
@@ -66,7 +66,8 @@ void main() {
       expect(tickets, hasLength(1));
       expect(tickets.single.id, 'developer-ticket-1');
       expect(tickets.single.ticketNumber, 'A-001');
-      expect(tickets.single.vendorName, 'Sandbox queue');
+      expect(tickets.single.vendorName, 'Sandbox profile');
+      expect(tickets.single.locationName, 'Main location');
       expect(tickets.single.status, TicketStatus.served);
     },
   );
