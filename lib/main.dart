@@ -2064,6 +2064,7 @@ class _CustomerShellState extends State<CustomerShell>
                 ticketRepository: widget.ticketRepository,
                 queueRepository: widget.queueRepository,
                 directoryRepository: widget.directoryRepository,
+                sandbox: widget.sandbox,
               ),
               AccountPage(
                 socialRepository: widget.directoryRepository?.social,
@@ -2186,6 +2187,7 @@ class _CustomerShellState extends State<CustomerShell>
               ticketRepository: widget.ticketRepository,
               directoryRepository: widget.directoryRepository,
               queueRepository: widget.queueRepository,
+              sandbox: widget.sandbox,
               showJoinConfirmation: true,
               onCancel:
                   ticket.canBeCancelled &&
@@ -2208,6 +2210,7 @@ class _CustomerShellState extends State<CustomerShell>
           ticketRepository: widget.ticketRepository,
           directoryRepository: widget.directoryRepository,
           queueRepository: widget.queueRepository,
+          sandbox: widget.sandbox,
           onCancel:
               ticket.canBeCancelled &&
                   ticket.tenantSlug != null &&
@@ -4567,11 +4570,13 @@ class TicketsPage extends StatefulWidget {
     this.ticketRepository,
     this.queueRepository,
     this.directoryRepository,
+    this.sandbox = false,
   });
 
   final QueueTicketRepository? ticketRepository;
   final QueueRepository? queueRepository;
   final DirectoryRepository? directoryRepository;
+  final bool sandbox;
 
   @override
   State<TicketsPage> createState() => _TicketsPageState();
@@ -4952,8 +4957,10 @@ class _TicketsPageState extends State<TicketsPage> {
       SwipeBackPageRoute<void>(
         builder: (context) => TicketDetailsPage(
           ticket: ticket,
+          ticketRepository: widget.ticketRepository,
           directoryRepository: widget.directoryRepository,
           queueRepository: widget.queueRepository,
+          sandbox: widget.sandbox,
           onCancel: ticket.canBeCancelled
               ? () => _confirmCancellation(ticket)
               : null,
@@ -5039,6 +5046,7 @@ class TicketDetailsPage extends StatefulWidget {
     this.ticketRepository,
     this.directoryRepository,
     this.queueRepository,
+    this.sandbox = false,
     this.onCancel,
   });
 
@@ -5047,6 +5055,7 @@ class TicketDetailsPage extends StatefulWidget {
   final QueueTicketRepository? ticketRepository;
   final DirectoryRepository? directoryRepository;
   final QueueRepository? queueRepository;
+  final bool sandbox;
   final Future<QueueTicket?> Function()? onCancel;
 
   @override
@@ -5102,7 +5111,10 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     final vendor = await _loadVendor(ticket);
     final repository = widget.queueRepository;
     final tenantSlug = ticket.tenantSlug;
-    if (repository == null || tenantSlug == null || ticket.lookupCode.isEmpty) {
+    if (widget.sandbox ||
+        repository == null ||
+        tenantSlug == null ||
+        ticket.lookupCode.isEmpty) {
       return _TicketDetailsData(ticket: ticket, vendor: vendor);
     }
 

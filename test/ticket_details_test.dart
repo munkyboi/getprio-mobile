@@ -371,6 +371,13 @@ void main() {
   ) async {
     final api = _ChangingSandboxAccountQueueApi();
     final ticketRepository = QueueTicketRepository(api);
+    final queueApi = FakeQueueApi(
+      snapshot: {
+        'focusTicket': {
+          'status': 'waiting',
+        },
+      },
+    );
 
     await tester.pumpWidget(
       ShadcnApp(
@@ -385,6 +392,8 @@ void main() {
             'status': 'waiting',
           }),
           ticketRepository: ticketRepository,
+          queueRepository: QueueRepository(queueApi),
+          sandbox: true,
         ),
       ),
     );
@@ -409,6 +418,7 @@ void main() {
       find.text('Your ticket was called. Proceed to the vendor.'),
       findsOneWidget,
     );
+    expect(queueApi.loadCalls, 0);
   });
 
   testWidgets('restores the ticket details surface without a vendor hero', (
