@@ -4850,6 +4850,7 @@ class _TicketsPageState extends State<TicketsPage> {
       SwipeBackPageRoute<void>(
         builder: (context) => TicketDetailsPage(
           ticket: ticket,
+          ticketRepository: widget.ticketRepository,
           directoryRepository: widget.directoryRepository,
           queueRepository: widget.queueRepository,
           onCancel: ticket.canBeCancelled
