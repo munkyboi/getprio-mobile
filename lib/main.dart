@@ -22,6 +22,7 @@ import 'auth/password_utils.dart';
 import 'auth/username_utils.dart';
 import 'account/ticket_repository.dart';
 import 'account/account_settings_repository.dart';
+import 'account/delete_account_dialog.dart';
 import 'account/phone_formatting.dart';
 import 'account/profile_repository.dart';
 import 'account/security_repository.dart';
@@ -5474,6 +5475,18 @@ class _AccountPageState extends State<AccountPage> {
                       : () => _confirmSignOut(overlayContext),
                   destructive: true,
                 ),
+                const Divider(),
+                _AccountAction(
+                  key: const Key('profile-delete-account'),
+                  icon: LucideIcons.trash2,
+                  title: 'Delete account',
+                  subtitle:
+                      'Permanently delete your account and personal data.',
+                  destructive: true,
+                  onPressed: widget.securityRepository == null
+                      ? null
+                      : () => _confirmDeleteAccount(overlayContext),
+                ),
               ],
             );
           },
@@ -5668,6 +5681,21 @@ class _AccountPageState extends State<AccountPage> {
       ),
     ).future;
     if (confirmed == true && mounted) onSignOut();
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final repository = widget.securityRepository;
+    if (repository == null) return;
+    _dismissKeyboard();
+    final deleted = await showOverlay<bool>(
+      context,
+      const DialogConfiguration(barrierDismissible: false),
+      builder: (dialogContext) => DeleteAccountDialog(
+        deleteAccount: repository.deleteAccount,
+        requiresPassword: repository.deletionRequiresPassword,
+      ),
+    ).future;
+    if (deleted == true && mounted) widget.onSignOut?.call();
   }
 }
 

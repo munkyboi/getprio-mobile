@@ -39,10 +39,37 @@ abstract interface class SecurityApi {
   });
 }
 
+class AccountDeletionReceipt {
+  const AccountDeletionReceipt({required this.requestId, required this.dueAt});
+
+  final String requestId;
+  final DateTime dueAt;
+}
+
+abstract interface class AccountDeletionApi {
+  Future<bool> deletionRequiresPassword();
+
+  Future<AccountDeletionReceipt> deleteAccount(String password);
+}
+
 class SecurityRepository {
   SecurityRepository(this.api);
 
   final SecurityApi api;
+
+  Future<bool> deletionRequiresPassword() =>
+      _deletionApi.deletionRequiresPassword();
+
+  Future<AccountDeletionReceipt> deleteAccount(String password) =>
+      _deletionApi.deleteAccount(password);
+
+  AccountDeletionApi get _deletionApi {
+    final deletionApi = api;
+    if (deletionApi is AccountDeletionApi) {
+      return deletionApi as AccountDeletionApi;
+    }
+    throw StateError('Account deletion is unavailable.');
+  }
 
   Future<MfaEnrollment> startMfaEnrollment() async {
     return MfaEnrollment.fromJson(await api.startMfaEnrollment());
@@ -79,10 +106,37 @@ class SecurityRepository {
   }
 }
 
-class RestSecurityApi implements SecurityApi {
+class RestSecurityApi implements SecurityApi, AccountDeletionApi {
   RestSecurityApi(this.client);
 
   final AuthenticatedApiClient client;
+
+  @override
+  Future<bool> deletionRequiresPassword() async {
+    final result = await client.get('/api/account/deletion-options');
+    if (result['passwordRequired'] is! bool) {
+      throw StateError('Could not load account verification requirements.');
+    }
+    return result['passwordRequired'] as bool;
+  }
+
+  @override
+  Future<AccountDeletionReceipt> deleteAccount(String password) async {
+    final result = await client.post('/api/account/delete', {
+      'password': password,
+    });
+    final dueAt = DateTime.tryParse(result['dueAt']?.toString() ?? '');
+    if (result['status'] != 'accepted' ||
+        result['requestId'] is! String ||
+        dueAt == null) {
+      throw StateError('The server did not confirm the deletion request.');
+    }
+    await client.authRepository.clearLocalSession();
+    return AccountDeletionReceipt(
+      requestId: result['requestId'] as String,
+      dueAt: dueAt,
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> changePassword({
