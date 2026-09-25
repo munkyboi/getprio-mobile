@@ -18,8 +18,8 @@ The build uses the `sandbox` Xcode scheme and the isolated Sandbox runtime:
 - Approved host: `sandbox.getprio.online`
 - TestFlight group: `Portal Developers`
 
-The workflow waits for App Store Connect processing before assigning the build
-to the external group and submits the build for beta review. Apple may still
+The workflow waits for App Store Connect processing, distributes the build to
+the external group, and submits the build for beta review. Apple may still
 require metadata, export-compliance, or first-build approval in App Store
 Connect before external testers can install it; those gates remain in the
 Developer portal.

@@ -208,6 +208,7 @@ jobs:
             --app_identifier "${APP_BUNDLE_ID}" \
             --api_key_path "${ASC_JSON_PATH}" \
             --groups "${TESTFLIGHT_GROUP}" \
+            --distribute_external true \
             --submit_beta_review true \
             --wait_processing_timeout_duration 1800 \
             --changelog "Automated Sandbox refresh for TestFlight testing."
