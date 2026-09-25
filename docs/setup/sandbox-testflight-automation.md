@@ -1,9 +1,8 @@
 # Sandbox TestFlight automation
 
 The `Sandbox TestFlight` GitHub Actions workflow builds and uploads the
-Sandbox iOS app on demand or every other month. TestFlight builds are available
-for 90 days, so the schedule leaves a renewal margin without producing a build
-for every source change.
+Sandbox iOS app on demand or monthly. TestFlight builds are available for 90
+days, so monthly renewal leaves room for one missed run.
 
 The workflow uses the App Store Connect API key for both Xcode automatic
 signing and the TestFlight upload. The repository secrets are:
@@ -20,9 +19,16 @@ The build uses the `sandbox` Xcode scheme and the isolated Sandbox runtime:
 - TestFlight group: `Portal Developers`
 
 The workflow waits for App Store Connect processing before assigning the build
-to the external group. Apple may still require TestFlight review for a first
-external build or after a material change. The workflow does not bypass that
-review gate.
+to the external group and submits the build for beta review. Apple may still
+require metadata, export-compliance, or first-build approval in App Store
+Connect before external testers can install it; those gates remain in the
+Developer portal.
+
+The workflow runs only from `main`, uses the `sandbox-testflight` environment,
+allocates the next build number from App Store Connect, runs
+`flutter analyze` and `flutter test`, and verifies the signed bundle ID,
+production APNs entitlement, and exported IPA metadata before upload. Configure
+required reviewers for the environment in **Settings → Environments**.
 
 Run it manually from GitHub under **Actions → Sandbox TestFlight → Run
 workflow**. Scheduled runs are intentionally limited to the Sandbox app; the

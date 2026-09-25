@@ -2,10 +2,10 @@ name: Sandbox TestFlight
 
 on:
   workflow_dispatch:
-  # A build is valid for 90 days. Running every other month leaves a safety
-  # margin without uploading a new build for every source change.
+  # A build is valid for 90 days. Monthly renewal leaves room for one missed
+  # run while avoiding uploads for every source change.
   schedule:
-    - cron: "0 3 1 */2 *"
+    - cron: "0 3 1 * *"
 
 concurrency:
   group: sandbox-testflight
@@ -19,41 +19,68 @@ jobs:
     name: Build and upload Sandbox
     runs-on: macos-latest
     timeout-minutes: 60
+    environment: sandbox-testflight
     env:
-      ASC_ISSUER_ID: ${{ secrets.GETPRIO_APP_STORE_CONNECT_ISSUER_ID }}
-      ASC_KEY_ID: ${{ secrets.GETPRIO_APP_STORE_CONNECT_KEY_ID }}
-      ASC_PRIVATE_KEY: ${{ secrets.GETPRIO_APP_STORE_CONNECT_PRIVATE_KEY }}
-      APPLE_TEAM_ID: 9N389C96JP
       APP_BUNDLE_ID: com.getprio.getprioMobile.ios.sandbox
       TESTFLIGHT_GROUP: Portal Developers
 
     steps:
       - name: Check out mobile app
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Require the protected default branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/heads/main" || {
+            echo "Sandbox TestFlight uploads must run from main (got ${GITHUB_REF})." >&2
+            exit 1
+          }
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
           cache: true
 
-      - name: Verify release tools
+      - name: Verify App Store Connect secrets
         shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.GETPRIO_APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.GETPRIO_APP_STORE_CONNECT_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.GETPRIO_APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           test -n "${ASC_ISSUER_ID}"
           test -n "${ASC_KEY_ID}"
           test -n "${ASC_PRIVATE_KEY}"
+
+      - name: Verify release tools
+        shell: bash
+        run: |
+          set -euo pipefail
           xcodebuild -version
           flutter --version
           if ! command -v fastlane >/dev/null 2>&1; then
-            gem install fastlane --no-document
+            gem install fastlane -v 2.228.0 --no-document
           fi
           fastlane --version
 
+      - name: Run Flutter checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter analyze
+          flutter test
+
       - name: Prepare App Store Connect credentials
         shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.GETPRIO_APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.GETPRIO_APP_STORE_CONNECT_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.GETPRIO_APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           asc_key_path="${RUNNER_TEMP}/AuthKey_${ASC_KEY_ID}.p8"
@@ -78,6 +105,8 @@ jobs:
           chmod 600 "${asc_json_path}"
           echo "ASC_KEY_PATH=${asc_key_path}" >> "${GITHUB_ENV}"
           echo "ASC_JSON_PATH=${asc_json_path}" >> "${GITHUB_ENV}"
+          echo "ASC_KEY_ID=${ASC_KEY_ID}" >> "${GITHUB_ENV}"
+          echo "ASC_ISSUER_ID=${ASC_ISSUER_ID}" >> "${GITHUB_ENV}"
 
       - name: Calculate build number
         shell: bash
@@ -85,19 +114,32 @@ jobs:
           set -euo pipefail
           build_name="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n 1)"
           test -n "${build_name}"
-          # CFBundleVersion accepts up to 18 numeric characters. A UTC
-          # timestamp guarantees a value newer than the existing TestFlight
-          # build without changing the committed pubspec version.
-          build_number="$(date -u +%Y%m%d%H%M%S)"
+          latest_build_number="$(
+            fastlane run latest_testflight_build_number \
+              app_identifier:"${APP_BUNDLE_ID}" \
+              api_key_path:"${ASC_JSON_PATH}" 2>&1 |
+              tee "${RUNNER_TEMP}/latest-testflight-build.log" |
+              sed -n 's/.*Result: //p' |
+              tail -n 1
+          )"
+          if ! [[ "${latest_build_number}" =~ ^[0-9]+$ ]]; then
+            echo "Could not determine the latest App Store Connect build number." >&2
+            cat "${RUNNER_TEMP}/latest-testflight-build.log" >&2
+            exit 1
+          fi
+          # CFBundleVersion accepts up to 18 numeric characters. Allocating
+          # from App Store Connect avoids collisions with another release
+          # runner without changing the committed pubspec version.
+          build_number="$((latest_build_number + 1))"
+          test "${#build_number}" -le 18
           echo "BUILD_NAME=${build_name}" >> "${GITHUB_ENV}"
           echo "BUILD_NUMBER=${build_number}" >> "${GITHUB_ENV}"
-          echo "Building ${build_name} (${build_number})"
+          echo "Building ${build_name} with build number ${build_number}"
 
       - name: Generate Flutter iOS artifacts
         shell: bash
         run: |
           set -euo pipefail
-          flutter pub get
           flutter build ios \
             --flavor sandbox \
             --release \
@@ -125,6 +167,14 @@ jobs:
             -authenticationKeyIssuerID "${ASC_ISSUER_ID}" \
             archive
 
+          app_path="$(find "${RUNNER_TEMP}/GetPrio-Sandbox.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "${app_path}"
+          codesign --verify --deep --strict --verbose=2 "${app_path}"
+          signed_bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${app_path}/Info.plist")"
+          test "${signed_bundle_id}" = "${APP_BUNDLE_ID}"
+          codesign -d --entitlements :- "${app_path}" > "${RUNNER_TEMP}/sandbox-entitlements.plist" 2>/dev/null
+          test "$(plutil -extract aps-environment raw -o - "${RUNNER_TEMP}/sandbox-entitlements.plist")" = "production"
+
       - name: Export Sandbox IPA
         shell: bash
         run: |
@@ -140,6 +190,13 @@ jobs:
             -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
           ipa_path="$(find "${RUNNER_TEMP}/GetPrio-Sandbox-export" -maxdepth 1 -name '*.ipa' -print -quit)"
           test -n "${ipa_path}"
+          unzip -q -o "${ipa_path}" -d "${RUNNER_TEMP}/GetPrio-Sandbox-ipa"
+          exported_app_path="$(find "${RUNNER_TEMP}/GetPrio-Sandbox-ipa/Payload" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "${exported_app_path}"
+          exported_bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${exported_app_path}/Info.plist")"
+          exported_build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "${exported_app_path}/Info.plist")"
+          test "${exported_bundle_id}" = "${APP_BUNDLE_ID}"
+          test "${exported_build_number}" = "${BUILD_NUMBER}"
           echo "IPA_PATH=${ipa_path}" >> "${GITHUB_ENV}"
 
       - name: Upload and assign to Portal Developers
@@ -151,6 +208,12 @@ jobs:
             --app_identifier "${APP_BUNDLE_ID}" \
             --api_key_path "${ASC_JSON_PATH}" \
             --groups "${TESTFLIGHT_GROUP}" \
-            --submit_beta_review false \
+            --submit_beta_review true \
             --wait_processing_timeout_duration 1800 \
             --changelog "Automated Sandbox refresh for TestFlight testing."
+
+      - name: Remove App Store Connect credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -f "${ASC_KEY_PATH:-}" "${ASC_JSON_PATH:-}"
