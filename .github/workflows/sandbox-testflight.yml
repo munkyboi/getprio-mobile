@@ -1,0 +1,156 @@
+name: Sandbox TestFlight
+
+on:
+  workflow_dispatch:
+  # A build is valid for 90 days. Running every other month leaves a safety
+  # margin without uploading a new build for every source change.
+  schedule:
+    - cron: "0 3 1 */2 *"
+
+concurrency:
+  group: sandbox-testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: Build and upload Sandbox
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      ASC_ISSUER_ID: ${{ secrets.GETPRIO_APP_STORE_CONNECT_ISSUER_ID }}
+      ASC_KEY_ID: ${{ secrets.GETPRIO_APP_STORE_CONNECT_KEY_ID }}
+      ASC_PRIVATE_KEY: ${{ secrets.GETPRIO_APP_STORE_CONNECT_PRIVATE_KEY }}
+      APPLE_TEAM_ID: 9N389C96JP
+      APP_BUNDLE_ID: com.getprio.getprioMobile.ios.sandbox
+      TESTFLIGHT_GROUP: Portal Developers
+
+    steps:
+      - name: Check out mobile app
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+          cache: true
+
+      - name: Verify release tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ASC_ISSUER_ID}"
+          test -n "${ASC_KEY_ID}"
+          test -n "${ASC_PRIVATE_KEY}"
+          xcodebuild -version
+          flutter --version
+          if ! command -v fastlane >/dev/null 2>&1; then
+            gem install fastlane --no-document
+          fi
+          fastlane --version
+
+      - name: Prepare App Store Connect credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          asc_key_path="${RUNNER_TEMP}/AuthKey_${ASC_KEY_ID}.p8"
+          asc_json_path="${RUNNER_TEMP}/app-store-connect-api-key.json"
+          printf '%s' "${ASC_PRIVATE_KEY}" > "${asc_key_path}"
+          chmod 600 "${asc_key_path}"
+          ASC_KEY_PATH="${asc_key_path}" ASC_JSON_PATH="${asc_json_path}" \
+            ASC_KEY_ID="${ASC_KEY_ID}" ASC_ISSUER_ID="${ASC_ISSUER_ID}" \
+            ruby <<'RUBY'
+          require "json"
+
+          File.write(
+            ENV.fetch("ASC_JSON_PATH"),
+            JSON.generate(
+              "key_id" => ENV.fetch("ASC_KEY_ID"),
+              "issuer_id" => ENV.fetch("ASC_ISSUER_ID"),
+              "key_filepath" => ENV.fetch("ASC_KEY_PATH"),
+              "in_house" => false
+            )
+          )
+          RUBY
+          chmod 600 "${asc_json_path}"
+          echo "ASC_KEY_PATH=${asc_key_path}" >> "${GITHUB_ENV}"
+          echo "ASC_JSON_PATH=${asc_json_path}" >> "${GITHUB_ENV}"
+
+      - name: Calculate build number
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_name="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n 1)"
+          test -n "${build_name}"
+          # CFBundleVersion accepts up to 18 numeric characters. A UTC
+          # timestamp guarantees a value newer than the existing TestFlight
+          # build without changing the committed pubspec version.
+          build_number="$(date -u +%Y%m%d%H%M%S)"
+          echo "BUILD_NAME=${build_name}" >> "${GITHUB_ENV}"
+          echo "BUILD_NUMBER=${build_number}" >> "${GITHUB_ENV}"
+          echo "Building ${build_name} (${build_number})"
+
+      - name: Generate Flutter iOS artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter build ios \
+            --flavor sandbox \
+            --release \
+            --no-codesign \
+            --build-name "${BUILD_NAME}" \
+            --build-number "${BUILD_NUMBER}" \
+            --dart-define=GETPRIO_ENVIRONMENT=sandbox \
+            --dart-define=GETPRIO_API_BASE_URL=https://sandbox-api.getprio.online \
+            --dart-define=GETPRIO_APPROVED_HOSTS=sandbox.getprio.online
+
+      - name: Archive Sandbox with automatic signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme sandbox \
+            -configuration Release-Sandbox \
+            -sdk iphoneos \
+            -destination generic/platform=iOS \
+            -archivePath "${RUNNER_TEMP}/GetPrio-Sandbox.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${ASC_KEY_PATH}" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}" \
+            archive
+
+      - name: Export Sandbox IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -exportArchive \
+            -archivePath "${RUNNER_TEMP}/GetPrio-Sandbox.xcarchive" \
+            -exportPath "${RUNNER_TEMP}/GetPrio-Sandbox-export" \
+            -exportOptionsPlist ios/ExportOptions-Sandbox.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${ASC_KEY_PATH}" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+          ipa_path="$(find "${RUNNER_TEMP}/GetPrio-Sandbox-export" -maxdepth 1 -name '*.ipa' -print -quit)"
+          test -n "${ipa_path}"
+          echo "IPA_PATH=${ipa_path}" >> "${GITHUB_ENV}"
+
+      - name: Upload and assign to Portal Developers
+        shell: bash
+        run: |
+          set -euo pipefail
+          fastlane pilot upload \
+            --ipa "${IPA_PATH}" \
+            --app_identifier "${APP_BUNDLE_ID}" \
+            --api_key_path "${ASC_JSON_PATH}" \
+            --groups "${TESTFLIGHT_GROUP}" \
+            --submit_beta_review false \
+            --wait_processing_timeout_duration 1800 \
+            --changelog "Automated Sandbox refresh for TestFlight testing."
