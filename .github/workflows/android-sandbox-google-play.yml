@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   build-and-publish:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: ${{ matrix.environment }}-google-play
@@ -83,16 +84,23 @@ jobs:
         run: |
           set -euo pipefail
           flutter pub get
+          # Play version codes must be higher than the initial manually published builds.
+          # The run attempt keeps reruns higher than the original attempt.
+          build_number=$((1000 + GITHUB_RUN_NUMBER * 1000 + GITHUB_RUN_ATTEMPT))
+          if [ "${build_number}" -gt 2100000000 ]; then
+            echo "Calculated Play version code is too large: ${build_number}"
+            exit 1
+          fi
           flutter build appbundle \
             --flavor "${{ matrix.flavor }}" \
             --release \
-            --build-number "${GITHUB_RUN_NUMBER}" \
+            --build-number "${build_number}" \
             --dart-define=GETPRIO_ENVIRONMENT="${{ matrix.environment }}" \
             --dart-define=GETPRIO_API_BASE_URL="${GETPRIO_API_BASE_URL}" \
             --dart-define=GETPRIO_APPROVED_HOSTS="${GETPRIO_APPROVED_HOSTS}"
 
       - name: Upload to Google Play internal testing
-        uses: r0adkll/upload-google-play@v1
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ env.ANDROID_PACKAGE_NAME }}
