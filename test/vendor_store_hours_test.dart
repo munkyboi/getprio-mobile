@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:getprio_mobile/app_theme.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
@@ -9,7 +10,7 @@ void main() {
     final vendor = VendorSummary.fromJson(_vendorJson());
     final hours = vendor.locations.single.hours;
 
-    expect(hours, hasLength(7));
+    expect(hours, hasLength(8));
     expect(hours.first.weekday, 0);
     expect(hours.first.opensAt, '09:00');
     expect(hours.first.closesAt, '17:00');
@@ -48,15 +49,39 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('vendor-store-hours-sheet')), findsOneWidget);
-    expect(find.text('Store hours'), findsOneWidget);
+    expect(find.text('Operating hours'), findsOneWidget);
     expect(find.text('Main Clinic'), findsNWidgets(2));
-    expect(find.text('Sunday'), findsOneWidget);
-    expect(find.text('Monday'), findsOneWidget);
-    expect(find.text('9:00 AM – 5:00 PM'), findsNWidgets(5));
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    final currentWeekday = DateTime.now().weekday % 7;
+    for (var weekday = 0; weekday < weekdays.length; weekday++) {
+      final dayFinder = find.text(weekdays[weekday]);
+      expect(dayFinder, findsOneWidget);
+      final dayText = tester.widget<Text>(dayFinder);
+      expect(
+        dayText.style?.color,
+        weekday == currentWeekday
+            ? GetPrioTheme.primary
+            : isNot(GetPrioTheme.primary),
+      );
+      if (weekday == currentWeekday) {
+        final row = find
+            .ancestor(of: dayFinder, matching: find.byType(Row))
+            .first;
+        final rangeText = tester
+            .widgetList<Text>(
+              find.descendant(of: row, matching: find.byType(Text)),
+            )
+            .last;
+        expect(rangeText.style?.color, GetPrioTheme.primary);
+      }
+    }
+    expect(find.text('9:00 AM – 5:00 PM'), findsNWidgets(4));
+    expect(find.text('9:00 AM – 12:00 PM'), findsOneWidget);
+    expect(find.text('5:00 PM – 9:00 PM'), findsOneWidget);
     expect(find.text('Open 24 hours'), findsOneWidget);
     expect(find.text('Closed'), findsOneWidget);
 
-    await tester.tap(find.bySemanticsLabel('Close store hours'));
+    await tester.tap(find.bySemanticsLabel('Close operating hours'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('vendor-store-hours-sheet')), findsNothing);
   });
@@ -109,7 +134,8 @@ Map<String, dynamic> _vendorJson() {
         },
         'hours': [
           {'weekday': 0, 'opensAt': '09:00', 'closesAt': '17:00'},
-          {'weekday': 1, 'opensAt': '09:00', 'closesAt': '17:00'},
+          {'weekday': 1, 'opensAt': '09:00', 'closesAt': '12:00'},
+          {'weekday': 1, 'opensAt': '17:00', 'closesAt': '21:00'},
           {'weekday': 2, 'opensAt': '00:00', 'closesAt': '00:00'},
           {'weekday': 3, 'opensAt': '09:00', 'closesAt': '17:00'},
           {'weekday': 4, 'opensAt': '09:00', 'closesAt': '17:00'},

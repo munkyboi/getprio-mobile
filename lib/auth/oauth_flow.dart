@@ -75,6 +75,8 @@ bool shouldShowAppleSignInButton({
 abstract interface class OAuthLinkSource {
   Future<Uri?> getInitialLink();
 
+  Future<Uri?> getLatestLink();
+
   Stream<Uri> get linkStream;
 }
 
@@ -85,6 +87,9 @@ class AppLinksSource implements OAuthLinkSource {
 
   @override
   Future<Uri?> getInitialLink() => _appLinks.getInitialLink();
+
+  @override
+  Future<Uri?> getLatestLink() => _appLinks.getLatestLink();
 
   @override
   Stream<Uri> get linkStream => _appLinks.uriLinkStream;
@@ -240,20 +245,58 @@ class OAuthFlow {
             'code_challenge': pair.challenge,
           },
         );
-    if (!await _browser.open(startUri)) {
-      throw const OAuthException('Could not open the sign-in provider.');
+    // Subscribe before opening the provider. On a warm app, getInitialLink()
+    // can keep returning the callback from the previous sign-in attempt (for
+    // example, after the user logs out and signs in again). Only consume a
+    // callback carrying this attempt's state.
+    final callbackCompleter = Completer<Uri>();
+    final callbackSubscription = _links.linkStream.listen((uri) {
+      if (_isCallbackForAttempt(uri, pair.state) &&
+          !callbackCompleter.isCompleted) {
+        callbackCompleter.complete(uri);
+      }
+    });
+
+    try {
+      if (!await _browser.open(startUri)) {
+        throw const OAuthException('Could not open the sign-in provider.');
+      }
+
+      // Keep cold-start support, but do not trust the first link blindly on a
+      // warm app. app_links exposes both the initial and latest received URI.
+      final initial = await _links.getInitialLink();
+      if (!callbackCompleter.isCompleted &&
+          _isCallbackForAttempt(initial, pair.state)) {
+        callbackCompleter.complete(initial!);
+      } else {
+        final latest = await _links.getLatestLink();
+        if (!callbackCompleter.isCompleted &&
+            _isCallbackForAttempt(latest, pair.state)) {
+          callbackCompleter.complete(latest!);
+        }
+      }
+
+      final callbackUri = await callbackCompleter.future.timeout(
+        const Duration(minutes: 2),
+        onTimeout: () => throw const OAuthException(
+          'Timed out waiting for the sign-in callback. Please try again.',
+        ),
+      );
+      final callback = OAuthCallback.parse(callbackUri);
+      validateCallback(callback, expectedState: pair.state);
+      final response = await api.exchange(
+        code: callback.code!,
+        codeVerifier: pair.verifier,
+        state: pair.state,
+      );
+      return await authRepository.completeLoginResponse(response);
+    } finally {
+      await callbackSubscription.cancel();
     }
-    final initial = await _links.getInitialLink();
-    final callback = initial == null
-        ? OAuthCallback.parse(await _links.linkStream.first)
-        : OAuthCallback.parse(initial);
-    validateCallback(callback, expectedState: pair.state);
-    final response = await api.exchange(
-      code: callback.code!,
-      codeVerifier: pair.verifier,
-      state: pair.state,
-    );
-    return authRepository.completeLoginResponse(response);
+  }
+
+  static bool _isCallbackForAttempt(Uri? uri, String expectedState) {
+    return uri?.queryParameters['state'] == expectedState;
   }
 
   Future<LoginResult> signInWithApple() async {

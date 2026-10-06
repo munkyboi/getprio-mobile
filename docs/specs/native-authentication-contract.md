@@ -1,5 +1,7 @@
 # Native authentication contract
 
+Planning update (2026-09-14): apply the [API versioning rollout handoff](api-versioning-rollout-handoff.md) to the route prefixes below when implementing the migration. Shared auth/account routes remain shared under `/api/v1`; mobile-specific OAuth routes move under `/api/v1/mobile`. The handoff is a target contract, not deployment evidence.
+
 Date: 2026-08-28  
 Scope: iOS-first Flutter customer app, with Android-compatible contracts.  
 Authority: shared GetPrio authentication/session services; mobile-only OAuth handoff is the only new auth boundary currently justified.

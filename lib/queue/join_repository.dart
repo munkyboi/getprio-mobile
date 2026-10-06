@@ -152,11 +152,13 @@ class JoinQueueDetails {
     this.waitingCount,
     this.currentTicketNumber,
     this.estimatedWaitMinutes,
+    this.lastCalledAt,
   });
 
   final int? waitingCount;
   final String? currentTicketNumber;
   final int? estimatedWaitMinutes;
+  final DateTime? lastCalledAt;
 
   factory JoinQueueDetails.fromSnapshot(Map<String, dynamic> snapshot) {
     final stats = _joinMap(snapshot['stats']);
@@ -169,6 +171,7 @@ class JoinQueueDetails {
       waitingCount: _joinInt(stats?['waitingCount']),
       currentTicketNumber: currentTicketNumber,
       estimatedWaitMinutes: _joinInt(stats?['estimatedWaitMinutes']),
+      lastCalledAt: DateTime.tryParse(current?['calledAt']?.toString() ?? ''),
     );
   }
 }
@@ -342,6 +345,10 @@ abstract interface class TicketClaimApi {
   Future<Map<String, dynamic>> claimTicket(String verificationCode);
 }
 
+abstract interface class LiveJoinApi {
+  Stream<void> watchQueue(String vendorSlug, String locationSlug);
+}
+
 abstract interface class DirectJoinApi {
   Future<Map<String, dynamic>> joinDirect({
     required String tenantSlug,
@@ -432,6 +439,16 @@ class JoinRepository {
   JoinRepository(this.api);
 
   final JoinApi api;
+
+  Stream<void> watchQueue(JoinPreview preview) {
+    final source = api;
+    final vendor = preview.vendorSlug;
+    final location = preview.locationSlug;
+    if (source is! LiveJoinApi || vendor == null || location == null) {
+      return const Stream<void>.empty();
+    }
+    return (source as LiveJoinApi).watchQueue(vendor, location);
+  }
 
   Future<JoinPreview> resolve(QrJoinPayload payload) async {
     return JoinPreview.fromJson(await api.resolve(payload.locationQrId));
@@ -711,10 +728,14 @@ bool _isQueueUnavailableApiCode(String? code) {
 }
 
 class RestJoinApi
-    implements JoinApi, DirectJoinApi, JoinOtpApi, TicketClaimApi {
+    implements JoinApi, DirectJoinApi, JoinOtpApi, TicketClaimApi, LiveJoinApi {
   RestJoinApi(this.client);
 
   final AuthenticatedApiClient client;
+
+  @override
+  Stream<void> watchQueue(String vendorSlug, String locationSlug) =>
+      client.watchPublicQueue(vendorSlug, locationSlug);
 
   @override
   Future<Map<String, dynamic>> verifyOtp({

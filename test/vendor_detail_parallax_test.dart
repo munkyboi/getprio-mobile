@@ -79,6 +79,36 @@ void main() {
     );
   });
 
+  testWidgets('limits vendor description to three lines until Read more', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: VendorDetailPage(
+          vendor: const VendorSummary(
+            slug: 'city-clinic',
+            name: 'City Clinic',
+            queueAvailable: true,
+          ),
+          repository: DirectoryRepository(_ParallaxDirectoryApi()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final description = find.textContaining('A welcoming clinic');
+    expect(tester.widget<Text>(description).maxLines, 3);
+    await tester.ensureVisible(find.text('Read more'));
+    await tester.tap(find.text('Read more'));
+    await tester.pump();
+    expect(tester.widget<Text>(description).maxLines, isNull);
+    await tester.ensureVisible(find.text('Show less'));
+    await tester.tap(find.text('Show less'));
+    await tester.pump();
+    expect(tester.widget<Text>(description).maxLines, 3);
+  });
+
   testWidgets('fades the profile logo out by half a viewport of scrolling', (
     tester,
   ) async {

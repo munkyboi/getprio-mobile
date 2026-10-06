@@ -26,7 +26,7 @@ abstract interface class SecurityApi {
     required String newPassword,
   });
 
-  Future<Map<String, dynamic>> startMfaEnrollment();
+  Future<Map<String, dynamic>> startMfaEnrollment({String? currentCode});
 
   Future<Map<String, dynamic>> confirmMfaEnrollment(String code);
 
@@ -41,14 +41,12 @@ abstract interface class SecurityApi {
 
 class AccountDeletionReceipt {
   const AccountDeletionReceipt({required this.requestId, required this.dueAt});
-
   final String requestId;
   final DateTime dueAt;
 }
 
 abstract interface class AccountDeletionApi {
   Future<bool> deletionRequiresPassword();
-
   Future<AccountDeletionReceipt> deleteAccount(String password);
 }
 
@@ -57,22 +55,26 @@ class SecurityRepository {
 
   final SecurityApi api;
 
-  Future<bool> deletionRequiresPassword() =>
-      _deletionApi.deletionRequiresPassword();
-
-  Future<AccountDeletionReceipt> deleteAccount(String password) =>
-      _deletionApi.deleteAccount(password);
-
-  AccountDeletionApi get _deletionApi {
+  Future<bool> deletionRequiresPassword() async {
     final deletionApi = api;
-    if (deletionApi is AccountDeletionApi) {
-      return deletionApi as AccountDeletionApi;
+    if (deletionApi is! AccountDeletionApi) {
+      throw StateError('Account deletion is unavailable.');
     }
-    throw StateError('Account deletion is unavailable.');
+    return (deletionApi as AccountDeletionApi).deletionRequiresPassword();
   }
 
-  Future<MfaEnrollment> startMfaEnrollment() async {
-    return MfaEnrollment.fromJson(await api.startMfaEnrollment());
+  Future<AccountDeletionReceipt> deleteAccount(String password) async {
+    final deletionApi = api;
+    if (deletionApi is! AccountDeletionApi) {
+      throw StateError('Account deletion is unavailable.');
+    }
+    return (deletionApi as AccountDeletionApi).deleteAccount(password);
+  }
+
+  Future<MfaEnrollment> startMfaEnrollment({String? currentCode}) async {
+    return MfaEnrollment.fromJson(
+      await api.startMfaEnrollment(currentCode: currentCode),
+    );
   }
 
   Future<List<String>> confirmMfaEnrollment(String code) async {
@@ -82,6 +84,8 @@ class SecurityRepository {
         ? codes.whereType<String>().toList(growable: false)
         : const [];
   }
+
+  Future<void> cancelMfaEnrollment() => api.cancelMfaEnrollment();
 
   Future<void> changePassword({
     required String currentPassword,
@@ -150,8 +154,10 @@ class RestSecurityApi implements SecurityApi, AccountDeletionApi {
   }
 
   @override
-  Future<Map<String, dynamic>> startMfaEnrollment() {
-    return client.post('/api/auth/mfa/enrollment/start', {});
+  Future<Map<String, dynamic>> startMfaEnrollment({String? currentCode}) {
+    return client.post('/api/auth/mfa/enrollment/start', {
+      'currentCode': ?currentCode,
+    });
   }
 
   @override

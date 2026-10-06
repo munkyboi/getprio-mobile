@@ -1,5 +1,7 @@
 # Mobile runtime configuration
 
+Planning update (2026-09-14): the accepted target is `/api/v1/*`, with mobile-specific routes under `/api/v1/mobile/*`. See [API versioning rollout handoff](../specs/api-versioning-rollout-handoff.md) for backend-first verification, production/Sandbox separation, and release gates. Unversioned examples below describe the prior contract; this note does not assert the new routes are deployed.
+
 The Flutter client is intentionally configured through build-time values. Do not commit production URLs, Firebase private credentials, OAuth secrets, or payment credentials.
 
 ## Required build values

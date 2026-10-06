@@ -2,6 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 import '../auth/auth_repository.dart';
+import '../form_validation.dart';
 import 'security_repository.dart';
 
 class DeleteAccountDialog extends StatefulWidget {
@@ -20,6 +21,7 @@ class DeleteAccountDialog extends StatefulWidget {
 
 class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
   final _password = TextEditingController();
+  final _passwordFocusNode = FocusNode();
   bool _loadingRequirements = true;
   bool _requirementsFailed = false;
   bool _passwordRequired = true;
@@ -36,6 +38,7 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
   @override
   void dispose() {
     _password.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -102,10 +105,11 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final receipt = _receipt;
-    final actionWidth = (MediaQuery.sizeOf(context).width - 64).clamp(
-      240.0,
-      380.0,
-    );
+    // AlertDialog reserves horizontal padding and space for the leading icon.
+    // Keep content and actions inside that actual inner width on narrow phones.
+    final dialogWidth = (MediaQuery.sizeOf(context).width - 112)
+        .clamp(200.0, 380.0)
+        .toDouble();
     return PopScope(
       canPop: !_submitting && receipt == null,
       child: AlertDialog(
@@ -117,7 +121,7 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
           receipt == null ? 'Delete your account?' : 'Deletion requested',
         ),
         content: SizedBox(
-          width: 380,
+          width: dialogWidth,
           child: SingleChildScrollView(
             child: receipt == null
                 ? _buildConfirmationContent()
@@ -127,7 +131,7 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
         actions: [
           if (receipt == null)
             SizedBox(
-              width: actionWidth,
+              width: dialogWidth,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -158,7 +162,7 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
             )
           else
             SizedBox(
-              width: actionWidth,
+              width: dialogWidth,
               child: GetPrioActionButton.primary(
                 key: const Key('delete-account-done'),
                 onPressed: () => closeOverlay(context, true),
@@ -192,12 +196,17 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
         else ...[
           const Text('Current password'),
           const SizedBox(height: 8),
-          TextField(
-            key: const Key('delete-account-password'),
-            controller: _password,
-            obscureText: true,
-            enabled: !_submitting,
-            placeholder: const Text('Enter your current password'),
+          KeyboardAwareInput(
+            child: TextField(
+              key: const Key('delete-account-password'),
+              controller: _password,
+              focusNode: _passwordFocusNode,
+              obscureText: true,
+              enabled: !_submitting,
+              placeholder: const Text('Enter your current password'),
+              features: const [InputFeature.passwordToggle()],
+              scrollPadding: const EdgeInsets.only(top: 24, bottom: 96),
+            ),
           ),
         ],
         if (_error != null) ...[

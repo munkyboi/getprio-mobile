@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,57 @@ import 'package:http/testing.dart';
 void main() {
   const hosts = {'app.getprio.test', 'enterprise.example.com'};
   const validId = '123e4567-e89b-42d3-a456-426614174000';
+
+  test(
+    'queue stream filters heartbeats and closes its own connection',
+    () async {
+      final transport = _EventClient();
+      final client = AuthenticatedApiClient(
+        baseUrl: 'https://api.getprio.test',
+        authRepository: AuthRepository(
+          api: _NoopAuthApi(),
+          tokenStore: MemoryTokenStore(),
+        ),
+        eventClientFactory: () => transport,
+      );
+      var signals = 0;
+      final subscription = RestJoinApi(client)
+          .watchQueue('bosslot', 'main')
+          .listen((_) => signals++);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        transport.request!.url.path,
+        '/api/v1/public/tenant/bosslot/location/main/stream',
+      );
+      expect(transport.request!.headers['Accept'], 'text/event-stream');
+      expect(transport.request!.headers.containsKey('Authorization'), isFalse);
+      transport.bytes.add(utf8.encode('data: {"stats":'));
+      transport.bytes.add(
+        utf8.encode('{}}\n\nevent: heartbeat\ndata: 123\n\n'),
+      );
+      transport.bytes.add(utf8.encode('data: {}\r\n\r\n'));
+      await Future<void>.delayed(Duration.zero);
+      expect(signals, 2);
+      await subscription.cancel();
+      expect(transport.closed, isTrue);
+      await transport.bytes.close();
+    },
+  );
+
+  test('queue stream surfaces failed connections for reconnect', () async {
+    final client = AuthenticatedApiClient(
+      baseUrl: 'https://api.getprio.test',
+      authRepository: AuthRepository(
+        api: _NoopAuthApi(),
+        tokenStore: MemoryTokenStore(),
+      ),
+      eventClientFactory: () => MockClient((_) async => http.Response('', 503)),
+    );
+    await expectLater(
+      client.watchPublicQueue('bosslot', 'main'),
+      emitsInOrder([emitsError(isA<StateError>()), emitsDone]),
+    );
+  });
 
   test('accepts a canonical QR URL and keeps only trusted join data', () {
     final payload = QrJoinPayload.parse(
@@ -216,13 +268,14 @@ void main() {
           'currentTicketNumber': 12,
           'estimatedWaitMinutes': 20,
         },
-        'current': {'ticketNumber': 12},
+        'current': {'ticketNumber': 12, 'calledAt': '2026-09-07T02:15:00Z'},
       },
     });
 
     expect(preview.queueDetails?.waitingCount, 4);
     expect(preview.queueDetails?.currentTicketNumber, '12');
     expect(preview.queueDetails?.estimatedWaitMinutes, 20);
+    expect(preview.queueDetails?.lastCalledAt, DateTime.utc(2026, 9, 7, 2, 15));
   });
 
   test('public profile image falls back as the vendor logo', () {
@@ -416,6 +469,23 @@ void main() {
       expect(response['vendorProfile'], isNull);
     },
   );
+}
+
+class _EventClient extends http.BaseClient {
+  final bytes = StreamController<List<int>>();
+  http.BaseRequest? request;
+  bool closed = false;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    this.request = request;
+    return http.StreamedResponse(bytes.stream, 200);
+  }
+
+  @override
+  void close() {
+    closed = true;
+  }
 }
 
 class FakeJoinApi implements JoinApi {

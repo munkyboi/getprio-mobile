@@ -140,7 +140,7 @@ class FakeSecurityApi implements SecurityApi {
   }) async {}
 
   @override
-  Future<Map<String, dynamic>> startMfaEnrollment() async => {
+  Future<Map<String, dynamic>> startMfaEnrollment({String? currentCode}) async => {
     'secret': 'secret-1',
     'otpAuthUri': 'otpauth://totp/GetPrio:test@example.com?secret=secret-1',
   };

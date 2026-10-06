@@ -245,8 +245,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('vendor-queue-status-main')), findsOneWidget);
-    expect(find.text('3 waiting'), findsOneWidget);
-    expect(find.text('15 min estimated wait'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('15 mins'), findsOneWidget);
     expect(find.text('Currently serving AH004'), findsOneWidget);
   });
 

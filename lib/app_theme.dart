@@ -401,6 +401,34 @@ class GetPrioActionButton extends StatelessWidget {
   }
 }
 
+class GetPrioModalActions extends StatelessWidget {
+  const GetPrioModalActions({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    // Alert dialogs also reserve horizontal padding and may include a leading
+    // icon. Keep modal actions inside the available width on narrow phones.
+    final width = (MediaQuery.sizeOf(context).width - 112)
+        .clamp(200.0, 320.0)
+        .toDouble();
+    return SizedBox(
+      width: width,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            if (index > 0) const SizedBox(height: 8),
+            children[index],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 ButtonStatePropertyDelegate<Decoration> _buttonDecoration({
   required double radius,
   List<BoxShadow>? shadow,

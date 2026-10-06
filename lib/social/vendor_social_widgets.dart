@@ -6,6 +6,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 import '../feedback_toast.dart';
+import '../form_validation.dart';
 import '../queue/queue_models.dart';
 import 'vendor_social_repository.dart';
 
@@ -822,16 +823,19 @@ class _VendorRatingFormState extends State<VendorRatingForm> {
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: comment,
-                focusNode: _commentFocus,
-                onTapOutside: (_) => _commentFocus.unfocus(),
-                enabled: !busy,
-                maxLines: 5,
-                maxLength: 500,
-                inputFormatters: [LengthLimitingTextInputFormatter(500)],
-                placeholder: const Text('Share your experience (optional)'),
-                onChanged: (_) => setState(() {}),
+              KeyboardAwareInput(
+                child: TextField(
+                  controller: comment,
+                  focusNode: _commentFocus,
+                  enabled: !busy,
+                  maxLines: 5,
+                  maxLength: 500,
+                  features: const [focusedClearInputFeature],
+                  scrollPadding: const EdgeInsets.only(top: 24, bottom: 96),
+                  inputFormatters: [LengthLimitingTextInputFormatter(500)],
+                  placeholder: const Text('Share your experience (optional)'),
+                  onChanged: (_) => setState(() {}),
+                ),
               ),
               Text('${comment.text.characters.length}/500'),
               if (error != null) Text(error!),
@@ -840,13 +844,17 @@ class _VendorRatingFormState extends State<VendorRatingForm> {
         ),
       ),
       actions: [
-        GetPrioActionButton.outline(
-          onPressed: busy ? null : () => closeOverlay(context),
-          child: const Text('Do it later'),
-        ),
-        GetPrioActionButton.primary(
-          onPressed: busy || stars == 0 ? null : submit,
-          child: Text(busy ? 'Submitting…' : 'Rate vendor'),
+        GetPrioModalActions(
+          children: [
+            GetPrioActionButton.outline(
+              onPressed: busy ? null : () => closeOverlay(context),
+              child: const Text('Do it later'),
+            ),
+            GetPrioActionButton.primary(
+              onPressed: busy || stars == 0 ? null : submit,
+              child: Text(busy ? 'Submitting…' : 'Rate vendor'),
+            ),
+          ],
         ),
       ],
     ),
@@ -946,13 +954,17 @@ Future<void> promptVendorRating(
           'Your ticket was served. Rate ${ticket.vendorName ?? 'the vendor'}.',
         ),
         actions: [
-          GetPrioActionButton.outline(
-            onPressed: () => closeOverlay(dialogContext, false),
-            child: const Text('Do it later'),
-          ),
-          GetPrioActionButton.primary(
-            onPressed: () => closeOverlay(dialogContext, true),
-            child: const Text('Rate vendor'),
+          GetPrioModalActions(
+            children: [
+              GetPrioActionButton.outline(
+                onPressed: () => closeOverlay(dialogContext, false),
+                child: const Text('Do it later'),
+              ),
+              GetPrioActionButton.primary(
+                onPressed: () => closeOverlay(dialogContext, true),
+                child: const Text('Rate vendor'),
+              ),
+            ],
           ),
         ],
       ),

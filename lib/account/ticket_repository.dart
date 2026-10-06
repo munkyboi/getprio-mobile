@@ -26,10 +26,32 @@ class TicketInvitation {
   String get id => ticket.id;
 }
 
+class CustomerTicketStats {
+  const CustomerTicketStats({required this.joined, required this.served});
+
+  final int joined;
+  final int served;
+
+  static CustomerTicketStats? fromJson(dynamic value) {
+    if (value is! Map<String, dynamic>) return null;
+    final joined = value['joined'];
+    final served = value['served'];
+    if (joined is! int ||
+        served is! int ||
+        joined < 0 ||
+        served < 0 ||
+        served > joined) {
+      return null;
+    }
+    return CustomerTicketStats(joined: joined, served: served);
+  }
+}
+
 class QueueTicketRepository {
   QueueTicketRepository(this.api);
 
   final AccountQueueApi api;
+  final ticketStats = ValueNotifier<CustomerTicketStats?>(null);
   final refreshVersion = ValueNotifier<int>(0);
   final servedTicket = ValueNotifier<QueueTicket?>(null);
   final Set<String> _observedActive = {};
@@ -50,13 +72,22 @@ class QueueTicketRepository {
 
   void requestRefresh() => refreshVersion.value++;
   void clearSession() {
+    ticketStats.value = null;
     _latestTickets = const [];
     _observedActive.clear();
     servedTicket.value = null;
   }
 
   Future<List<QueueTicket>> loadOverview() async {
-    final tickets = _ticketsFrom(await api.loadOverview());
+    late final Map<String, dynamic> response;
+    try {
+      response = await api.loadOverview();
+    } catch (_) {
+      ticketStats.value = null;
+      rethrow;
+    }
+    ticketStats.value = CustomerTicketStats.fromJson(response['ticketStats']);
+    final tickets = _ticketsFrom(response);
     _observeTickets(tickets);
     _latestTickets = tickets;
     return tickets;
@@ -173,9 +204,54 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
   final bool sandbox;
 
   @override
-  Future<Map<String, dynamic>> loadOverview() {
+  Future<Map<String, dynamic>> loadOverview() async {
     if (sandbox) return _loadSandboxTickets(view: 'active');
-    return client.get('/api/account/overview');
+    final response = await client.get('/api/account/overview');
+    final tickets = response['tickets'];
+    if (tickets is! List) return response;
+    return {
+      ...response,
+      'tickets': await Future.wait(
+        tickets.map((raw) async {
+          if (raw is! Map<String, dynamic>) return raw;
+          final ticket = QueueTicket.fromJson(raw);
+          if (ticket.status != TicketStatus.waiting ||
+              ticket.position != null ||
+              ticket.tenantSlug == null ||
+              ticket.tenantSlug!.isEmpty ||
+              ticket.lookupCode.isEmpty) {
+            return raw;
+          }
+          try {
+            final snapshot = await RestQueueApi(client).loadQueueSnapshot(
+              tenantSlug: ticket.tenantSlug!,
+              locationSlug: ticket.locationSlug,
+              lookupCode: ticket.lookupCode,
+            );
+            final focus = snapshot['focusTicket'];
+            if (focus is! Map<String, dynamic> ||
+                focus['lookupCode'] != ticket.lookupCode) {
+              return raw;
+            }
+            // Retain account metadata while using the queue's live lifecycle data.
+            return {
+              ...raw,
+              for (final key in [
+                'status',
+                'position',
+                'estimatedWaitMinutes',
+                'customerConfirmedAt',
+                'statusReason',
+              ])
+                if (focus.containsKey(key)) key: focus[key],
+            };
+          } catch (_) {
+            // One unavailable queue must not hide the customer's other tickets.
+            return raw;
+          }
+        }),
+      ),
+    };
   }
 
   @override
