@@ -26,7 +26,7 @@ abstract interface class SecurityApi {
     required String newPassword,
   });
 
-  Future<Map<String, dynamic>> startMfaEnrollment();
+  Future<Map<String, dynamic>> startMfaEnrollment({String? currentCode});
 
   Future<Map<String, dynamic>> confirmMfaEnrollment(String code);
 
@@ -39,13 +39,42 @@ abstract interface class SecurityApi {
   });
 }
 
+class AccountDeletionReceipt {
+  const AccountDeletionReceipt({required this.requestId, required this.dueAt});
+  final String requestId;
+  final DateTime dueAt;
+}
+
+abstract interface class AccountDeletionApi {
+  Future<bool> deletionRequiresPassword();
+  Future<AccountDeletionReceipt> deleteAccount(String password);
+}
+
 class SecurityRepository {
   SecurityRepository(this.api);
 
   final SecurityApi api;
 
-  Future<MfaEnrollment> startMfaEnrollment() async {
-    return MfaEnrollment.fromJson(await api.startMfaEnrollment());
+  Future<bool> deletionRequiresPassword() async {
+    final deletionApi = api;
+    if (deletionApi is! AccountDeletionApi) {
+      throw StateError('Account deletion is unavailable.');
+    }
+    return (deletionApi as AccountDeletionApi).deletionRequiresPassword();
+  }
+
+  Future<AccountDeletionReceipt> deleteAccount(String password) async {
+    final deletionApi = api;
+    if (deletionApi is! AccountDeletionApi) {
+      throw StateError('Account deletion is unavailable.');
+    }
+    return (deletionApi as AccountDeletionApi).deleteAccount(password);
+  }
+
+  Future<MfaEnrollment> startMfaEnrollment({String? currentCode}) async {
+    return MfaEnrollment.fromJson(
+      await api.startMfaEnrollment(currentCode: currentCode),
+    );
   }
 
   Future<List<String>> confirmMfaEnrollment(String code) async {
@@ -55,6 +84,8 @@ class SecurityRepository {
         ? codes.whereType<String>().toList(growable: false)
         : const [];
   }
+
+  Future<void> cancelMfaEnrollment() => api.cancelMfaEnrollment();
 
   Future<void> changePassword({
     required String currentPassword,
@@ -79,10 +110,37 @@ class SecurityRepository {
   }
 }
 
-class RestSecurityApi implements SecurityApi {
+class RestSecurityApi implements SecurityApi, AccountDeletionApi {
   RestSecurityApi(this.client);
 
   final AuthenticatedApiClient client;
+
+  @override
+  Future<bool> deletionRequiresPassword() async {
+    final result = await client.get('/api/account/deletion-options');
+    if (result['passwordRequired'] is! bool) {
+      throw StateError('Could not load account verification requirements.');
+    }
+    return result['passwordRequired'] as bool;
+  }
+
+  @override
+  Future<AccountDeletionReceipt> deleteAccount(String password) async {
+    final result = await client.post('/api/account/delete', {
+      'password': password,
+    });
+    final dueAt = DateTime.tryParse(result['dueAt']?.toString() ?? '');
+    if (result['status'] != 'accepted' ||
+        result['requestId'] is! String ||
+        dueAt == null) {
+      throw StateError('The server did not confirm the deletion request.');
+    }
+    await client.authRepository.clearLocalSession();
+    return AccountDeletionReceipt(
+      requestId: result['requestId'] as String,
+      dueAt: dueAt,
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> changePassword({
@@ -96,8 +154,10 @@ class RestSecurityApi implements SecurityApi {
   }
 
   @override
-  Future<Map<String, dynamic>> startMfaEnrollment() {
-    return client.post('/api/auth/mfa/enrollment/start', {});
+  Future<Map<String, dynamic>> startMfaEnrollment({String? currentCode}) {
+    return client.post('/api/auth/mfa/enrollment/start', {
+      'currentCode': ?currentCode,
+    });
   }
 
   @override

@@ -31,6 +31,7 @@ dependencies:
   app_links: ^7.2.1
   async: ^2.13.1
   barcode_widget: ^2.0.4
+  cached_network_image: ^3.4.1
   crypto: ^3.0.7
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0
@@ -44,9 +45,12 @@ dependencies:
   local_auth: ^3.0.2
   mobile_scanner: ^7.4.0
   shadcn_flutter: ^0.0.54
+  sign_in_with_apple: ^6.1.4
   url_launcher: ^6.3.2
 
 dev_dependencies:
+  integration_test:
+    sdk: flutter
   flutter_test:
     sdk: flutter
 
@@ -72,6 +76,7 @@ flutter:
     - assets/onboarding/
     - assets/branding/logo.svg
     - assets/branding/logo-dark.svg
+    - assets/auth/
     - assets/branding/login-biometric-scene.png
     - assets/illustrations/customer-onboarding.png
     - assets/illustrations/hero-queue-scene-transparent.png

@@ -29,17 +29,15 @@ class ApprovedVendor {
 
   Map<String, String> toJson() => {'key': key, 'name': name};
 
-  static ApprovedVendor fromTicket({
+  static ApprovedVendor? fromTicket({
     required String? tenantSlug,
     required String? vendorName,
   }) {
     final name = vendorName?.trim();
     final visibleName = name == null || name.isEmpty ? 'Queue vendor' : name;
     final slug = tenantSlug?.trim().toLowerCase();
-    final key = slug == null || slug.isEmpty
-        ? 'name:${visibleName.toLowerCase()}'
-        : 'slug:$slug';
-    return ApprovedVendor(key: key, name: visibleName);
+    if (slug == null || slug.isEmpty) return null;
+    return ApprovedVendor(key: 'slug:$slug', name: visibleName);
   }
 }
 

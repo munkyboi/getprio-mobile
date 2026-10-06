@@ -20,9 +20,47 @@ void main() {
     expect(isPhilippineMobileNumber('(0917) 123-4567'), isTrue);
   });
 
-  testWidgets('opens personal info from both the card and the menu row', (
+  testWidgets('deletion is last in Security and signs out after the receipt', (
     tester,
   ) async {
+    var signedOut = false;
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: AccountPage(
+          securityRepository: SecurityRepository(FakeProfileDeletionApi()),
+          onSignOut: () => signedOut = true,
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('profile-edit-button')), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('profile-delete-account')),
+      250,
+    );
+    await tester.ensureVisible(find.byKey(const Key('profile-delete-account')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.byKey(const Key('profile-delete-account'))).dy,
+      greaterThan(
+        tester.getTopLeft(find.byKey(const Key('profile-logout'))).dy,
+      ),
+    );
+    await tester.tap(find.byKey(const Key('profile-delete-account')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('delete-account-password')),
+      'current',
+    );
+    await tester.tap(find.byKey(const Key('delete-account-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('delete-account-accepted')), findsOneWidget);
+    expect(signedOut, isFalse);
+    await tester.tap(find.byKey(const Key('delete-account-done')));
+    await tester.pumpAndSettle();
+    expect(signedOut, isTrue);
+  });
+
+  testWidgets('opens personal info from the menu row', (tester) async {
     final api = FakeAccountProfileApi();
     final repository = AccountProfileRepository(api);
     await tester.pumpWidget(
@@ -31,7 +69,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const Key('profile-edit-button')));
+    await tester.tap(find.byKey(const Key('profile-personal-info')));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('profile-personal-info-sheet')),
@@ -62,7 +100,7 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.byKey(const Key('profile-edit-button')));
+      await tester.tap(find.byKey(const Key('profile-personal-info')));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('profile-full-name')),
@@ -96,7 +134,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const Key('profile-edit-button')));
+    await tester.tap(find.byKey(const Key('profile-personal-info')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('profile-full-name')),
@@ -131,7 +169,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const Key('profile-edit-button')));
+    await tester.tap(find.byKey(const Key('profile-personal-info')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('profile-email')), findsNothing);
     expect(find.byKey(const Key('profile-email-value')), findsOneWidget);
@@ -180,7 +218,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('Close personal info')));
     await tester.pumpAndSettle();
     expect(find.text('new@example.com'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('profile-edit-button')));
+    await tester.tap(find.byKey(const Key('profile-personal-info')));
     await tester.pumpAndSettle();
     expect(
       tester.widget<Text>(find.byKey(const Key('profile-email-value'))).data,
@@ -309,34 +347,36 @@ void main() {
     );
   });
 
-  testWidgets('dismisses the keyboard when a profile field loses focus', (
-    tester,
-  ) async {
-    final api = FakeAccountProfileApi();
-    await tester.pumpWidget(
-      ShadcnApp(
-        home: AccountPage(
-          user: api.user,
-          profileRepository: AccountProfileRepository(api),
+  testWidgets(
+    'keeps the keyboard available when tapping around a profile field',
+    (tester) async {
+      final api = FakeAccountProfileApi();
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: AccountPage(
+            user: api.user,
+            profileRepository: AccountProfileRepository(api),
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.byKey(const Key('profile-edit-button')));
-    await tester.pumpAndSettle();
-    final field = find.byKey(const Key('profile-full-name'));
-    await tester.tap(field);
-    await tester.pump();
-    expect(FocusManager.instance.primaryFocus, isNotNull);
+      await tester.tap(find.byKey(const Key('profile-personal-info')));
+      await tester.pumpAndSettle();
+      final field = find.byKey(const Key('profile-full-name'));
+      await tester.tap(field);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, isNotNull);
 
-    await tester.tap(
-      find.text(
-        'Keep your contact details current so queue updates reach you.',
-      ),
-    );
-    await tester.pump();
-    expect(tester.testTextInput.isVisible, isFalse);
-  });
+      await tester.tap(
+        find.text(
+          'Keep your contact details current so queue updates reach you.',
+        ),
+      );
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+      expect(tester.testTextInput.isVisible, isTrue);
+    },
+  );
 
   testWidgets('requires confirmation before logging out', (tester) async {
     var signedOut = false;
@@ -607,7 +647,9 @@ class FakeProfileSecurityApi implements SecurityApi {
   }) async => <String, dynamic>{};
 
   @override
-  Future<Map<String, dynamic>> startMfaEnrollment() async => {
+  Future<Map<String, dynamic>> startMfaEnrollment({
+    String? currentCode,
+  }) async => {
     'secret': 'secret-1',
     'otpAuthUri': 'otpauth://totp/GetPrio:test@example.com?secret=secret-1',
   };
@@ -649,5 +691,20 @@ class MemoryApprovedVendorStore implements ApprovedVendorStore {
     values[accountId] = (await load(accountId))
         .where((item) => item.key != vendorKey)
         .toList(growable: false);
+  }
+}
+
+class FakeProfileDeletionApi extends FakeProfileSecurityApi
+    implements AccountDeletionApi {
+  @override
+  Future<bool> deletionRequiresPassword() async => true;
+
+  @override
+  Future<AccountDeletionReceipt> deleteAccount(String password) async {
+    expect(password, 'current');
+    return AccountDeletionReceipt(
+      requestId: 'profile-request',
+      dueAt: DateTime(2026, 10, 7),
+    );
   }
 }

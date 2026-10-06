@@ -152,11 +152,13 @@ class JoinQueueDetails {
     this.waitingCount,
     this.currentTicketNumber,
     this.estimatedWaitMinutes,
+    this.lastCalledAt,
   });
 
   final int? waitingCount;
   final String? currentTicketNumber;
   final int? estimatedWaitMinutes;
+  final DateTime? lastCalledAt;
 
   factory JoinQueueDetails.fromSnapshot(Map<String, dynamic> snapshot) {
     final stats = _joinMap(snapshot['stats']);
@@ -169,6 +171,7 @@ class JoinQueueDetails {
       waitingCount: _joinInt(stats?['waitingCount']),
       currentTicketNumber: currentTicketNumber,
       estimatedWaitMinutes: _joinInt(stats?['estimatedWaitMinutes']),
+      lastCalledAt: DateTime.tryParse(current?['calledAt']?.toString() ?? ''),
     );
   }
 }
@@ -313,9 +316,14 @@ String? _joinPlainText(String? html) {
 abstract class QrScanPayload {
   const QrScanPayload();
 
-  static QrScanPayload parse(String raw, {required Set<String> allowedHosts}) {
+  static QrScanPayload parse(
+    String raw, {
+    required Set<String> allowedHosts,
+    bool allowTicketClaims = false,
+  }) {
     final normalized = raw.trim();
-    if (RegExp(r'^[a-f0-9]{8}$', caseSensitive: false).hasMatch(normalized)) {
+    if (allowTicketClaims &&
+        RegExp(r'^[a-f0-9]{8}$', caseSensitive: false).hasMatch(normalized)) {
       return QrTicketClaimPayload(normalized.toUpperCase());
     }
     return QrJoinPayload.parse(normalized, allowedHosts: allowedHosts);
@@ -340,6 +348,10 @@ abstract interface class JoinApi {
 
 abstract interface class TicketClaimApi {
   Future<Map<String, dynamic>> claimTicket(String verificationCode);
+}
+
+abstract interface class LiveJoinApi {
+  Stream<void> watchQueue(String vendorSlug, String locationSlug);
 }
 
 abstract interface class DirectJoinApi {
@@ -429,15 +441,33 @@ class PaymentRequired extends JoinResult {
 }
 
 class JoinRepository {
-  JoinRepository(this.api);
+  JoinRepository(this.api, {this.allowTicketClaims = false});
 
   final JoinApi api;
+  final bool allowTicketClaims;
+
+  Stream<void> watchQueue(JoinPreview preview) {
+    final source = api;
+    final vendor = preview.vendorSlug;
+    final location = preview.locationSlug;
+    if (source is! LiveJoinApi || vendor == null || location == null) {
+      return const Stream<void>.empty();
+    }
+    return (source as LiveJoinApi).watchQueue(vendor, location);
+  }
 
   Future<JoinPreview> resolve(QrJoinPayload payload) async {
     return JoinPreview.fromJson(await api.resolve(payload.locationQrId));
   }
 
   Future<QueueTicket> claimTicket(QrTicketClaimPayload payload) async {
+    if (!allowTicketClaims) {
+      throw const ApiException(
+        501,
+        'TICKET_CLAIM_UNAVAILABLE',
+        'Printed ticket QR claims are not configured for this build.',
+      );
+    }
     final claimApi = api is TicketClaimApi ? api as TicketClaimApi : null;
     if (claimApi == null) {
       throw const ApiException(
@@ -711,10 +741,14 @@ bool _isQueueUnavailableApiCode(String? code) {
 }
 
 class RestJoinApi
-    implements JoinApi, DirectJoinApi, JoinOtpApi, TicketClaimApi {
+    implements JoinApi, DirectJoinApi, JoinOtpApi, TicketClaimApi, LiveJoinApi {
   RestJoinApi(this.client);
 
   final AuthenticatedApiClient client;
+
+  @override
+  Stream<void> watchQueue(String vendorSlug, String locationSlug) =>
+      client.watchPublicQueue(vendorSlug, locationSlug);
 
   @override
   Future<Map<String, dynamic>> verifyOtp({

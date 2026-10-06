@@ -1,3 +1,5 @@
+import 'queue/active_ticket_carousel.dart';
+import 'directory/expandable_vendor_description.dart';
 import 'social/vendor_social_widgets.dart';
 import 'social/vendor_social_repository.dart';
 
@@ -7,6 +9,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:barcode_widget/barcode_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'
     show FirebaseMessaging;
 import 'package:flutter/foundation.dart';
@@ -24,6 +27,7 @@ import 'auth/password_utils.dart';
 import 'auth/username_utils.dart';
 import 'account/ticket_repository.dart';
 import 'account/account_settings_repository.dart';
+import 'account/delete_account_dialog.dart';
 import 'account/approved_vendor_store.dart';
 import 'account/phone_formatting.dart';
 import 'account/profile_repository.dart';
@@ -42,6 +46,7 @@ import 'queue/join_ui.dart';
 import 'queue/payment_flow.dart';
 import 'queue/queue_models.dart';
 import 'queue/queue_repository.dart';
+import 'queue/current_queue_card.dart';
 import 'push/push_coordinator.dart';
 import 'app_theme.dart';
 import 'loading_skeleton.dart';
@@ -101,16 +106,24 @@ class GetPrioApp extends StatelessWidget {
         home: _EnvironmentConfigurationError(message: configurationError),
       );
     }
+    const appleSignInEnabled = bool.fromEnvironment(
+      'GETPRIO_APPLE_SIGN_IN_ENABLED',
+      defaultValue: false,
+    );
     final apiClient = AuthenticatedApiClient(
       baseUrl: baseUrl,
       authRepository: authRepository,
     );
-    final joinRepository = JoinRepository(RestJoinApi(apiClient));
+    final joinRepository = JoinRepository(
+      RestJoinApi(apiClient),
+      allowTicketClaims: environmentConfig.isSandbox,
+    );
     final paymentApi = RestPaymentApi(apiClient);
     final oauthFlow = OAuthFlow(
       baseUrl: baseUrl,
       authRepository: authRepository,
       api: RestOAuthApi(baseUrl: baseUrl),
+      appleEnabled: appleSignInEnabled,
     );
     final ticketRepository = QueueTicketRepository(
       RestAccountQueueApi(apiClient, sandbox: environmentConfig.isSandbox),
@@ -141,9 +154,7 @@ class GetPrioApp extends StatelessWidget {
       paymentApi: paymentApi,
       ticketRepository: ticketRepository,
       queueRepository: QueueRepository(RestQueueApi(apiClient)),
-      directoryRepository: DirectoryRepository(
-        RestDirectoryApi(apiClient),
-      ),
+      directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
       settingsRepository: AccountSettingsRepository(
         RestAccountSettingsApi(apiClient),
       ),
@@ -165,6 +176,14 @@ class GetPrioApp extends StatelessWidget {
       themeMode: ThemeMode.light,
       background: lightTheme.colorScheme.background,
       theme: lightTheme,
+      onUnknownRoute: (settings) {
+        if (settings.name?.startsWith('/callback') != true) return null;
+        return PageRouteBuilder<void>(
+          settings: settings,
+          opaque: false,
+          pageBuilder: (_, _, _) => const _OAuthCallbackRoute(),
+        );
+      },
       home: GetPrioTheme.wrap(
         environmentConfig.isSandbox
             ? authGate
@@ -205,6 +224,28 @@ class _EnvironmentConfigurationError extends StatelessWidget {
       ),
     );
   }
+}
+
+class _OAuthCallbackRoute extends StatefulWidget {
+  const _OAuthCallbackRoute();
+
+  @override
+  State<_OAuthCallbackRoute> createState() => _OAuthCallbackRouteState();
+}
+
+class _OAuthCallbackRouteState extends State<_OAuthCallbackRoute> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class AuthGate extends StatefulWidget {
@@ -347,6 +388,7 @@ class _AuthGateState extends State<AuthGate> {
         if (_showBiometricLogin) {
           return BiometricLoginPage(
             authRepository: widget.authRepository,
+            oauthFlow: widget.oauthFlow,
             onAuthenticated: _authenticated,
             sandbox: widget.sandbox,
           );
@@ -467,7 +509,7 @@ class SplashLoadingScreen extends StatelessWidget {
   }
 }
 
-class _LabeledTextField extends StatelessWidget {
+class _LabeledTextField extends StatefulWidget {
   const _LabeledTextField({
     required this.label,
     required this.placeholder,
@@ -476,6 +518,7 @@ class _LabeledTextField extends StatelessWidget {
     this.focusNode,
     this.keyboardType,
     this.obscureText = false,
+    this.onTap,
     this.onChanged,
     this.supportingText,
     this.supportingTextColor,
@@ -490,11 +533,27 @@ class _LabeledTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final TextInputType? keyboardType;
   final bool obscureText;
+  final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
   final String? supportingText;
   final Color? supportingTextColor;
   final List<TextInputFormatter>? inputFormatters;
   final int? maxLength;
+
+  @override
+  State<_LabeledTextField> createState() => _LabeledTextFieldState();
+}
+
+class _LabeledTextFieldState extends State<_LabeledTextField> {
+  final _internalFocusNode = FocusNode();
+
+  FocusNode get _focusNode => widget.focusNode ?? _internalFocusNode;
+
+  @override
+  void dispose() {
+    _internalFocusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -509,28 +568,31 @@ class _LabeledTextField extends StatelessWidget {
       }
       return true;
     });
-    final input = KeyboardAwareField(
-      focusNode: focusNode,
-      builder: (context, keyboardFocusNode) => TextField(
-        key: inputKey,
+    final input = KeyboardAwareInput(
+      child: TextField(
+        key: widget.inputKey,
         enabled: inputEnabled,
-        controller: controller,
-        focusNode: keyboardFocusNode,
-        placeholder: Text(placeholder),
-        keyboardType: keyboardType,
-        obscureText: obscureText,
-        onChanged: onChanged,
-        inputFormatters: inputFormatters,
-        maxLength: maxLength,
+        controller: widget.controller,
+        focusNode: _focusNode,
+        placeholder: Text(widget.placeholder),
+        keyboardType: widget.keyboardType,
+        obscureText: widget.obscureText,
+        features: widget.obscureText
+            ? const [InputFeature.passwordToggle()]
+            : const [focusedClearInputFeature],
+        scrollPadding: inputScrollPadding,
+        onTap: widget.onTap,
+        onChanged: widget.onChanged,
+        inputFormatters: widget.inputFormatters,
+        maxLength: widget.maxLength,
         onEditingComplete: _dismissKeyboard,
-        onTapOutside: (_) => _dismissKeyboard(),
       ),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          label,
+          widget.label,
           style: theme.typography.small.copyWith(
             color: theme.colorScheme.foreground,
             fontWeight: FontWeight.w600,
@@ -542,15 +604,16 @@ class _LabeledTextField extends StatelessWidget {
         else
           ValidatedField(
             validation: validation!,
-            controller: controller,
+            controller: widget.controller,
             child: input,
           ),
-        if (supportingText != null && supportingText!.isNotEmpty) ...[
+        if (widget.supportingText != null &&
+            widget.supportingText!.isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(
-            supportingText!,
+            widget.supportingText!,
             style: theme.typography.small.copyWith(
-              color: supportingTextColor ?? GetPrioTheme.mutedInk,
+              color: widget.supportingTextColor ?? GetPrioTheme.mutedInk,
             ),
           ),
         ],
@@ -568,10 +631,12 @@ class BiometricLoginPage extends StatefulWidget {
     super.key,
     required this.authRepository,
     required this.onAuthenticated,
+    this.oauthFlow,
     this.sandbox = false,
   });
 
   final AuthRepository authRepository;
+  final OAuthFlow? oauthFlow;
   final ValueChanged<AuthSession> onAuthenticated;
   final bool sandbox;
 
@@ -592,6 +657,7 @@ class _BiometricLoginPageState extends State<BiometricLoginPage> {
       }
       return SignInPage(
         authRepository: widget.authRepository,
+        oauthFlow: widget.oauthFlow,
         onAuthenticated: widget.onAuthenticated,
         rememberedUser: snapshot.data,
         biometricLogin: true,
@@ -640,10 +706,11 @@ class _RememberedLoginProfile extends StatelessWidget {
               color: GetPrioTheme.paperAccent,
               child: url == null || url.isEmpty
                   ? fallback
-                  : Image.network(
-                      url,
+                  : CachedNetworkImage(
+                      imageUrl: url,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => fallback,
+                      cacheKey: 'remembered-profile-${user.id}-$url',
+                      errorWidget: (_, _, _) => fallback,
                     ),
             ),
           ),
@@ -694,6 +761,7 @@ class _SignInPageState extends State<SignInPage>
   String? _error;
   bool _isBusy = false;
   bool _useRecoveryCode = false;
+  Timer? _keepFieldVisibleTimer;
   @override
   void initState() {
     super.initState();
@@ -729,6 +797,7 @@ class _SignInPageState extends State<SignInPage>
 
   @override
   void dispose() {
+    _keepFieldVisibleTimer?.cancel();
     _identifierController.dispose();
     _passwordController.dispose();
     _mfaController.dispose();
@@ -739,13 +808,27 @@ class _SignInPageState extends State<SignInPage>
   @override
   Widget build(BuildContext context) {
     final challenge = _challenge;
+    final showOAuthButtons = shouldShowOAuthButtons(
+      enabled: widget.oauthFlow?.enabled == true,
+    );
+    final showAppleButton = shouldShowAppleSignInButton(
+      enabled:
+          widget.oauthFlow?.enabled == true &&
+          widget.oauthFlow?.appleEnabled == true,
+      platform: defaultTargetPlatform,
+    );
     return Scaffold(
       resizeToAvoidBottomInset: true,
       child: SafeArea(
         child: Center(
-          child: KeyboardAwareScrollView(
+          child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.fromLTRB(
+              24,
+              24,
+              24,
+              24 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
@@ -764,9 +847,7 @@ class _SignInPageState extends State<SignInPage>
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    widget.sandbox
-                        ? 'GetPrio Sandbox'
-                        : widget.biometricLogin
+                    widget.biometricLogin
                         ? 'Welcome back'
                         : 'Welcome to GetPrio',
                     textAlign: TextAlign.center,
@@ -774,9 +855,7 @@ class _SignInPageState extends State<SignInPage>
                   const SizedBox(height: 8),
                   Text(
                     challenge == null
-                        ? widget.sandbox
-                              ? 'Sign in with your Sandbox test-user credentials.'
-                              : 'Sign in to manage your queue tickets.'
+                        ? 'Sign in to manage your queue tickets.'
                         : 'Verify your identity to finish signing in.',
                     textAlign: challenge == null
                         ? TextAlign.center
@@ -795,6 +874,7 @@ class _SignInPageState extends State<SignInPage>
                         label: 'Email or username',
                         placeholder: 'you@example.com or username',
                         keyboardType: TextInputType.emailAddress,
+                        onTap: () => _keepFieldVisible(_identifierController),
                       ),
                     const SizedBox(height: 12),
                     _LabeledTextField(
@@ -803,6 +883,7 @@ class _SignInPageState extends State<SignInPage>
                       label: 'Password',
                       placeholder: 'Enter your password',
                       obscureText: true,
+                      onTap: () => _keepFieldVisible(_passwordController),
                     ),
                     const SizedBox(height: 20),
                     GetPrioActionButton.primary(
@@ -849,24 +930,21 @@ class _SignInPageState extends State<SignInPage>
                         ),
                       ),
                       const SizedBox(height: 8),
-                    ] else if (!widget.sandbox) ...[
+                    ] else ...[
                       GetPrioActionButton.outline(
                         onPressed: _isBusy ? null : _openRegister,
                         child: const Text('Create customer account'),
                       ),
                       const SizedBox(height: 8),
                     ],
-                    if (!widget.sandbox)
-                      Center(
-                        child: LinkButton(
-                          key: const Key('forgot-password-link'),
-                          onPressed: _isBusy ? null : _openPasswordRecovery,
-                          child: const Text('Forgot password?'),
-                        ),
+                    Center(
+                      child: LinkButton(
+                        key: const Key('forgot-password-link'),
+                        onPressed: _isBusy ? null : _openPasswordRecovery,
+                        child: const Text('Forgot password?'),
                       ),
-                    if (!widget.sandbox &&
-                        !widget.biometricLogin &&
-                        widget.oauthFlow?.enabled == true) ...[
+                    ),
+                    if (showOAuthButtons || showAppleButton) ...[
                       const SizedBox(height: 16),
                       const Text(
                         'Or continue with',
@@ -874,24 +952,34 @@ class _SignInPageState extends State<SignInPage>
                       ),
                       const SizedBox(height: 8),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Expanded(
-                            child: GetPrioActionButton.outline(
+                          if (showOAuthButtons)
+                            _OAuthIconButton(
+                              assetPath: 'assets/auth/google.svg',
+                              label: 'Continue with Google',
                               onPressed: _isBusy
                                   ? null
                                   : () => _signInWithOAuth('google'),
-                              child: const Text('Google'),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: GetPrioActionButton.outline(
+                          if (showOAuthButtons) const SizedBox(width: 12),
+                          if (showOAuthButtons)
+                            _OAuthIconButton(
+                              assetPath: 'assets/auth/facebook.svg',
+                              label: 'Continue with Facebook',
                               onPressed: _isBusy
                                   ? null
                                   : () => _signInWithOAuth('facebook'),
-                              child: const Text('Facebook'),
                             ),
-                          ),
+                          if (showOAuthButtons && showAppleButton)
+                            const SizedBox(width: 12),
+                          if (showAppleButton)
+                            _OAuthIconButton(
+                              assetPath: 'assets/auth/apple.svg',
+                              label: 'Continue with Apple',
+                              onPressed: _isBusy ? null : _signInWithApple,
+                            ),
                         ],
                       ),
                     ],
@@ -902,6 +990,7 @@ class _SignInPageState extends State<SignInPage>
                         controller: _recoveryController,
                         label: 'Recovery code',
                         placeholder: 'Enter a recovery code',
+                        onTap: () => _keepFieldVisible(_recoveryController),
                       )
                     else
                       _LabeledTextField(
@@ -910,6 +999,7 @@ class _SignInPageState extends State<SignInPage>
                         label: 'Authenticator code',
                         placeholder: 'Enter your 6-digit code',
                         keyboardType: TextInputType.number,
+                        onTap: () => _keepFieldVisible(_mfaController),
                       ),
                     const SizedBox(height: 12),
                     GetPrioActionButton.primary(
@@ -951,6 +1041,51 @@ class _SignInPageState extends State<SignInPage>
         ),
       ),
     );
+  }
+
+  void _keepFieldVisible(TextEditingController controller) {
+    void ensureVisible() {
+      final fieldContext = formValidation.keyFor(controller).currentContext;
+      if (!mounted || fieldContext == null || !fieldContext.mounted) return;
+      final fieldRenderObject = fieldContext.findRenderObject();
+      final scrollable = Scrollable.maybeOf(fieldContext);
+      if (fieldRenderObject is! RenderBox ||
+          !fieldRenderObject.hasSize ||
+          scrollable == null) {
+        return;
+      }
+
+      final fieldTop = fieldRenderObject.localToGlobal(Offset.zero).dy;
+      final fieldBottom = fieldTop + fieldRenderObject.size.height;
+      final viewInsets = MediaQuery.viewInsetsOf(context);
+      final keyboardTop = MediaQuery.sizeOf(context).height - viewInsets.bottom;
+      const safeGap = 24.0;
+      final scrollDelta = fieldBottom > keyboardTop - safeGap
+          ? fieldBottom - (keyboardTop - safeGap)
+          : fieldTop < safeGap
+          ? fieldTop - safeGap
+          : 0.0;
+      if (scrollDelta == 0) return;
+
+      final position = scrollable.position;
+      final target = (position.pixels + scrollDelta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      position.animateTo(
+        target,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ensureVisible();
+      _keepFieldVisibleTimer?.cancel();
+      _keepFieldVisibleTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) ensureVisible();
+      });
+    });
   }
 
   Future<void> _signIn() async {
@@ -1047,7 +1182,38 @@ class _SignInPageState extends State<SignInPage>
           setState(() => _challenge = challenge);
       }
     } catch (error) {
-      if (mounted) showFormError(error, _authError(error));
+      if (mounted) {
+        final message = _authError(error);
+        setState(() => _error = message);
+        showFormError(error, message);
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _signInWithApple() async {
+    final flow = widget.oauthFlow;
+    if (flow == null) return;
+    setState(() {
+      _error = null;
+      _isBusy = true;
+    });
+    try {
+      final result = await flow.signInWithApple();
+      if (!mounted) return;
+      switch (result) {
+        case AuthenticatedSession(:final session):
+          widget.onAuthenticated(session);
+        case final MfaChallenge challenge:
+          setState(() => _challenge = challenge);
+      }
+    } catch (error) {
+      if (mounted) {
+        final message = _authError(error);
+        setState(() => _error = message);
+        showFormError(error, message);
+      }
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
@@ -1078,8 +1244,44 @@ class _SignInPageState extends State<SignInPage>
       return 'API URL is missing. Launch with --dart-define=GETPRIO_API_BASE_URL=<your-api-origin>.';
     }
     if (error is ApiException && error.message.isNotEmpty) return error.message;
+    if (error is OAuthException && error.message.isNotEmpty) {
+      return error.message;
+    }
     if (error is FormatException) return error.message;
     return 'We could not sign you in. Check your connection and try again.';
+  }
+}
+
+class _OAuthIconButton extends StatelessWidget {
+  const _OAuthIconButton({
+    required this.assetPath,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String assetPath;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: label,
+      onTap: onPressed,
+      child: ExcludeSemantics(
+        child: IconButton.outline(
+          icon: SvgPicture.asset(
+            assetPath,
+            width: 32,
+            height: 32,
+            excludeFromSemantics: true,
+          ),
+          onPressed: onPressed,
+        ),
+      ),
+    );
   }
 }
 
@@ -1176,15 +1378,6 @@ class _RegisterPageState extends State<RegisterPage>
         const Text('Customer registration').h1(),
         const SizedBox(height: 8),
         const Text('Create your account to manage bookings and queue tickets.'),
-        const SizedBox(height: 12),
-        const SizedBox(
-          height: 150,
-          child: Image(
-            image: AssetImage('assets/illustrations/customer-onboarding.png'),
-            fit: BoxFit.contain,
-            semanticLabel: 'Illustration of a customer using GetPrio',
-          ),
-        ),
         const SizedBox(height: 20),
         _LabeledTextField(
           inputKey: const Key('register-full-name'),
@@ -1856,7 +2049,13 @@ class _CustomerShellState extends State<CustomerShell>
   Future<void> _presentTicketInvitation([PushSignal? signal]) async {
     final repository = widget.ticketRepository;
     if (repository == null) return;
-    var invitations = await repository.loadPendingInvitations();
+    List<TicketInvitation> invitations;
+    try {
+      invitations = await repository.loadPendingInvitations();
+    } catch (error) {
+      debugPrint('[tickets] invitation refresh failed: $error');
+      return;
+    }
     if (!mounted || invitations.isEmpty) return;
 
     invitations = await _acceptApprovedInvitations(repository, invitations);
@@ -1881,14 +2080,15 @@ class _CustomerShellState extends State<CustomerShell>
       DialogConfiguration(),
       builder: (dialogContext) {
         var alwaysAccept = false;
-        final canApproveVendor =
-            widget.sandbox &&
-            widget.approvedVendorStore != null &&
-            widget.user?.id.trim().isNotEmpty == true;
         final approvedVendor = ApprovedVendor.fromTicket(
           tenantSlug: invitation.ticket.tenantSlug,
           vendorName: invitation.ticket.vendorName,
         );
+        final canApproveVendor =
+            widget.sandbox &&
+            widget.approvedVendorStore != null &&
+            widget.user?.id.trim().isNotEmpty == true &&
+            approvedVendor != null;
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             key: const Key('ticket-invitation-prompt'),
@@ -1989,7 +2189,7 @@ class _CustomerShellState extends State<CustomerShell>
         tenantSlug: invitation.ticket.tenantSlug,
         vendorName: invitation.ticket.vendorName,
       );
-      if (!approved.any((item) => item.key == vendor.key)) {
+      if (vendor == null || !approved.any((item) => item.key == vendor.key)) {
         remaining.add(invitation);
         continue;
       }
@@ -2237,13 +2437,17 @@ class _CustomerShellState extends State<CustomerShell>
           'You will leave the queue and this action cannot be undone.',
         ),
         actions: [
-          GetPrioActionButton.outline(
-            onPressed: () => closeOverlay(dialogContext, false),
-            child: const Text('Keep ticket'),
-          ),
-          GetPrioActionButton.destructive(
-            onPressed: () => closeOverlay(dialogContext, true),
-            child: const Text('Cancel ticket'),
+          GetPrioModalActions(
+            children: [
+              GetPrioActionButton.outline(
+                onPressed: () => closeOverlay(dialogContext, false),
+                child: const Text('Keep ticket'),
+              ),
+              GetPrioActionButton.destructive(
+                onPressed: () => closeOverlay(dialogContext, true),
+                child: const Text('Cancel ticket'),
+              ),
+            ],
           ),
         ],
       ),
@@ -2365,22 +2569,13 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 20),
           const Text('Your stats').h3(),
           const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _StatMetric(label: 'Tickets joined', value: '0'),
-              ),
-              const SizedBox(
-                height: 48,
-                child: VerticalDivider(width: 1, thickness: 1),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: _StatMetric(label: 'Tickets served', value: '0'),
-              ),
-            ],
-          ),
+          if (widget.ticketRepository case final repository?)
+            ValueListenableBuilder<CustomerTicketStats?>(
+              valueListenable: repository.ticketStats,
+              builder: (context, stats, _) => _homeTicketStats(stats),
+            )
+          else
+            _homeTicketStats(null),
           if (widget.directoryRepository?.social case final repository?) ...[
             const SizedBox(height: 28),
             const Divider(),
@@ -2397,6 +2592,29 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+
+  Widget _homeTicketStats(CustomerTicketStats? stats) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: _StatMetric(
+          label: 'Tickets joined',
+          value: stats?.joined.toString() ?? '—',
+        ),
+      ),
+      const SizedBox(
+        height: 48,
+        child: VerticalDivider(width: 1, thickness: 1),
+      ),
+      const SizedBox(width: 20),
+      Expanded(
+        child: _StatMetric(
+          label: 'Tickets served',
+          value: stats?.served.toString() ?? '—',
+        ),
+      ),
+    ],
+  );
 
   Future<void> _refresh() async {
     try {
@@ -2463,9 +2681,14 @@ class _ActiveTicketCard extends StatelessWidget {
               final active =
                   snapshot.data?.where((ticket) => ticket.isActive).toList() ??
                   [];
-              return active.isEmpty
-                  ? _emptyCard(context)
-                  : _ticketCard(context, active.first);
+              if (active.isEmpty) return _emptyCard(context);
+              if (active.length == 1) return _ticketCard(context, active.first);
+              return ActiveTicketCarousel(
+                key: ValueKey(active.map((ticket) => ticket.id).join('|')),
+                children: active
+                    .map((ticket) => _ticketCard(context, ticket))
+                    .toList(),
+              );
             },
           ),
     );
@@ -2566,7 +2789,7 @@ class _ActiveTicketCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 20),
-              _TicketProgress(ticket: ticket),
+              _TicketProgress(ticket: ticket, useIconTimeline: true),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
@@ -2645,6 +2868,8 @@ class _ExplorePageState extends State<ExplorePage> {
   Future<List<VendorSummary>>? _vendors;
   String _query = '';
   String _filter = 'All';
+  final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -2659,6 +2884,13 @@ class _ExplorePageState extends State<ExplorePage> {
         oldWidget.queueRepository != widget.queueRepository) {
       _vendors = widget.repository?.loadVendors();
     }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _reloadVendors() async {
@@ -2699,12 +2931,17 @@ class _ExplorePageState extends State<ExplorePage> {
           const SizedBox(height: 4),
           const Text('Browse vendors with queueing available.'),
           const SizedBox(height: 20),
-          KeyboardAwareField(
-            builder: (context, focusNode) => TextField(
+          KeyboardAwareInput(
+            child: TextField(
               key: const Key('vendor-search-field'),
-              focusNode: focusNode,
+              controller: _searchController,
+              focusNode: _searchFocusNode,
               placeholder: const Text('Search vendors'),
-              features: const [InputFeature.leading(Icon(LucideIcons.search))],
+              features: [
+                InputFeature.leading(Icon(LucideIcons.search)),
+                focusedClearInputFeature,
+              ],
+              scrollPadding: inputScrollPadding,
               onChanged: (value) => setState(() => _query = value.trim()),
             ),
           ),
@@ -3379,28 +3616,28 @@ class _VendorProfileView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 28),
-            Row(
-              children: [
-                Expanded(
-                  child: _VendorHighlight(
-                    value: '${vendor.locations.length}',
-                    label: vendor.locations.length == 1
-                        ? 'Location'
-                        : 'Locations',
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _VendorHighlight(
+                      value: '${vendor.locations.length}',
+                      label: vendor.locations.length == 1
+                          ? 'Location'
+                          : 'Locations',
+                    ),
                   ),
-                ),
-                const SizedBox(
-                  height: 52,
-                  child: VerticalDivider(width: 1, thickness: 1),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: _VendorHighlight(
-                    value: '$openLocations',
-                    label: openLocations == 1 ? 'Queue open' : 'Queues open',
+                  const VerticalDivider(width: 1, thickness: 1),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: _VendorHighlight(
+                      value: '$openLocations',
+                      label: openLocations == 1 ? 'Queue open' : 'Queues open',
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             if (vendor.description != null) ...[
               const SizedBox(height: 32),
@@ -3408,7 +3645,7 @@ class _VendorProfileView extends StatelessWidget {
               const SizedBox(height: 24),
               const Text('About').h3(),
               const SizedBox(height: 10),
-              _ExpandableVendorDescription(description: vendor.description!),
+              ExpandableVendorDescription(description: vendor.description!),
             ],
             const SizedBox(height: 32),
             const Text('Queue-capable locations').h3(),
@@ -3884,6 +4121,8 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
 
   final _subject = TextEditingController();
   final _message = TextEditingController();
+  final _subjectFocusNode = FocusNode();
+  final _messageFocusNode = FocusNode();
   bool _busy = false;
   String? _error;
 
@@ -3891,6 +4130,8 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
   void dispose() {
     _subject.dispose();
     _message.dispose();
+    _subjectFocusNode.dispose();
+    _messageFocusNode.dispose();
     super.dispose();
   }
 
@@ -4012,13 +4253,15 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
               ValidatedField(
                 validation: formValidation,
                 controller: _subject,
-                child: KeyboardAwareField(
-                  builder: (context, focusNode) => TextField(
+                child: KeyboardAwareInput(
+                  child: TextField(
                     key: const Key('vendor-contact-subject'),
                     enabled: !_busy,
                     controller: _subject,
-                    focusNode: focusNode,
+                    focusNode: _subjectFocusNode,
                     placeholder: const Text('What would you like to ask?'),
+                    features: const [focusedClearInputFeature],
+                    scrollPadding: inputScrollPadding,
                     textInputAction: TextInputAction.next,
                   ),
                 ),
@@ -4034,13 +4277,15 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
               ValidatedField(
                 validation: formValidation,
                 controller: _message,
-                child: KeyboardAwareField(
-                  builder: (context, focusNode) => TextArea(
+                child: KeyboardAwareInput(
+                  child: TextArea(
                     key: const Key('vendor-contact-message'),
                     enabled: !_busy,
                     controller: _message,
-                    focusNode: focusNode,
+                    focusNode: _messageFocusNode,
                     placeholder: const Text('Write your message'),
+                    features: const [focusedClearInputFeature],
+                    scrollPadding: inputScrollPadding,
                     initialHeight: 132,
                     minHeight: 132,
                     maxHeight: 220,
@@ -4063,46 +4308,6 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ExpandableVendorDescription extends StatefulWidget {
-  const _ExpandableVendorDescription({required this.description});
-
-  final String description;
-
-  @override
-  State<_ExpandableVendorDescription> createState() =>
-      _ExpandableVendorDescriptionState();
-}
-
-class _ExpandableVendorDescriptionState
-    extends State<_ExpandableVendorDescription> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final canExpand = widget.description.length > 320;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          widget.description,
-          maxLines: canExpand && !_expanded ? 7 : null,
-          overflow: canExpand && !_expanded
-              ? TextOverflow.ellipsis
-              : TextOverflow.visible,
-        ),
-        if (canExpand) ...[
-          const SizedBox(height: 8),
-          GhostButton(
-            onPressed: () => setState(() => _expanded = !_expanded),
-            density: ButtonDensity.compact,
-            child: Text(_expanded ? 'Show less' : 'Read more'),
-          ),
-        ],
-      ],
     );
   }
 }
@@ -4201,7 +4406,7 @@ class _VendorLocationRow extends StatelessWidget {
                     onPressed: onShowStoreHours,
                     leading: const Icon(LucideIcons.clock, size: 18),
                     trailing: const Icon(LucideIcons.chevronRight, size: 18),
-                    child: const Text('Show store hours'),
+                    child: const Text('Show operating hours'),
                   ),
                 ],
               ],
@@ -4223,8 +4428,12 @@ class _VendorStoreHoursSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hours = [...location.hours]
-      ..sort((left, right) => left.weekday.compareTo(right.weekday));
+    final groupedHours = <int, List<VendorStoreHour>>{};
+    for (final hour in location.hours) {
+      groupedHours.putIfAbsent(hour.weekday, () => []).add(hour);
+    }
+    final weekdays = groupedHours.keys.toList()..sort();
+    final currentWeekday = DateTime.now().weekday % 7;
     return Container(
       key: const Key('vendor-store-hours-sheet'),
       clipBehavior: Clip.antiAlias,
@@ -4251,7 +4460,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Store hours', style: theme.typography.h2),
+                        Text('Operating hours', style: theme.typography.h2),
                         const SizedBox(height: 4),
                         Text(
                           location.name,
@@ -4264,7 +4473,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                   ),
                   Semantics(
                     button: true,
-                    label: 'Close store hours',
+                    label: 'Close operating hours',
                     child: GhostButton(
                       onPressed: () => closeSheet(context),
                       density: ButtonDensity.icon,
@@ -4274,7 +4483,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              if (hours.isEmpty)
+              if (groupedHours.isEmpty)
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -4282,7 +4491,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    location.openStatus ?? 'Store hours are unavailable.',
+                    location.openStatus ?? 'Operating hours are unavailable.',
                   ),
                 )
               else
@@ -4298,9 +4507,14 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      for (var index = 0; index < hours.length; index++) ...[
-                        _VendorStoreHoursRow(hour: hours[index]),
-                        if (index < hours.length - 1) const Divider(height: 1),
+                      for (var index = 0; index < weekdays.length; index++) ...[
+                        _VendorStoreHoursRow(
+                          weekday: weekdays[index],
+                          hours: groupedHours[weekdays[index]]!,
+                          isToday: weekdays[index] == currentWeekday,
+                        ),
+                        if (index < weekdays.length - 1)
+                          const Divider(height: 1),
                       ],
                     ],
                   ),
@@ -4314,9 +4528,15 @@ class _VendorStoreHoursSheet extends StatelessWidget {
 }
 
 class _VendorStoreHoursRow extends StatelessWidget {
-  const _VendorStoreHoursRow({required this.hour});
+  const _VendorStoreHoursRow({
+    required this.weekday,
+    required this.hours,
+    required this.isToday,
+  });
 
-  final VendorStoreHour hour;
+  final int weekday;
+  final List<VendorStoreHour> hours;
+  final bool isToday;
 
   @override
   Widget build(BuildContext context) {
@@ -4327,17 +4547,30 @@ class _VendorStoreHoursRow extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              _storeHourWeekdayLabel(hour.weekday),
-              style: theme.typography.p.copyWith(fontWeight: FontWeight.w600),
+              _storeHourWeekdayLabel(weekday),
+              style: theme.typography.p.copyWith(
+                fontWeight: FontWeight.w600,
+                color: isToday ? GetPrioTheme.primary : null,
+              ),
             ),
           ),
           const SizedBox(width: 16),
-          Text(
-            _storeHourRangeLabel(hour),
-            textAlign: TextAlign.right,
-            style: theme.typography.p.copyWith(
-              color: hour.isClosed ? GetPrioTheme.mutedInk : GetPrioTheme.ink,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (final hour in hours)
+                Text(
+                  _storeHourRangeLabel(hour),
+                  textAlign: TextAlign.right,
+                  style: theme.typography.p.copyWith(
+                    color: isToday
+                        ? GetPrioTheme.primary
+                        : hour.isClosed
+                        ? GetPrioTheme.mutedInk
+                        : GetPrioTheme.ink,
+                  ),
+                ),
+            ],
           ),
         ],
       ),
@@ -4345,15 +4578,7 @@ class _VendorStoreHoursRow extends StatelessWidget {
   }
 }
 
-const _storeHourWeekdays = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-];
+const _storeHourWeekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 String _storeHourWeekdayLabel(int weekday) {
   if (weekday < 0 || weekday >= _storeHourWeekdays.length) {
@@ -4467,22 +4692,20 @@ class _VendorQueueStatusState extends State<_VendorQueueStatus> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(left: 52, bottom: 12),
-      child: Card(
+      child: FutureBuilder<QueueSnapshot>(
         key: ValueKey(
           'vendor-queue-status-${widget.location.slug ?? widget.location.id}',
         ),
-        child: FutureBuilder<QueueSnapshot>(
-          future: _snapshot,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const LiveQueueStatusSkeleton();
-            }
-            if (snapshot.hasError) {
-              return const Text('Live queue status is unavailable right now.');
-            }
-            return _content(snapshot.data!);
-          },
-        ),
+        future: _snapshot,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const LiveQueueStatusSkeleton();
+          }
+          if (snapshot.hasError || snapshot.data == null) {
+            return const Text('Live queue status is unavailable right now.');
+          }
+          return _content(snapshot.data!);
+        },
       ),
     );
   }
@@ -4498,71 +4721,19 @@ class _VendorQueueStatusState extends State<_VendorQueueStatus> {
         (snapshot.queueDay.isPaused ||
             snapshot.queueDay.intakeMode == 'paused' ||
             snapshot.queueIntake.state == 'paused');
-    final status = isClosed
-        ? const DestructiveBadge(child: Text('QUEUE CLOSED'))
-        : isPaused
-        ? const SecondaryBadge(child: Text('PAUSED'))
-        : const PrimaryBadge(child: Text('QUEUE OPEN'));
     final current =
         snapshot.current?.ticketNumber ??
         snapshot.stats.currentTicketNumber ??
         '--';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [const Text('Current queue').h4(), status],
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: _VendorQueueMetric(
-                value: '${snapshot.stats.waitingCount} waiting',
-                label: 'in line',
-              ),
-            ),
-            const SizedBox(
-              height: 42,
-              child: VerticalDivider(width: 1, thickness: 1),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _VendorQueueMetric(
-                value:
-                    '${snapshot.stats.estimatedWaitMinutes} min estimated wait',
-                label: 'for a new join',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text('Currently serving $current'),
-      ],
-    );
-  }
-}
-
-class _VendorQueueMetric extends StatelessWidget {
-  const _VendorQueueMetric({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          value,
-          style: Theme.of(context).typography.p
-              .copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 2),
-        Text(label, style: Theme.of(context).typography.textMuted),
-      ],
+    return CurrentQueueCard(
+      status: isClosed
+          ? CurrentQueueCardStatus.closed
+          : isPaused
+          ? CurrentQueueCardStatus.paused
+          : CurrentQueueCardStatus.open,
+      waitingCount: snapshot.stats.waitingCount,
+      currentTicketNumber: current,
+      estimatedWaitMinutes: snapshot.stats.estimatedWaitMinutes,
     );
   }
 }
@@ -4991,13 +5162,17 @@ class _TicketsPageState extends State<TicketsPage> {
           'You will leave the queue and this action cannot be undone.',
         ),
         actions: [
-          GetPrioActionButton.outline(
-            onPressed: () => closeOverlay(dialogContext, false),
-            child: const Text('Keep ticket'),
-          ),
-          GetPrioActionButton.destructive(
-            onPressed: () => closeOverlay(dialogContext, true),
-            child: const Text('Cancel ticket'),
+          GetPrioModalActions(
+            children: [
+              GetPrioActionButton.outline(
+                onPressed: () => closeOverlay(dialogContext, false),
+                child: const Text('Keep ticket'),
+              ),
+              GetPrioActionButton.destructive(
+                onPressed: () => closeOverlay(dialogContext, true),
+                child: const Text('Cancel ticket'),
+              ),
+            ],
           ),
         ],
       ),
@@ -5114,10 +5289,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     final vendor = await _loadVendor(ticket);
     final repository = widget.queueRepository;
     final tenantSlug = ticket.tenantSlug;
-    if (widget.sandbox ||
-        repository == null ||
-        tenantSlug == null ||
-        ticket.lookupCode.isEmpty) {
+    if (repository == null || tenantSlug == null || ticket.lookupCode.isEmpty) {
       return _TicketDetailsData(ticket: ticket, vendor: vendor);
     }
 
@@ -5677,9 +5849,10 @@ class _TicketMetric extends StatelessWidget {
 }
 
 class _TicketProgress extends StatelessWidget {
-  const _TicketProgress({required this.ticket});
+  const _TicketProgress({required this.ticket, this.useIconTimeline = false});
 
   final QueueTicket ticket;
+  final bool useIconTimeline;
 
   @override
   Widget build(BuildContext context) {
@@ -5690,6 +5863,7 @@ class _TicketProgress extends StatelessWidget {
         const SizedBox(height: 12),
         _TimelineStep(
           label: 'Joined queue',
+          icon: useIconTimeline ? LucideIcons.check : null,
           caption: ticket.joinedAt == null
               ? 'Ticket confirmed'
               : _timeLabel(ticket.joinedAt!),
@@ -5697,6 +5871,11 @@ class _TicketProgress extends StatelessWidget {
         ),
         _TimelineStep(
           label: ticket.displayStatusLabel,
+          icon: useIconTimeline
+              ? (ticket.status == TicketStatus.waiting
+                    ? LucideIcons.clock
+                    : LucideIcons.circleDot)
+              : null,
           caption: _statusCaption(ticket),
           color: _statusColor(ticket.status),
           isLast: true,
@@ -5707,9 +5886,16 @@ class _TicketProgress extends StatelessWidget {
 
   String _statusCaption(QueueTicket ticket) {
     if (ticket.status == TicketStatus.waiting && ticket.position != null) {
+      if (useIconTimeline) {
+        final ahead = ticket.position! > 1 ? ticket.position! - 1 : 0;
+        return ahead == 1
+            ? 'There is 1 person in front of you'
+            : 'There are $ahead people in front of you';
+      }
       return 'Position ${ticket.position} in line';
     }
     return switch (ticket.status) {
+      TicketStatus.waiting => 'Queue position is temporarily unavailable',
       TicketStatus.called when ticket.isConfirmed =>
         'Arrival confirmed; waiting for service',
       TicketStatus.called => 'Please proceed to the service area',
@@ -5735,6 +5921,10 @@ class _TicketProgress extends StatelessWidget {
   String _timeLabel(DateTime date) {
     final local = date.toLocal();
     final minute = local.minute.toString().padLeft(2, '0');
+    if (useIconTimeline) {
+      final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+      return '$hour:$minute ${local.hour >= 12 ? 'PM' : 'AM'}';
+    }
     return '${local.hour}:$minute';
   }
 }
@@ -5744,16 +5934,78 @@ class _TimelineStep extends StatelessWidget {
     required this.label,
     required this.caption,
     required this.color,
+    this.icon,
     this.isLast = false,
   });
 
   final String label;
   final String caption;
   final Color color;
+  final IconData? icon;
   final bool isLast;
+
+  Widget _iconTimeline(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 28,
+            child: Column(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 16, color: GetPrioTheme.onPrimary),
+                ),
+                if (!isLast) ...[
+                  const SizedBox(height: 4),
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.only(bottom: 4),
+                      decoration: BoxDecoration(
+                        color: GetPrioTheme.line,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(top: 3, bottom: isLast ? 0 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    caption,
+                    style: const TextStyle(color: GetPrioTheme.mutedInk),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (icon != null) return _iconTimeline(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5839,155 +6091,157 @@ class _AccountPageState extends State<AccountPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (_) => _dismissKeyboard(),
-      child: DrawerOverlay(
-        child: Builder(
-          builder: (overlayContext) {
-            final user = _user ?? widget.user;
-            final displayName = user?.customerName ?? 'Customer';
-            final email = user?.email ?? '';
-            return ListView(
-              key: const Key('account-page'),
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              children: [
-                const Text('Profile').h2(),
-                const SizedBox(height: 4),
-                const Text('Manage your profile and app preferences.'),
-                const SizedBox(height: 20),
-                Card(
-                  child: Row(
-                    children: [
-                      _ProfileAvatar(
-                        user: user,
-                        busy: _avatarBusy,
-                        onPressed: _pickAvatar,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(displayName).h3(),
-                            const SizedBox(height: 4),
-                            Text(email),
-                            if (user != null && !user.emailVerified) ...[
-                              const SizedBox(height: 6),
-                              Text(
-                                'Email not verified',
-                                style: TextStyle(
-                                  color: GetPrioTheme.destructive,
-                                ),
-                              ),
-                            ],
+    return DrawerOverlay(
+      child: Builder(
+        builder: (overlayContext) {
+          final user = _user ?? widget.user;
+          final displayName = user?.customerName ?? 'Customer';
+          final email = user?.email ?? '';
+          return ListView(
+            key: const Key('account-page'),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: [
+              const Text('Profile').h2(),
+              const SizedBox(height: 4),
+              const Text('Manage your profile and app preferences.'),
+              const SizedBox(height: 20),
+              Card(
+                child: Row(
+                  children: [
+                    _ProfileAvatar(
+                      user: user,
+                      busy: _avatarBusy,
+                      onPressed: _pickAvatar,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(displayName).h3(),
+                          const SizedBox(height: 4),
+                          Text(email),
+                          if (user != null && !user.emailVerified) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Email not verified',
+                              style: TextStyle(color: GetPrioTheme.destructive),
+                            ),
                           ],
-                        ),
+                        ],
                       ),
-                      GhostButton(
-                        key: const Key('profile-edit-button'),
-                        onPressed: () => _openPersonalInfoSheet(overlayContext),
-                        density: ButtonDensity.icon,
-                        child: const Icon(LucideIcons.pencil),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 28),
-                const Text('Account').h3(),
-                const SizedBox(height: 8),
-                if (widget.socialRepository case final repository?) ...[
-                  _AccountAction(
-                    icon: LucideIcons.heart,
-                    title: 'Favorites',
-                    subtitle: 'Manage your favorite vendors.',
-                    onPressed: () => showFavoritesSheet(
-                      overlayContext,
-                      repository,
-                      onOpen: widget.onOpenVendor,
                     ),
-                  ),
-                  const Divider(),
-                ],
-                _AccountAction(
-                  key: const Key('profile-personal-info'),
-                  icon: LucideIcons.userRound,
-                  title: 'Personal info',
-                  subtitle: 'Name, display name, email, and phone number.',
-                  onPressed: () => _openPersonalInfoSheet(overlayContext),
+                  ],
                 ),
-                const Divider(),
-                const SizedBox(height: 20),
-                const Text('Settings').h3(),
-                const SizedBox(height: 8),
-                if (widget.sandbox && widget.approvedVendorStore != null) ...[
-                  _AccountAction(
-                    key: const Key('profile-approved-vendors'),
-                    icon: LucideIcons.store,
-                    title: 'Approved Vendors',
-                    subtitle: 'Manage vendors whose invitations are accepted automatically.',
-                    onPressed: () => _openApprovedVendorsSheet(overlayContext),
-                  ),
-                  const Divider(),
-                ],
+              ),
+              const SizedBox(height: 28),
+              const Text('Account').h3(),
+              const SizedBox(height: 8),
+              _AccountAction(
+                key: const Key('profile-personal-info'),
+                icon: LucideIcons.userRound,
+                title: 'Personal info',
+                subtitle: 'Name, display name, email, and phone number.',
+                onPressed: () => _openPersonalInfoSheet(overlayContext),
+              ),
+              const Divider(),
+              if (widget.socialRepository case final repository?) ...[
                 _AccountAction(
-                  key: const Key('profile-notifications'),
-                  icon: LucideIcons.bell,
-                  title: 'Notifications',
-                  subtitle: widget.settingsRepository == null
-                      ? 'Queue alerts unavailable'
-                      : 'Manage queue alerts and app preferences.',
-                  onPressed: () => _openNotificationsSheet(overlayContext),
-                ),
-                const Divider(),
-                const Text('Security').h3(),
-                const SizedBox(height: 8),
-                _AccountAction(
-                  key: const Key('profile-biometrics'),
-                  icon: LucideIcons.fingerprint,
-                  title: 'Biometrics',
-                  subtitle: 'Manage Face ID, Touch ID, or fingerprint sign-in.',
-                  onPressed: () => _openSecuritySheet(
+                  key: const Key('profile-favorites'),
+                  icon: LucideIcons.heart,
+                  title: 'Favorites',
+                  subtitle: 'Manage your favorite vendors.',
+                  onPressed: () => showFavoritesSheet(
                     overlayContext,
-                    SecuritySection.biometrics,
+                    repository,
+                    onOpen: widget.onOpenVendor,
                   ),
                 ),
-                if (!widget.sandbox) ...[
-                  const Divider(),
-                  _AccountAction(
-                    key: const Key('profile-password'),
-                    icon: LucideIcons.lockKeyhole,
-                    title: 'Password',
-                    subtitle: 'Change your account password.',
-                    onPressed: () => _openSecuritySheet(
-                      overlayContext,
-                      SecuritySection.password,
-                    ),
-                  ),
-                  const Divider(),
-                  _AccountAction(
-                    key: const Key('profile-mfa'),
-                    icon: LucideIcons.shieldCheck,
-                    title: 'MFA Setup',
-                    subtitle: 'Set up an authenticator app and recovery codes.',
-                    onPressed: () =>
-                        _openSecuritySheet(overlayContext, SecuritySection.mfa),
-                  ),
-                ],
                 const Divider(),
-                _AccountAction(
-                  key: const Key('profile-logout'),
-                  icon: LucideIcons.logOut,
-                  title: 'Log out',
-                  subtitle: 'Sign out of this device.',
-                  onPressed: widget.onSignOut == null
-                      ? null
-                      : () => _confirmSignOut(overlayContext),
-                  destructive: true,
-                ),
               ],
-            );
-          },
-        ),
+              const SizedBox(height: 20),
+              const Text('Settings').h3(),
+              const SizedBox(height: 8),
+              if (widget.approvedVendorStore != null) ...[
+                _AccountAction(
+                  key: const Key('profile-approved-vendors'),
+                  icon: LucideIcons.store,
+                  title: 'Approved Vendors',
+                  subtitle: 'Manage vendors whose invitations are accepted automatically.',
+                  onPressed: () => _openApprovedVendorsSheet(overlayContext),
+                ),
+                const Divider(),
+              ],
+              _AccountAction(
+                key: const Key('profile-notifications'),
+                icon: LucideIcons.bell,
+                title: 'Notifications',
+                subtitle: widget.settingsRepository == null
+                    ? 'Queue alerts unavailable'
+                    : 'Manage queue alerts and app preferences.',
+                onPressed: () => _openNotificationsSheet(overlayContext),
+              ),
+              const Divider(),
+              const SizedBox(height: 20),
+              const Text('Security').h3(),
+              const SizedBox(height: 8),
+              _AccountAction(
+                key: const Key('profile-biometrics'),
+                icon: LucideIcons.fingerprint,
+                title: 'Biometrics',
+                subtitle: 'Manage Face ID, Touch ID, or fingerprint sign-in.',
+                onPressed: () => _openSecuritySheet(
+                  overlayContext,
+                  SecuritySection.biometrics,
+                ),
+              ),
+              const Divider(),
+              _AccountAction(
+                key: const Key('profile-password'),
+                icon: LucideIcons.lockKeyhole,
+                title: 'Password',
+                subtitle: 'Change your account password.',
+                onPressed: () => _openSecuritySheet(
+                  overlayContext,
+                  SecuritySection.password,
+                ),
+              ),
+              const Divider(),
+              _AccountAction(
+                key: const Key('profile-mfa'),
+                icon: LucideIcons.shieldCheck,
+                title: user?.mfaEnabled == true ? 'MFA' : 'MFA Setup',
+                subtitle: user?.mfaEnabled == true
+                    ? 'Authenticator app is enabled.'
+                    : 'Set up an authenticator app and recovery codes.',
+                onPressed: () =>
+                    _openSecuritySheet(overlayContext, SecuritySection.mfa),
+              ),
+              const Divider(),
+              _AccountAction(
+                key: const Key('profile-logout'),
+                icon: LucideIcons.logOut,
+                title: 'Log out',
+                subtitle: 'Sign out of this device.',
+                onPressed: widget.onSignOut == null
+                    ? null
+                    : () => _confirmSignOut(overlayContext),
+                destructive: true,
+              ),
+              const Divider(),
+              _AccountAction(
+                key: const Key('profile-delete-account'),
+                icon: LucideIcons.trash2,
+                title: 'Delete account',
+                subtitle: 'Permanently delete your account and personal data.',
+                destructive: true,
+                onPressed: widget.securityRepository == null
+                    ? null
+                    : () => _confirmDeleteAccount(overlayContext),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -6103,6 +6357,15 @@ class _AccountPageState extends State<AccountPage> {
         repository: widget.securityRepository,
         biometricLogin: biometricLogin,
         onPasswordChanged: widget.onSignOut,
+        mfaEnabled: (_user ?? widget.user)?.mfaEnabled == true,
+        mfaRequired: (_user ?? widget.user)?.mfaRequired == true,
+        onMfaChanged: (enabled) {
+          final user = _user ?? widget.user;
+          if (!mounted || user == null) return;
+          final updated = user.copyWith(mfaEnabled: enabled);
+          setState(() => _user = updated);
+          widget.onUserUpdated?.call(updated);
+        },
         asSheet: true,
         section: section,
       ),
@@ -6168,6 +6431,21 @@ class _AccountPageState extends State<AccountPage> {
     }
   }
 
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final repository = widget.securityRepository;
+    if (repository == null) return;
+    _dismissKeyboard();
+    final deleted = await showOverlay<bool>(
+      context,
+      const DialogConfiguration(barrierDismissible: false),
+      builder: (_) => DeleteAccountDialog(
+        deleteAccount: repository.deleteAccount,
+        requiresPassword: repository.deletionRequiresPassword,
+      ),
+    ).future;
+    if (deleted == true && mounted) widget.onSignOut?.call();
+  }
+
   Future<void> _confirmSignOut(BuildContext context) async {
     final onSignOut = widget.onSignOut;
     if (onSignOut == null) return;
@@ -6183,15 +6461,19 @@ class _AccountPageState extends State<AccountPage> {
           'You will be signed out of this device. You can sign in again anytime.',
         ),
         actions: [
-          GetPrioActionButton.outline(
-            key: const Key('logout-cancel'),
-            onPressed: () => closeOverlay(dialogContext, false),
-            child: const Text('Stay signed in'),
-          ),
-          GetPrioActionButton.destructive(
-            key: const Key('logout-confirm'),
-            onPressed: () => closeOverlay(dialogContext, true),
-            child: const Text('Log out'),
+          GetPrioModalActions(
+            children: [
+              GetPrioActionButton.outline(
+                key: const Key('logout-cancel'),
+                onPressed: () => closeOverlay(dialogContext, false),
+                child: const Text('Stay signed in'),
+              ),
+              GetPrioActionButton.destructive(
+                key: const Key('logout-confirm'),
+                onPressed: () => closeOverlay(dialogContext, true),
+                child: const Text('Log out'),
+              ),
+            ],
           ),
         ],
       ),
@@ -6418,11 +6700,7 @@ class _ProfileSheetContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maxBodyHeight = MediaQuery.sizeOf(context).height * 0.78;
-    final body = Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) => _dismissKeyboard(),
-      child: child,
-    );
+    final body = child;
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxHeight ?? double.infinity),
       child: SafeArea(
@@ -7185,6 +7463,9 @@ class SecurityPage extends StatefulWidget {
     required this.repository,
     this.biometricLogin,
     this.onPasswordChanged,
+    this.mfaEnabled = false,
+    this.onMfaChanged,
+    this.mfaRequired = false,
     this.asSheet = false,
     this.section,
   });
@@ -7192,6 +7473,9 @@ class SecurityPage extends StatefulWidget {
   final SecurityRepository? repository;
   final BiometricLogin? biometricLogin;
   final VoidCallback? onPasswordChanged;
+  final bool mfaEnabled;
+  final ValueChanged<bool>? onMfaChanged;
+  final bool mfaRequired;
   final bool asSheet;
   final SecuritySection? section;
 
@@ -7213,12 +7497,21 @@ class _SecurityPageState extends State<SecurityPage>
   String? _message;
   bool _busy = false;
   bool _mfaSetupInitiated = false;
+  bool? _updatedMfaEnabled;
+  String? _mfaAction;
+  bool _useMfaRecoveryCode = false;
+  final _mfaPassword = TextEditingController();
+  final _currentMfaCode = TextEditingController();
+
+  bool get _mfaEnabled => _updatedMfaEnabled ?? widget.mfaEnabled;
 
   @override
   void dispose() {
     _currentPassword.dispose();
     _newPassword.dispose();
     _confirmPassword.dispose();
+    _mfaPassword.dispose();
+    _currentMfaCode.dispose();
     _mfaCode.dispose();
     super.dispose();
   }
@@ -7291,8 +7584,10 @@ class _SecurityPageState extends State<SecurityPage>
               const Text('Authenticator app').h2(),
               const SizedBox(height: 8),
             ],
-            const Text(
-              'Add an authenticator app for an extra sign-in factor. Recovery codes are shown only after setup.',
+            Text(
+              _mfaEnabled
+                  ? 'MFA is enabled. Use your authenticator app when signing in.'
+                  : 'Add an authenticator app for an extra sign-in factor. Recovery codes are shown only after setup.',
             ),
             const SizedBox(height: 12),
             if (_enrollment != null) ...[
@@ -7353,6 +7648,7 @@ class _SecurityPageState extends State<SecurityPage>
               const SizedBox(height: 12),
               _LabeledTextField(
                 controller: _mfaCode,
+                inputKey: const Key('mfa-enrollment-code'),
                 label: 'Authenticator code',
                 placeholder: 'Enter your 6-digit code',
                 keyboardType: TextInputType.number,
@@ -7363,12 +7659,20 @@ class _SecurityPageState extends State<SecurityPage>
                 onPressed: _busy ? null : _confirmMfa,
                 child: Text(_busy ? 'Confirming...' : 'Confirm MFA setup'),
               ),
-            ] else if (!_mfaSetupInitiated)
+              const SizedBox(height: 8),
+              GetPrioActionButton.outline(
+                key: const Key('mfa-cancel-enrollment'),
+                onPressed: _busy ? null : _cancelMfaEnrollment,
+                child: const Text('Cancel setup'),
+              ),
+            ] else if (!_mfaEnabled && !_mfaSetupInitiated)
               GetPrioActionButton.outline(
                 key: const Key('mfa-setup-button'),
                 onPressed: _busy ? null : _startMfa,
                 child: const Text('Set up MFA'),
               ),
+            if (_mfaEnabled && _enrollment == null && _recoveryCodes == null)
+              _buildMfaManagement(),
             if (_recoveryCodes != null) ...[
               const SizedBox(height: 16),
               Card(
@@ -7504,8 +7808,212 @@ class _SecurityPageState extends State<SecurityPage>
     }
   }
 
+  Widget _buildMfaManagement() {
+    final removing = _mfaAction == 'remove';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_mfaAction == null) ...[
+          GetPrioActionButton.outline(
+            key: const Key('mfa-replace-button'),
+            onPressed: _busy
+                ? null
+                : () => setState(() => _mfaAction = 'replace'),
+            child: const Text('Replace authenticator'),
+          ),
+          const SizedBox(height: 8),
+          if (!widget.mfaRequired)
+            GetPrioActionButton.destructive(
+              key: const Key('mfa-remove-button'),
+              onPressed: _busy
+                  ? null
+                  : () => setState(() => _mfaAction = 'remove'),
+              child: const Text('Remove MFA'),
+            )
+          else
+            const Text('MFA is required for your account role.'),
+        ] else ...[
+          Text(
+            removing
+                ? 'Removing MFA turns off authenticator verification at sign-in. Enter your password and a security code to confirm.'
+                : 'Enter a code from your current authenticator. You must have signed in within the last 10 minutes. Your current authenticator stays active until you confirm the new one.',
+          ),
+          const SizedBox(height: 12),
+          if (removing) ...[
+            _LabeledTextField(
+              inputKey: const Key('mfa-management-password'),
+              controller: _mfaPassword,
+              label: 'Password',
+              placeholder: 'Enter your password',
+              obscureText: true,
+            ),
+            const SizedBox(height: 12),
+          ],
+          _LabeledTextField(
+            inputKey: const Key('mfa-current-code'),
+            controller: _currentMfaCode,
+            label: removing && _useMfaRecoveryCode
+                ? 'Recovery code'
+                : 'Current authenticator code',
+            placeholder: removing && _useMfaRecoveryCode
+                ? 'Enter a recovery code'
+                : 'Enter your 6-digit code',
+            keyboardType: removing && _useMfaRecoveryCode
+                ? TextInputType.text
+                : TextInputType.number,
+          ),
+          if (removing)
+            GetPrioActionButton.outline(
+              key: const Key('mfa-toggle-recovery'),
+              onPressed: _busy
+                  ? null
+                  : () => setState(() {
+                      _useMfaRecoveryCode = !_useMfaRecoveryCode;
+                      _currentMfaCode.clear();
+                    }),
+              child: Text(
+                _useMfaRecoveryCode
+                    ? 'Use authenticator code'
+                    : 'Use recovery code',
+              ),
+            ),
+          const SizedBox(height: 12),
+          if (removing)
+            GetPrioActionButton.destructive(
+              key: const Key('mfa-remove-confirm'),
+              onPressed: _busy ? null : _removeMfa,
+              child: Text(_busy ? 'Removing...' : 'Confirm removal'),
+            )
+          else
+            GetPrioActionButton.primary(
+              key: const Key('mfa-replace-confirm'),
+              onPressed: _busy ? null : _replaceMfa,
+              child: Text(_busy ? 'Verifying...' : 'Continue replacement'),
+            ),
+          const SizedBox(height: 8),
+          GetPrioActionButton.outline(
+            key: const Key('mfa-management-cancel'),
+            onPressed: _busy
+                ? null
+                : () => setState(() {
+                    _mfaAction = null;
+                    _mfaPassword.clear();
+                    _currentMfaCode.clear();
+                    formValidation.setErrors({});
+                  }),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _replaceMfa() async {
+    if (_busy ||
+        !validateForm({_currentMfaCode: codeField(_currentMfaCode.text)})) {
+      return;
+    }
+    final repository = widget.repository;
+    if (repository == null) {
+      showFormError(
+        StateError('unavailable'),
+        'Security settings are unavailable right now.',
+      );
+      return;
+    }
+    _dismissKeyboard();
+    setState(() => _busy = true);
+    try {
+      final enrollment = await repository.startMfaEnrollment(
+        currentCode: _currentMfaCode.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _enrollment = enrollment;
+        _mfaSetupInitiated = true;
+        _currentMfaCode.clear();
+        _mfaCode.clear();
+      });
+    } catch (error) {
+      if (mounted) {
+        showFormError(
+          error,
+          'Could not start authenticator replacement. Try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _cancelMfaEnrollment() async {
+    if (_busy || widget.repository == null) return;
+    setState(() => _busy = true);
+    try {
+      await widget.repository!.cancelMfaEnrollment();
+      if (!mounted) return;
+      setState(() {
+        _enrollment = null;
+        _mfaSetupInitiated = false;
+        _mfaAction = null;
+        _mfaCode.clear();
+      });
+    } catch (error) {
+      if (mounted) {
+        showFormError(error, 'Could not cancel MFA setup. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _removeMfa() async {
+    if (_busy ||
+        widget.mfaRequired ||
+        !validateForm({
+          _mfaPassword: requiredField(_mfaPassword.text, 'Password'),
+          _currentMfaCode: _useMfaRecoveryCode
+              ? requiredField(_currentMfaCode.text, 'Recovery code')
+              : codeField(_currentMfaCode.text),
+        })) {
+      return;
+    }
+    final repository = widget.repository;
+    if (repository == null) {
+      showFormError(
+        StateError('unavailable'),
+        'Security settings are unavailable right now.',
+      );
+      return;
+    }
+    _dismissKeyboard();
+    setState(() => _busy = true);
+    try {
+      await repository.disableMfa(
+        password: _mfaPassword.text,
+        code: _useMfaRecoveryCode ? null : _currentMfaCode.text.trim(),
+        recoveryCode: _useMfaRecoveryCode ? _currentMfaCode.text.trim() : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _updatedMfaEnabled = false;
+        _mfaSetupInitiated = false;
+        _mfaAction = null;
+        _recoveryCodes = null;
+        _mfaPassword.clear();
+        _currentMfaCode.clear();
+      });
+      showFeedbackToast(context, message: 'MFA removed.');
+      widget.onMfaChanged?.call(false);
+    } catch (error) {
+      if (mounted) showFormError(error, 'Could not remove MFA. Try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _startMfa() async {
-    if (_busy) return;
+    if (_busy || _mfaEnabled) return;
     final repository = widget.repository;
     if (repository == null) {
       showFormError(
@@ -7574,11 +8082,16 @@ class _SecurityPageState extends State<SecurityPage>
         setState(() {
           _recoveryCodes = codes;
           _enrollment = null;
+          _updatedMfaEnabled = true;
+          _mfaAction = null;
+          _mfaCode.clear();
+          _currentMfaCode.clear();
         });
         showFeedbackToast(
           context,
           message: 'MFA enabled. Save your recovery codes.',
         );
+        widget.onMfaChanged?.call(true);
       }
     } catch (error) {
       if (mounted) {

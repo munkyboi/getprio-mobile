@@ -70,13 +70,45 @@ void main() {
     expect(find.text('CONFIRMED'), findsOneWidget);
   });
 
-  testWidgets('queue movement push signals refresh all account ticket surfaces', (
+  testWidgets(
+    'queue movement push signals refresh all account ticket surfaces',
+    (tester) async {
+      final api = _PollingAccountQueueApi();
+      final repository = QueueTicketRepository(api);
+      final pushSignal = ValueNotifier<PushSignal?>(null);
+      addTearDown(pushSignal.dispose);
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: CustomerShell(
+            ticketRepository: repository,
+            pushSignal: pushSignal,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final initialOverviewCalls = api.overviewCalls;
+      api.ticketStatus = 'called';
+      api.customerConfirmed = true;
+      pushSignal.value = const PushSignal(
+        eventType: 'developer_queue_moved',
+        notificationId: 'queue-movement-1',
+      );
+      await tester.pumpAndSettle();
+
+      expect(api.overviewCalls, greaterThan(initialOverviewCalls));
+      expect(find.text('CONFIRMED'), findsOneWidget);
+    },
+  );
+
+  testWidgets('near-turn push refreshes ticket details opened from Tickets', (
     tester,
   ) async {
     final api = _PollingAccountQueueApi();
     final repository = QueueTicketRepository(api);
     final pushSignal = ValueNotifier<PushSignal?>(null);
     addTearDown(pushSignal.dispose);
+
     await tester.pumpWidget(
       ShadcnApp(
         home: CustomerShell(
@@ -87,42 +119,56 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final initialOverviewCalls = api.overviewCalls;
+    await tester.tap(find.text('Tickets'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('active-ticket-active-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ticket-details-page')), findsOneWidget);
+    expect(find.text('WAITING'), findsOneWidget);
+
     api.ticketStatus = 'called';
     api.customerConfirmed = true;
     pushSignal.value = const PushSignal(
-      eventType: 'developer_queue_moved',
-      notificationId: 'queue-movement-1',
+      eventType: 'developer_ticket_near_turn',
+      notificationId: 'near-turn-1',
     );
     await tester.pumpAndSettle();
 
-    expect(api.overviewCalls, greaterThan(initialOverviewCalls));
     expect(find.text('CONFIRMED'), findsOneWidget);
   });
 
-  testWidgets('refreshes the Tickets screen after five minutes', (
+  testWidgets('near-turn push refreshes the Tickets active preview', (
     tester,
   ) async {
     final api = _PollingAccountQueueApi();
+    final repository = QueueTicketRepository(api);
+    final pushSignal = ValueNotifier<PushSignal?>(null);
+    addTearDown(pushSignal.dispose);
+
     await tester.pumpWidget(
       ShadcnApp(
-        home: CustomerShell(ticketRepository: QueueTicketRepository(api)),
+        home: CustomerShell(
+          ticketRepository: repository,
+          pushSignal: pushSignal,
+        ),
       ),
     );
     await tester.pumpAndSettle();
-
     await tester.tap(find.text('Tickets'));
     await tester.pumpAndSettle();
 
-    final initialHistoryCalls = api.historyCalls;
-    expect(initialHistoryCalls, greaterThanOrEqualTo(1));
-
-    await tester.pump(const Duration(minutes: 5, seconds: 1));
+    expect(find.text('WAITING'), findsOneWidget);
+    api.ticketStatus = 'called';
+    api.customerConfirmed = true;
+    pushSignal.value = const PushSignal(
+      eventType: 'developer_ticket_near_turn',
+      notificationId: 'near-turn-tickets-1',
+    );
     await tester.pumpAndSettle();
 
-    expect(api.historyCalls, greaterThan(initialHistoryCalls));
+    expect(find.text('CONFIRMED'), findsOneWidget);
   });
-
   testWidgets('background ticket refresh keeps the history scroll position', (
     tester,
   ) async {

@@ -1,3 +1,5 @@
+import '../directory/expandable_vendor_description.dart';
+
 import 'dart:async';
 
 import 'package:flutter/services.dart';
@@ -14,6 +16,7 @@ import '../navigation/scroll_aware_app_bar.dart';
 import 'join_repository.dart';
 import 'payment_flow.dart';
 import 'queue_models.dart';
+import 'current_queue_card.dart';
 
 class JoinPage extends StatefulWidget {
   const JoinPage({
@@ -44,7 +47,7 @@ class JoinPage extends StatefulWidget {
 }
 
 class _JoinPageState extends State<JoinPage>
-    with FormValidationMixin<JoinPage> {
+    with FormValidationMixin<JoinPage>, WidgetsBindingObserver {
   final _drawerAnchorKey = GlobalKey();
   QrJoinPayload? _payload;
   QrTicketClaimPayload? _ticketPayload;
@@ -53,7 +56,14 @@ class _JoinPageState extends State<JoinPage>
   PaymentRequired? _payment;
   JoinEmailVerification? _emailChallenge;
   final _otpController = TextEditingController();
+  final _otpFocusNode = FocusNode();
   Timer? _otpTimer;
+  Timer? _queueRefreshTimer;
+  StreamSubscription<void>? _queueEvents;
+  int _queueWatchGeneration = 0;
+  bool _refreshingQueue = false;
+  bool _queueRefreshPending = false;
+  bool _appActive = true;
   String? _error;
   bool _isBusy = false;
   bool _checkoutSheetOpen = false;
@@ -65,6 +75,7 @@ class _JoinPageState extends State<JoinPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (_isDirectJoin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_joinDirect());
@@ -81,9 +92,92 @@ class _JoinPageState extends State<JoinPage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopQueueUpdates();
     _otpTimer?.cancel();
+    _otpFocusNode.dispose();
     _otpController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appActive = state == AppLifecycleState.resumed;
+    if (_appActive) {
+      _startQueueUpdates();
+      unawaited(_refreshQueue());
+    } else {
+      _stopQueueUpdates();
+    }
+  }
+
+  bool get _canRefreshQueue =>
+      mounted &&
+      _appActive &&
+      _preview != null &&
+      _payload != null &&
+      _joinedTicket == null &&
+      _payment == null &&
+      _emailChallenge == null;
+
+  void _stopQueueUpdates() {
+    _queueWatchGeneration++;
+    _queueRefreshTimer?.cancel();
+    _queueRefreshTimer = null;
+    unawaited(_queueEvents?.cancel());
+    _queueEvents = null;
+  }
+
+  void _startQueueUpdates() {
+    _stopQueueUpdates();
+    if (!_canRefreshQueue) return;
+    _connectQueueEvents();
+    _queueRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (_queueEvents == null) _connectQueueEvents();
+      unawaited(_refreshQueue());
+    });
+  }
+
+  void _connectQueueEvents() {
+    if (!_canRefreshQueue) return;
+    final generation = _queueWatchGeneration;
+    _queueEvents = widget.repository!
+        .watchQueue(_preview!)
+        .listen(
+          (_) => unawaited(_refreshQueue()),
+          onError: (Object _) {},
+          onDone: () {
+            if (generation == _queueWatchGeneration) _queueEvents = null;
+          },
+        );
+  }
+
+  Future<void> _refreshQueue() async {
+    if (!_canRefreshQueue || _isBusy) return;
+    if (_refreshingQueue) {
+      _queueRefreshPending = true;
+      return;
+    }
+    final generation = _queueWatchGeneration;
+    final payload = _payload!;
+    _refreshingQueue = true;
+    try {
+      final preview = await widget.repository!.resolve(payload);
+      if (_canRefreshQueue &&
+          !_isBusy &&
+          generation == _queueWatchGeneration &&
+          identical(payload, _payload)) {
+        setState(() => _preview = preview);
+      }
+    } catch (_) {
+      // Keep the last successful preview while the connection recovers.
+    } finally {
+      _refreshingQueue = false;
+      if (_queueRefreshPending) {
+        _queueRefreshPending = false;
+        unawaited(_refreshQueue());
+      }
+    }
   }
 
   Widget _buildEmailVerification(JoinEmailVerification challenge) {
@@ -109,11 +203,11 @@ class _JoinPageState extends State<JoinPage>
               ValidatedField(
                 validation: formValidation,
                 controller: _otpController,
-                child: KeyboardAwareField(
-                  builder: (context, focusNode) => TextField(
+                child: KeyboardAwareInput(
+                  child: TextField(
                     key: const Key('queue-join-otp'),
                     controller: _otpController,
-                    focusNode: focusNode,
+                    focusNode: _otpFocusNode,
                     enabled: !_isBusy && !expired,
                     keyboardType: TextInputType.number,
                     autofillHints: const [AutofillHints.oneTimeCode],
@@ -121,6 +215,8 @@ class _JoinPageState extends State<JoinPage>
                       FilteringTextInputFormatter.digitsOnly,
                       LengthLimitingTextInputFormatter(6),
                     ],
+                    features: const [focusedClearInputFeature],
+                    scrollPadding: const EdgeInsets.only(top: 24, bottom: 96),
                     onChanged: (value) {
                       setState(() {});
                       if (value.length == 6) unawaited(_verifyEmail());
@@ -293,6 +389,7 @@ class _JoinPageState extends State<JoinPage>
     if (error == null) {
       return QrScannerPage(
         allowedHosts: widget.allowedHosts,
+        allowTicketClaims: widget.repository?.allowTicketClaims ?? false,
         showAppBar: false,
         onBack: _closeJoinFlow,
         onPayload: (payload) => unawaited(_handleScannedPayload(payload)),
@@ -386,6 +483,7 @@ class _JoinPageState extends State<JoinPage>
 
   Future<void> _handleScannedPayload(QrScanPayload payload) async {
     if (!mounted) return;
+    _stopQueueUpdates();
     final repository = widget.repository;
     if (repository == null) {
       setState(() => _error = 'Queue API is not configured for this build.');
@@ -426,6 +524,7 @@ class _JoinPageState extends State<JoinPage>
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
+    if (mounted) _startQueueUpdates();
   }
 
   Future<void> _join() async {
@@ -488,6 +587,7 @@ class _JoinPageState extends State<JoinPage>
   }
 
   void _handleJoinResult(JoinResult result) {
+    _stopQueueUpdates();
     switch (result) {
       case JoinEmailVerification challenge:
         setState(() => _emailChallenge = challenge);
@@ -592,6 +692,7 @@ class _JoinPageState extends State<JoinPage>
   }
 
   void _reset() {
+    _stopQueueUpdates();
     _payload = null;
     _ticketPayload = null;
     _preview = null;
@@ -924,100 +1025,127 @@ class JoinPreviewContent extends StatelessWidget {
     final category = profile?.category;
     final description = profile?.description;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _JoinVendorProfileMedia(profile: profile, vendorName: vendorName),
-              const SizedBox(height: 24),
-              Text(vendorName).h2(),
-              if (category != null) ...[
-                const SizedBox(height: 4),
-                Text(category, style: Theme.of(context).typography.textMuted),
-              ],
-              const SizedBox(height: 14),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(LucideIcons.mapPin, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
+    final coverHeight =
+        (MediaQuery.sizeOf(context).height * 0.5).clamp(360.0, 480.0) / 2;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _JoinProfileScroll(
+            profile: profile,
+            vendorName: vendorName,
+            coverHeight: coverHeight,
+            surface: Padding(
+              padding: EdgeInsets.only(top: coverHeight - 44),
+              child: Container(
+                key: const Key('join-preview-surface'),
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(24, 30, 24, 32),
+                decoration: const BoxDecoration(
+                  color: GetPrioTheme.paper,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x245B422A),
+                      blurRadius: 28,
+                      offset: Offset(0, -6),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(vendorName, style: Theme.of(context).typography.h1),
+                    if (category != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        category,
+                        style: Theme.of(context).typography.textMuted,
+                      ),
+                    ],
+                    if (description != null) ...[
+                      const SizedBox(height: 24),
+                      ExpandableVendorDescription(description: description),
+                    ],
+                    const SizedBox(height: 28),
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(location?.name ?? preview.locationName),
-                        if (location?.address != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            location!.address!,
-                            style: Theme.of(context).typography.textMuted,
+                        const Icon(LucideIcons.mapPin, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(location?.name ?? preview.locationName),
+                              if (location?.address != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  location!.address!,
+                                  style: Theme.of(context).typography.textMuted,
+                                ),
+                              ],
+                            ],
                           ),
-                        ],
+                        ),
                       ],
+                    ),
+                    const SizedBox(height: 24),
+                    CurrentQueueCard(
+                      status: preview.joinable
+                          ? CurrentQueueCardStatus.open
+                          : CurrentQueueCardStatus.unavailable,
+                      waitingCount: preview.queueDetails?.waitingCount,
+                      currentTicketNumber:
+                          preview.queueDetails?.currentTicketNumber,
+                      estimatedWaitMinutes:
+                          preview.queueDetails?.estimatedWaitMinutes,
+                      lastCalledAt: preview.queueDetails?.lastCalledAt,
+                      fee: preview.paymentRequired
+                          ? 'Fee: ${preview.currency} ${(preview.fee / 100).toStringAsFixed(2)}'
+                          : null,
+                      unavailableReason:
+                          preview.unavailableReason ??
+                          'Queueing is unavailable.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Container(
+          key: const Key('join-preview-bottom-action'),
+          color: GetPrioTheme.paper,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (errorMessage != null) ...[
+                    DestructiveBadge(child: Text(errorMessage!)),
+                    const SizedBox(height: 12),
+                  ],
+                  GetPrioActionButton.primary(
+                    onPressed: preview.joinable && !isBusy ? onJoin : null,
+                    child: Text(
+                      isBusy
+                          ? 'Joining...'
+                          : actionLabel ??
+                                (preview.paymentRequired
+                                    ? 'Continue to payment'
+                                    : 'Join queue'),
                     ),
                   ),
                 ],
               ),
-              if (description != null) ...[
-                const SizedBox(height: 16),
-                Text(description, maxLines: 3, overflow: TextOverflow.ellipsis),
-              ],
-              const SizedBox(height: 24),
-              Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Queue details').h3(),
-                    const SizedBox(height: 8),
-                    if (preview.joinable)
-                      const SecondaryBadge(child: Text('QUEUE OPEN'))
-                    else
-                      const OutlineBadge(child: Text('UNAVAILABLE')),
-                    const SizedBox(height: 12),
-                    Text(
-                      preview.paymentRequired
-                          ? 'Fee: ${preview.currency} ${(preview.fee / 100).toStringAsFixed(2)}'
-                          : 'Free queue',
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      preview.joinable
-                          ? 'Queueing is available now.'
-                          : preview.unavailableReason ??
-                                'Queueing is unavailable.',
-                    ),
-                    if (preview.queueDetails != null) ...[
-                      const SizedBox(height: 16),
-                      _JoinQueueDetails(details: preview.queueDetails!),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              GetPrioActionButton.primary(
-                onPressed: preview.joinable && !isBusy ? onJoin : null,
-                child: Text(
-                  isBusy
-                      ? 'Joining...'
-                      : actionLabel != null
-                      ? actionLabel!
-                      : preview.paymentRequired
-                      ? 'Continue to payment'
-                      : 'Join queue',
-                ),
-              ),
-              if (errorMessage != null) ...[
-                const SizedBox(height: 16),
-                DestructiveBadge(child: Text(errorMessage!)),
-              ],
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -1037,36 +1165,54 @@ class JoinPreviewContent extends StatelessWidget {
   }
 }
 
-class _JoinQueueDetails extends StatelessWidget {
-  const _JoinQueueDetails({required this.details});
+class _JoinProfileScroll extends StatefulWidget {
+  const _JoinProfileScroll({
+    required this.profile,
+    required this.vendorName,
+    required this.coverHeight,
+    required this.surface,
+  });
+  final JoinVendorProfile? profile;
+  final String vendorName;
+  final double coverHeight;
+  final Widget surface;
 
-  final JoinQueueDetails details;
+  @override
+  State<_JoinProfileScroll> createState() => _JoinProfileScrollState();
+}
+
+class _JoinProfileScrollState extends State<_JoinProfileScroll> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rows = <({String label, String value})>[];
-    if (details.waitingCount != null) {
-      rows.add((label: 'Waiting now', value: '${details.waitingCount}'));
-    }
-    if (details.currentTicketNumber != null) {
-      rows.add((label: 'Now serving', value: details.currentTicketNumber!));
-    }
-    if (details.estimatedWaitMinutes != null) {
-      rows.add((
-        label: 'Estimated wait',
-        value: '${details.estimatedWaitMinutes} min',
-      ));
-    }
-    if (rows.isEmpty) return const SizedBox.shrink();
-    return Column(
+    return Stack(
+      clipBehavior: Clip.hardEdge,
       children: [
-        for (var index = 0; index < rows.length; index++) ...[
-          if (index > 0) const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [Text(rows[index].label), Text(rows[index].value)],
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: _JoinVendorProfileMedia(
+            profile: widget.profile,
+            vendorName: widget.vendorName,
+            height: widget.coverHeight,
+            scrollController: _controller,
           ),
-        ],
+        ),
+        ListView(
+          key: const Key('join-preview-scroll'),
+          controller: _controller,
+          padding: EdgeInsets.zero,
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [widget.surface],
+        ),
       ],
     );
   }
@@ -1076,57 +1222,116 @@ class _JoinVendorProfileMedia extends StatelessWidget {
   const _JoinVendorProfileMedia({
     required this.profile,
     required this.vendorName,
+    required this.height,
+    required this.scrollController,
   });
 
   final JoinVendorProfile? profile;
   final String vendorName;
+  final double height;
+  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
-    const logoSize = 96.0;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        key: const Key('join-vendor-cover'),
-        height: 210,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _cover(),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x33000000), Color(0x0D000000)],
-                ),
-              ),
-            ),
-            Center(
-              child: Container(
-                key: const Key('join-vendor-logo'),
-                width: logoSize,
-                height: logoSize,
-                padding: const EdgeInsets.all(5),
-                decoration: const BoxDecoration(
-                  color: GetPrioTheme.card,
-                  shape: BoxShape.circle,
-                  border: Border.fromBorderSide(
-                    BorderSide(color: Color(0xF2FFFFFF), width: 4),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Color(0x3D23180F),
-                      blurRadius: 24,
-                      offset: Offset(0, 8),
+    const logoSize = 104.0;
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedBuilder(
+            animation: scrollController,
+            builder: (context, child) {
+              final offset = scrollController.hasClients
+                  ? scrollController.offset.clamp(0.0, double.infinity)
+                  : 0.0;
+              return Transform.translate(
+                offset: Offset(0, -offset * 0.28),
+                child: child,
+              );
+            },
+            child: SizedBox(
+              key: const Key('join-vendor-cover'),
+              height: height,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _cover(),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0x75000000), Color(0x00000000)],
+                        stops: [0, 0.55],
+                      ),
                     ),
-                  ],
-                ),
-                child: ClipOval(child: _logo()),
+                  ),
+                  const DecoratedBox(
+                    key: Key('join-profile-cover-surface-fade'),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [GetPrioTheme.paper, Color(0x00FBF7F1)],
+                        stops: [0.0, 0.3],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+          Positioned(
+            top: (height - 44 - logoSize) / 2,
+            left: 0,
+            right: 0,
+            child: AnimatedBuilder(
+              animation: scrollController,
+              builder: (context, child) {
+                final offset = scrollController.hasClients
+                    ? scrollController.offset.clamp(0.0, double.infinity)
+                    : 0.0;
+                final fadeDistance = MediaQuery.sizeOf(context).height * 0.5;
+                return Opacity(
+                  key: const Key('join-profile-logo-opacity'),
+                  opacity: fadeDistance <= 0
+                      ? 0
+                      : (1 - offset / fadeDistance).clamp(0.0, 1.0),
+                  child: Transform.translate(
+                    offset: Offset(0, offset * 0.7),
+                    child: child,
+                  ),
+                );
+              },
+              child: Center(
+                child: Container(
+                  key: const Key('join-vendor-logo'),
+                  width: logoSize,
+                  height: logoSize,
+                  padding: const EdgeInsets.all(5),
+                  decoration: const BoxDecoration(
+                    color: GetPrioTheme.card,
+                    shape: BoxShape.circle,
+                    border: Border.fromBorderSide(
+                      BorderSide(color: Color(0xF2FFFFFF), width: 4),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x3D23180F),
+                        blurRadius: 24,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(child: _logo()),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1189,12 +1394,14 @@ class QrScannerPage extends StatefulWidget {
   const QrScannerPage({
     super.key,
     required this.allowedHosts,
+    this.allowTicketClaims = false,
     this.showAppBar = true,
     this.onPayload,
     this.onBack,
   });
 
   final Set<String> allowedHosts;
+  final bool allowTicketClaims;
   final bool showAppBar;
   final ValueChanged<QrScanPayload>? onPayload;
   final VoidCallback? onBack;
@@ -1286,6 +1493,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
       final payload = QrScanPayload.parse(
         raw,
         allowedHosts: widget.allowedHosts,
+        allowTicketClaims: widget.allowTicketClaims,
       );
       _handled = true;
       try {

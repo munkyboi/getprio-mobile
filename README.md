@@ -32,4 +32,7 @@ Firebase, FCM, OAuth callback, verified-host, and backend migration setup is doc
 
 Product decisions and implementation contracts are kept in [`CONTEXT.md`](CONTEXT.md) and [`docs/`](docs/).
 
-Sandbox flavor setup is documented in [`docs/setup/sandbox-mobile-runtime-configuration.md`](docs/setup/sandbox-mobile-runtime-configuration.md).
+## Upcoming API integration work
+
+- [API versioning rollout handoff](docs/specs/api-versioning-rollout-handoff.md) — implemented local `/api/v1` client and backend overlap, with production `1.0.2+4`, separate Sandbox identity/version sequence, and deployment/device verification still pending.
+- [Ticket invitation blocking handoff](docs/specs/api-ticket-invitation-blocking-handoff.md) — accepted v1 mobile scope; implementation and backend dependencies pending.

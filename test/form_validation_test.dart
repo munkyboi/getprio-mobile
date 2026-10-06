@@ -181,5 +181,5 @@ class _SecurityApi implements SecurityApi {
     String? recoveryCode,
   }) async {}
   @override
-  Future<Map<String, dynamic>> startMfaEnrollment() async => {};
+  Future<Map<String, dynamic>> startMfaEnrollment({String? currentCode}) async => {};
 }

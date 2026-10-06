@@ -1,5 +1,7 @@
 # Native authentication contract
 
+Planning update (2026-09-14): apply the [API versioning rollout handoff](api-versioning-rollout-handoff.md) to the route prefixes below when implementing the migration. Shared auth/account routes remain shared under `/api/v1`; mobile-specific OAuth routes move under `/api/v1/mobile`. The handoff is a target contract, not deployment evidence.
+
 Date: 2026-08-28  
 Scope: iOS-first Flutter customer app, with Android-compatible contracts.  
 Authority: shared GetPrio authentication/session services; mobile-only OAuth handoff is the only new auth boundary currently justified.
@@ -115,6 +117,20 @@ Add a narrowly scoped mobile OAuth handoff under `/backend/mobile/`, while reusi
 4. Flutter verifies that the returned state equals the pending state, then calls `POST /api/mobile/auth/oauth/exchange` with `{ "code": "...", "codeVerifier": "...", "state": "..." }`.
 5. The exchange endpoint consumes the handoff once, validates the verifier and state, and returns the shared bearer `AuthResponse` or the shared MFA challenge response. It never returns a refresh token in the redirect URL.
 
+### Native Apple extension
+
+For iOS, Sign in with Apple uses the system authorization sheet rather than the
+browser handoff. Flutter generates a per-attempt nonce and state, requests the
+`email` and `fullName` scopes, verifies the returned state, and posts the native
+identity token, authorization code, nonce, and first-authorization name fields to
+`POST /api/mobile/auth/oauth/apple`. The backend verifies the identity token against
+Apple's rotating JWKS, exchanges the authorization code with an Apple client secret,
+and binds both credentials to the same Apple subject before creating the shared
+session response. Apple private relay addresses and the user's name are treated as
+optional profile fields because Apple may omit them after the first authorization.
+The Apple path must issue the same MFA challenge as the browser handoff when the
+customer has an enabled factor.
+
 The exact verified HTTPS universal-link host is deployment configuration, not a hard-coded product domain. iOS Associated Domains must be configured for it; Android App Links can use the same contract later. A custom URL scheme may be retained only as a development fallback, never as the sole production trust mechanism.
 
 If OAuth completion produces a customer with an enabled TOTP factor, the mobile handoff must issue the same five-minute MFA challenge before returning a bearer session. The provider proves identity; it does not bypass the customer's configured second factor.
@@ -156,7 +172,8 @@ Before mobile auth is considered ready, verify on an iPhone with a production-li
 - access refresh rotates securely and survives app restart through Keychain storage;
 - logout, password change, password reset, and expired sessions cannot reuse old tokens;
 - TOTP enrollment, login verification, recovery-code use, replacement, disable, and required-role enforcement behave as specified;
-- Google and Facebook OAuth return through the verified link, reject state/PKCE mismatch and replay, and never expose tokens in the URL; and
+- Google and Facebook OAuth return through the verified link, reject state/PKCE mismatch and replay, and never expose tokens in the URL;
+- Sign in with Apple validates the native nonce, Apple subject, authorization code, and configured client credentials on a physical iPhone; and
 - provider cancellation, invalid credentials, lockout, offline state, and backend errors produce recoverable mobile states.
 
 No new mobile endpoint is justified for password auth, refresh, logout, profile, password recovery, or MFA. The only mobile-specific backend surface specified here is the OAuth handoff/exchange; the ordinary-customer MFA challenge behavior is a shared authentication correction required to make the settled optional-MFA decision meaningful.

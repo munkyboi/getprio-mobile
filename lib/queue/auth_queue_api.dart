@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -24,12 +25,72 @@ class AuthenticatedApiClient {
     required String baseUrl,
     required this.authRepository,
     http.Client? client,
+    http.Client Function()? eventClientFactory,
   }) : _baseUrl = baseUrl.replaceFirst(RegExp(r'/$'), ''),
+       _eventClientFactory = eventClientFactory ?? http.Client.new,
        _client = client ?? http.Client();
 
   final String _baseUrl;
   final AuthRepository authRepository;
   final http.Client _client;
+  final http.Client Function() _eventClientFactory;
+
+  /// Public queue events contain no customer data or authentication tokens.
+  Stream<void> watchPublicQueue(String tenantSlug, String locationSlug) {
+    late StreamController<void> controller;
+    http.Client? connection;
+    var cancelled = false;
+    Future<void> connect() async {
+      connection = _eventClientFactory();
+      try {
+        final request = http.Request(
+          'GET',
+          Uri.parse(
+            '$_baseUrl${versionedApiPath('/api/public/tenant/${Uri.encodeComponent(tenantSlug)}')}'
+            '/location/${Uri.encodeComponent(locationSlug)}/stream',
+          ),
+        )..headers['Accept'] = 'text/event-stream';
+        final response = await connection!
+            .send(request)
+            .timeout(const Duration(seconds: 15));
+        if (response.statusCode != 200) {
+          throw StateError('Queue event stream unavailable');
+        }
+        var heartbeat = false;
+        var hasData = false;
+        await for (final line
+            in response.stream
+                .timeout(const Duration(seconds: 45))
+                .transform(utf8.decoder)
+                .transform(const LineSplitter())) {
+          if (cancelled) break;
+          if (line.isEmpty) {
+            if (hasData && !heartbeat) controller.add(null);
+            heartbeat = false;
+            hasData = false;
+          } else if (line.startsWith('event:')) {
+            heartbeat = line.substring(6).trim() == 'heartbeat';
+          } else if (line.startsWith('data:')) {
+            hasData = true;
+          }
+        }
+      } catch (error, stack) {
+        if (!cancelled) controller.addError(error, stack);
+      } finally {
+        connection?.close();
+        if (!cancelled) unawaited(controller.close());
+      }
+    }
+
+    controller = StreamController<void>(
+      onListen: () => unawaited(connect()),
+      onCancel: () {
+        cancelled = true;
+        connection?.close();
+      },
+    );
+    return controller.stream;
+  }
 
   Future<Map<String, dynamic>> get(
     String path, {

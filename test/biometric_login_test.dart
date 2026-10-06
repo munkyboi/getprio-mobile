@@ -1,11 +1,14 @@
 import 'support/memory_onboarding_store.dart';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/auth/remembered_user_store.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/auth/biometric_login.dart';
+import 'package:getprio_mobile/auth/oauth_flow.dart';
 import 'package:getprio_mobile/main.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -245,6 +248,32 @@ void main() {
     expect(tokens.refreshToken, 'rotated');
   });
 
+  testWidgets('remembered login keeps OAuth providers available', (
+    tester,
+  ) async {
+    final oauthFlow = OAuthFlow(
+      baseUrl: 'https://api.example.com',
+      authRepository: repository,
+      api: RestOAuthApi(baseUrl: 'https://api.example.com'),
+      appleEnabled: true,
+    );
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: BiometricLoginPage(
+          authRepository: repository,
+          oauthFlow: oauthFlow,
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Continue with Google'), findsOneWidget);
+    expect(find.bySemanticsLabel('Continue with Facebook'), findsOneWidget);
+    expect(find.bySemanticsLabel('Continue with Apple'), findsOneWidget);
+  }, variant: TargetPlatformVariant({TargetPlatform.iOS}));
+
   testWidgets('original login has a recovery link and no biometric button', (
     tester,
   ) async {
@@ -262,6 +291,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PasswordRecoveryPage), findsOneWidget);
   });
+
+  testWidgets('iOS password login shows centered 32px OAuth icons', (
+    tester,
+  ) async {
+    final oauthFlow = OAuthFlow(
+      baseUrl: 'https://api.example.com',
+      authRepository: repository,
+      api: RestOAuthApi(baseUrl: 'https://api.example.com'),
+      appleEnabled: true,
+    );
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: SignInPage(
+          authRepository: repository,
+          oauthFlow: oauthFlow,
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Continue with Google'), findsOneWidget);
+    expect(find.bySemanticsLabel('Continue with Facebook'), findsOneWidget);
+    expect(find.bySemanticsLabel('Continue with Apple'), findsOneWidget);
+    for (final label in [
+      'Continue with Google',
+      'Continue with Facebook',
+      'Continue with Apple',
+    ]) {
+      final semantics = tester.getSemantics(find.bySemanticsLabel(label));
+      expect(
+        semantics.getSemanticsData().hasAction(SemanticsAction.tap),
+        isTrue,
+        reason: '$label should expose a tap action',
+      );
+    }
+    final icons = tester.widgetList<SvgPicture>(find.byType(SvgPicture));
+    expect(icons, hasLength(3));
+    for (final icon in icons) {
+      expect(icon.width, 32);
+      expect(icon.height, 32);
+    }
+  }, variant: TargetPlatformVariant({TargetPlatform.iOS}));
 
   testWidgets('login resizes for the keyboard and keeps fields scrollable', (
     tester,

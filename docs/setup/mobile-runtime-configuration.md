@@ -1,5 +1,7 @@
 # Mobile runtime configuration
 
+Planning update (2026-09-14): the accepted target is `/api/v1/*`, with mobile-specific routes under `/api/v1/mobile/*`. See [API versioning rollout handoff](../specs/api-versioning-rollout-handoff.md) for backend-first verification, production/Sandbox separation, and release gates. Unversioned examples below describe the prior contract; this note does not assert the new routes are deployed.
+
 The Flutter client is intentionally configured through build-time values. Do not commit production URLs, Firebase private credentials, OAuth secrets, or payment credentials.
 
 ## Required build values
@@ -7,10 +9,14 @@ The Flutter client is intentionally configured through build-time values. Do not
 ```bash
 flutter run \
   --dart-define=GETPRIO_API_BASE_URL=https://api.example.com \
-  --dart-define=GETPRIO_APPROVED_HOSTS=app.example.com,enterprise.example.com
+  --dart-define=GETPRIO_APPROVED_HOSTS=app.example.com,enterprise.example.com \
+  --dart-define=GETPRIO_APPLE_SIGN_IN_ENABLED=true
 ```
 
 `GETPRIO_API_BASE_URL` is the trusted GetPrio API origin. `GETPRIO_APPROVED_HOSTS` is the comma-separated HTTPS host allowlist used by QR and payment-return parsing. The scanner never opens a scanned URL.
+`GETPRIO_APPLE_SIGN_IN_ENABLED=true` enables the native iOS Apple button only after
+the backend Apple credentials and Apple Developer capability are ready. It should
+remain false or omitted in builds that have not completed that setup.
 
 ### Physical iPhone testing when debug mode disconnects
 
@@ -69,6 +75,21 @@ native projects. Paid queue joins return through the verified HTTPS
 active payment attempt and always confirms status through the authenticated sync
 endpoint.
 
+The provider-facing OAuth redirect URI is the server callback, not the app
+scheme. Add the exact URI below to the Google OAuth client's **Authorized
+redirect URIs**:
+
+`https://api.getprio.online/api/v1/mobile/auth/oauth/google/callback`
+
+For Facebook, add the corresponding server callback to **Valid OAuth Redirect
+URIs**:
+
+`https://api.getprio.online/api/v1/mobile/auth/oauth/facebook/callback`
+
+Keep `getprio://oauth/callback` configured only as the final server-to-app
+handoff (`MOBILE_OAUTH_REDIRECT_URI`); do not use it as Google's or Facebook's
+provider redirect URI.
+
 If the deployment uses an HTTPS universal link for OAuth, configure the selected host in:
 
 - iOS Associated Domains (`applinks:<approved-host>`)
@@ -77,11 +98,34 @@ If the deployment uses an HTTPS universal link for OAuth, configure the selected
 
 The exact host remains deployment configuration and must match the platform dashboard allowlist.
 
+Google and Facebook remain available on iOS and Android when OAuth is configured
+with the API base URL; provider failures remain recoverable in the sign-in flow.
+iOS also offers Sign in with Apple through the native authorization sheet to
+satisfy Apple's equivalent-login requirement.
+
+Sign in with Apple is now available on iOS through the native Apple authorization
+sheet. A paid Apple Developer Program membership is required, and the Apple
+Developer account must enable Sign in with Apple for the app's
+App ID, and the backend deployment must provide these secret values through its
+environment (never through `--dart-define` or source control):
+
+- `APPLE_CLIENT_ID` — the app's bundle identifier
+- `APPLE_TEAM_ID` — the Apple Developer team identifier
+- `APPLE_KEY_ID` — the Sign in with Apple key identifier
+- `APPLE_PRIVATE_KEY` — the downloaded `.p8` key contents, with newlines preserved
+
+The backend validates Apple's identity token against Apple's rotating JWKS and
+exchanges the authorization code before creating a GetPrio session. If users can
+choose Apple's private relay address, publish the required SPF record for the
+relay email domain. The first authorization supplies the user's name; subsequent
+authorizations may omit it, so the backend retains the existing profile name.
+
 ## Server dependencies
 
 The mobile client expects the existing shared bearer routes plus these mobile-only surfaces:
 
 - `GET /api/mobile/auth/oauth/{provider}/start`
+- `POST /api/mobile/auth/oauth/apple`
 - `POST /api/mobile/auth/oauth/exchange`
 - `GET /api/mobile/queue-join/resolve?id=<uuid>`
 - `POST /api/mobile/queue-join`
