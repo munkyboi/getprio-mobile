@@ -1,0 +1,109 @@
+name: Android Sandbox Google Play
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-sandbox-google-play
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ matrix.environment }}-google-play
+    env:
+      ANDROID_PACKAGE_NAME: ${{ matrix.package_name }}
+      GETPRIO_API_BASE_URL: ${{ matrix.api_base_url }}
+      GETPRIO_APPROVED_HOSTS: ${{ matrix.approved_hosts }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - environment: sandbox
+            flavor: sandbox
+            package_name: com.getprio.getprioMobile.android.sandbox
+            api_base_url: https://sandbox-api.getprio.online
+            approved_hosts: sandbox.getprio.online
+          - environment: production
+            flavor: production
+            package_name: com.getprio.getprio_mobile
+            api_base_url: https://api.getprio.online
+            approved_hosts: getprio.online
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.1"
+          channel: stable
+          cache: true
+
+      - name: Validate release credentials
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          for variable in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD GOOGLE_PLAY_SERVICE_ACCOUNT_JSON; do
+            if [ -z "${!variable}" ]; then
+              echo "Missing required Google Play secret: ${variable}"
+              exit 1
+            fi
+          done
+
+      - name: Decode Android upload key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/getprio-${{ matrix.environment }}-upload.jks"
+
+      - name: Build Android App Bundle
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/getprio-${{ matrix.environment }}-upload.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          flutter pub get
+          # Play version codes must be higher than the initial manually published builds.
+          # The run attempt keeps reruns higher than the original attempt.
+          build_number=$((1000 + GITHUB_RUN_NUMBER * 1000 + GITHUB_RUN_ATTEMPT))
+          if [ "${build_number}" -gt 2100000000 ]; then
+            echo "Calculated Play version code is too large: ${build_number}"
+            exit 1
+          fi
+          flutter build appbundle \
+            --flavor "${{ matrix.flavor }}" \
+            --release \
+            --build-number "${build_number}" \
+            --dart-define=GETPRIO_ENVIRONMENT="${{ matrix.environment }}" \
+            --dart-define=GETPRIO_API_BASE_URL="${GETPRIO_API_BASE_URL}" \
+            --dart-define=GETPRIO_APPROVED_HOSTS="${GETPRIO_APPROVED_HOSTS}"
+
+      - name: Upload to Google Play internal testing
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.ANDROID_PACKAGE_NAME }}
+          releaseFiles: build/app/outputs/bundle/${{ matrix.flavor }}Release/app-${{ matrix.flavor }}-release.aab
+          track: internal
+          status: completed

@@ -794,7 +794,7 @@ class _VendorRatingFormState extends State<VendorRatingForm> {
       title: Text('Rate ${widget.ticket.vendorName ?? 'vendor'}'),
       content: SizedBox(
         width: 340,
-        child: SingleChildScrollView(
+        child: KeyboardAwareScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

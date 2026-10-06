@@ -56,10 +56,13 @@ abstract interface class OAuthBrowser {
   Future<bool> open(Uri uri);
 }
 
-class ExternalOAuthBrowser implements OAuthBrowser {
+/// Presents provider sign-in inside the app's Safari View Controller or
+/// Android Custom Tab so OAuth does not eject customers into the default
+/// browser during sign-in.
+class InAppOAuthBrowser implements OAuthBrowser {
   @override
   Future<bool> open(Uri uri) =>
-      launchUrl(uri, mode: LaunchMode.externalApplication);
+      launchUrl(uri, mode: LaunchMode.inAppBrowserView);
 }
 
 /// Google and Facebook are available on every platform when OAuth is
@@ -147,6 +150,7 @@ class RestOAuthApi implements OAuthApi {
         response.statusCode,
         body['code'] as String?,
         body['message'] as String? ?? 'OAuth sign-in could not be completed.',
+        correlationId: body['correlationId'] as String?,
       );
     }
     return body;
@@ -197,7 +201,7 @@ class OAuthFlow {
     this.appleEnabled = false,
     OAuthBrowser? browser,
     OAuthLinkSource? links,
-  }) : _browser = browser ?? ExternalOAuthBrowser(),
+  }) : _browser = browser ?? InAppOAuthBrowser(),
        _links = links ?? AppLinksSource();
 
   final String baseUrl;

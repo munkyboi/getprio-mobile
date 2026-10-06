@@ -226,6 +226,38 @@ void main() {
       expect(authApi.refreshCalls, 1);
     },
   );
+
+  test('preserves the API correlation ID on a failed request', () async {
+    final authApi = FakeAuthApiForTransport();
+    final authRepository = AuthRepository(
+      api: authApi,
+      tokenStore: MemoryTokenStore()..refreshToken = 'refresh-1',
+    );
+    await authRepository.signIn(identifier: 'customer', password: 'password');
+    final api = AuthenticatedApiClient(
+      baseUrl: 'https://api.example.test',
+      authRepository: authRepository,
+      client: MockClient(
+        (_) async => http.Response(
+          '{"code":"SANDBOX_DEVICE_LIMIT","message":"Device limit reached.","correlationId":"request-42"}',
+          409,
+        ),
+      ),
+    );
+
+    await expectLater(
+      api.put('/api/mobile/push/registrations/install-1', {}),
+      throwsA(
+        isA<ApiException>()
+            .having((error) => error.code, 'code', 'SANDBOX_DEVICE_LIMIT')
+            .having(
+              (error) => error.correlationId,
+              'correlationId',
+              'request-42',
+            ),
+      ),
+    );
+  });
 }
 
 class FakeQueueApi implements QueueApi {

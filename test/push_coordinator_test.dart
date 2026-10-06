@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/push/push_coordinator.dart';
 
 void main() {
@@ -103,6 +104,57 @@ void main() {
 
     expect(api.registration?.token, 'fcm-1');
     await coordinator.logout();
+  });
+
+  test('Sandbox device limit is surfaced without scheduling retries', () async {
+    final messaging = FakeMessaging(
+      permission: PushPermission.authorized,
+      token: 'fcm-1',
+    );
+    final api = FakePushRegistrationApi()
+      ..registerError = const ApiException(
+        409,
+        'SANDBOX_DEVICE_LIMIT',
+        'This Sandbox account already has two active devices.',
+      );
+    final errors = <Object>[];
+    final surfaced = Completer<Object>();
+    final coordinator = PushCoordinator(
+      messaging: messaging,
+      api: api,
+      installationStore: MemoryInstallationStore('installation-1'),
+      platform: 'ios',
+      appVersion: '1.0.0',
+      locale: 'en-PH',
+    );
+    final subscription = coordinator.registrationErrors.listen((error) {
+      errors.add(error);
+      if (!surfaced.isCompleted) surfaced.complete(error);
+    });
+
+    await coordinator.initialize();
+    await coordinator.flush();
+    await surfaced.future;
+
+    expect(errors, hasLength(1));
+    expect(
+      errors.single,
+      isA<ApiException>().having(
+        (error) => error.code,
+        'code',
+        'SANDBOX_DEVICE_LIMIT',
+      ),
+    );
+    expect(api.registrationCount, 0);
+    expect(api.registration, isNull);
+
+    api.registerError = null;
+    await coordinator.retryRegistration();
+    expect(api.registrationCount, 1);
+    expect(api.registration?.token, 'fcm-1');
+
+    await subscription.cancel();
+    await coordinator.dispose();
   });
 
   test('safe push signal is passed to the REST refresh callback', () async {

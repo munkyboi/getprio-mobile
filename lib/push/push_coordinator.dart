@@ -6,8 +6,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../auth/auth_repository.dart';
+import '../mobile_environment.dart';
 import '../queue/auth_queue_api.dart';
 import 'foreground_notification_presenter.dart';
+import 'firebase_options.dart';
 
 enum PushPermission { authorized, provisional, denied }
 
@@ -126,12 +129,17 @@ class PushCoordinator {
   final String appVersion;
   final String locale;
   final Future<void> Function(PushSignal signal)? onSignal;
+  final StreamController<Object> _registrationErrorController =
+      StreamController<Object>.broadcast();
   StreamSubscription<String>? _tokenSubscription;
   StreamSubscription<PushSignal>? _signalSubscription;
   Future<void> _pending = Future.value();
   Timer? _registrationRetryTimer;
   String? _installationId;
+  String? _lastToken;
   int _sessionGeneration = 0;
+
+  Stream<Object> get registrationErrors => _registrationErrorController.stream;
 
   Future<bool> initialize() async {
     final sessionGeneration = ++_sessionGeneration;
@@ -153,6 +161,7 @@ class PushCoordinator {
     }
     final token = await messaging.getToken();
     if (token != null && token.isNotEmpty) {
+      _lastToken = token;
       await _registerToken(token, sessionGeneration);
     }
     return true;
@@ -162,6 +171,7 @@ class PushCoordinator {
     final installationId = _installationId;
     _sessionGeneration++;
     _installationId = null;
+    _lastToken = null;
     _registrationRetryTimer?.cancel();
     _registrationRetryTimer = null;
     final tokenSubscription = _tokenSubscription;
@@ -188,9 +198,17 @@ class PushCoordinator {
     _registrationRetryTimer = null;
     await _tokenSubscription?.cancel();
     await _signalSubscription?.cancel();
+    await _registrationErrorController.close();
+  }
+
+  Future<void> retryRegistration() async {
+    final token = _lastToken;
+    if (token == null || _installationId == null) return;
+    await _registerToken(token, _sessionGeneration);
   }
 
   Future<void> _registerToken(String token, int sessionGeneration) async {
+    _lastToken = token;
     try {
       await _enqueue(() async {
         final installationId = _installationId;
@@ -213,6 +231,12 @@ class PushCoordinator {
       }
     } catch (error) {
       if (sessionGeneration == _sessionGeneration) {
+        if (error is ApiException && error.code == 'SANDBOX_DEVICE_LIMIT') {
+          _registrationRetryTimer?.cancel();
+          _registrationRetryTimer = null;
+          _registrationErrorController.add(error);
+          return;
+        }
         _scheduleRegistrationRetry(token, sessionGeneration);
         debugPrint('[push] token registration failed: $error');
       }
@@ -373,9 +397,17 @@ PushSignal? _tryParseSignal(Map<String, dynamic> data) {
   }
 }
 
-Future<bool> initializeFirebase() async {
+Future<bool> initializeFirebase({
+  GetPrioEnvironment environment = GetPrioEnvironment.production,
+}) async {
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: environment == GetPrioEnvironment.sandbox
+          ? (defaultTargetPlatform == TargetPlatform.android
+                ? sandboxFirebaseOptionsAndroid
+                : sandboxFirebaseOptionsIos)
+          : null,
+    );
     return true;
   } on FirebaseException catch (error) {
     // Missing platform Firebase configuration is a setup state, not a reason

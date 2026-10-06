@@ -11,6 +11,7 @@ import '../app_theme.dart';
 import '../form_validation.dart';
 import '../feedback_toast.dart';
 import '../auth/auth_repository.dart';
+import '../keyboard_avoidance.dart';
 import '../navigation/scroll_aware_app_bar.dart';
 import 'join_repository.dart';
 import 'payment_flow.dart';
@@ -186,7 +187,7 @@ class _JoinPageState extends State<JoinPage>
         : resendAt.difference(DateTime.now()).inSeconds + 1;
     final expired = challenge.expiresAt?.isBefore(DateTime.now()) ?? false;
     return Center(
-      child: SingleChildScrollView(
+      child: KeyboardAwareScrollView(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),

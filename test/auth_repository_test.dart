@@ -160,6 +160,69 @@ void main() {
     expect(result.message, 'Username is available.');
   });
 
+  test(
+    'sandbox password auth uses the dedicated mobile auth endpoints',
+    () async {
+      final paths = <String>[];
+      final compatibilityHeaders = <String, String?>{};
+      final api = RestAuthApi(
+        baseUrl: 'https://sandbox-api.example.test',
+        sandbox: true,
+        client: MockClient((request) async {
+          paths.add(request.url.path);
+          compatibilityHeaders[request.url.path] =
+              request.headers['x-auth-compatibility'];
+          return http.Response(
+            jsonEncode(
+              authenticatedJson(
+                token: 'sandbox-access',
+                refreshToken: 'sandbox-refresh',
+              ),
+            ),
+            200,
+          );
+        }),
+      );
+
+      await api.login(identifier: 'test-abc@sandbox.invalid', password: 'once');
+      await api.refresh('sandbox-refresh');
+      await api.logout('sandbox-refresh');
+
+      expect(paths, [
+        '/api/v1/mobile/auth/login',
+        '/api/v1/mobile/auth/refresh',
+        '/api/v1/mobile/auth/logout',
+      ]);
+      expect(compatibilityHeaders['/api/v1/mobile/auth/login'], isNull);
+      expect(compatibilityHeaders['/api/v1/mobile/auth/refresh'], isNull);
+      expect(compatibilityHeaders['/api/v1/mobile/auth/logout'], isNull);
+    },
+  );
+
+  test('sandbox auth rejects production account flows locally', () async {
+    final api = RestAuthApi(
+      baseUrl: 'https://sandbox-api.example.test',
+      sandbox: true,
+      client: MockClient((_) async => http.Response('{}', 500)),
+    );
+
+    await expectLater(
+      api.startCustomerRegistration(
+        name: 'Synthetic user',
+        username: 'synthetic',
+        email: 'test-abc@sandbox.invalid',
+        password: 'password',
+      ),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.code,
+          'code',
+          'SANDBOX_AUTH_UNSUPPORTED',
+        ),
+      ),
+    );
+  });
+
   test('turns non-JSON auth errors into an API exception', () async {
     final api = RestAuthApi(
       baseUrl: 'https://api.example.test',

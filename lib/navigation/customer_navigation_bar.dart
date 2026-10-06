@@ -42,6 +42,7 @@ class CustomerNavigationBar extends StatelessWidget {
           destination: CustomerDestination.explore,
           label: 'Explore',
           icon: LucideIcons.compass,
+          enabled: false,
         ),
         _joinQueueAction(context),
         _destinationItem(
@@ -65,11 +66,17 @@ class CustomerNavigationBar extends StatelessWidget {
     required CustomerDestination destination,
     required String label,
     required IconData icon,
+    bool enabled = true,
   }) {
     final selected = selectedDestination == destination;
-    final color = selected ? GetPrioTheme.orange : GetPrioTheme.ink;
+    final color = selected
+        ? GetPrioTheme.orange
+        : enabled
+        ? GetPrioTheme.ink
+        : GetPrioTheme.disabled;
     return NavigationItem(
       key: ValueKey(destination),
+      enabled: enabled,
       label: Text(
         label,
         style: Theme.of(context).typography.xSmall

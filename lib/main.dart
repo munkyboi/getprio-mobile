@@ -36,6 +36,7 @@ import 'directory/directory_repository.dart';
 import 'directory/vendor_contact.dart';
 import 'feedback_toast.dart';
 import 'form_validation.dart';
+import 'keyboard_avoidance.dart';
 import 'navigation/customer_navigation_bar.dart';
 import 'navigation/scroll_aware_app_bar.dart';
 import 'navigation/swipe_back_page_route.dart';
@@ -51,15 +52,24 @@ import 'app_theme.dart';
 import 'loading_skeleton.dart';
 import 'onboarding/onboarding_gate.dart';
 import 'onboarding/onboarding_store.dart';
+import 'mobile_environment.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  final firebaseEnabled = await initializeFirebase();
+  final environmentConfig = MobileEnvironmentConfig.fromCompileTime();
+  final firebaseEnabled = await initializeFirebase(
+    environment: environmentConfig.environment,
+  );
   if (firebaseEnabled) {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
-  runApp(GetPrioApp(firebaseEnabled: firebaseEnabled));
+  runApp(
+    GetPrioApp(
+      firebaseEnabled: firebaseEnabled,
+      environmentConfig: environmentConfig,
+    ),
+  );
 }
 
 class GetPrioApp extends StatelessWidget {
@@ -119,8 +129,32 @@ class GetPrioApp extends StatelessWidget {
           )
         : null;
     final lightTheme = GetPrioTheme.light();
+    final authGate = AuthGate(
+      authRepository: authRepository,
+      joinRepository: joinRepository,
+      paymentApi: paymentApi,
+      ticketRepository: ticketRepository,
+      queueRepository: QueueRepository(RestQueueApi(apiClient)),
+      directoryRepository: DirectoryRepository(
+        RestDirectoryApi(apiClient),
+      ),
+      settingsRepository: AccountSettingsRepository(
+        RestAccountSettingsApi(apiClient),
+      ),
+      securityRepository: SecurityRepository(RestSecurityApi(apiClient)),
+      profileRepository: AccountProfileRepository(
+        RestAccountProfileApi(apiClient),
+      ),
+      allowedHosts: environmentConfig.approvedHostSet,
+      sandbox: environmentConfig.isSandbox,
+      paymentLinkSource: AppPaymentLinkSource(),
+      pushCoordinator: pushCoordinator,
+      pushSignal: pushSignal,
+      oauthFlow: oauthFlow,
+      approvedVendorStore: approvedVendorStore,
+    );
     return ShadcnApp(
-      title: 'GetPrio',
+      title: environmentConfig.appName,
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.light,
       background: lightTheme.colorScheme.background,
@@ -166,27 +200,33 @@ class GetPrioApp extends StatelessWidget {
     );
   }
 
-  static AuthRepository _defaultAuthRepository() {
-    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
+  static AuthRepository _defaultAuthRepository(
+    MobileEnvironmentConfig environmentConfig,
+  ) {
     return AuthRepository(
-      api: RestAuthApi(baseUrl: baseUrl),
+      api: RestAuthApi(
+        baseUrl: environmentConfig.apiBaseUrl,
+        sandbox: environmentConfig.isSandbox,
+      ),
       tokenStore: SecureTokenStore(),
       biometricLogin: DeviceBiometricLogin(),
       rememberedUserStore: SecureRememberedUserStore(),
     );
   }
+}
 
-  static Set<String> _allowedHosts() {
-    const configuredHosts = String.fromEnvironment('GETPRIO_APPROVED_HOSTS');
-    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
-    final hosts = configuredHosts
-        .split(',')
-        .map((host) => host.trim().toLowerCase())
-        .where((host) => host.isNotEmpty)
-        .toSet();
-    final baseHost = Uri.tryParse(baseUrl)?.host;
-    if (baseHost != null && baseHost.isNotEmpty) hosts.add(baseHost);
-    return hosts;
+class _EnvironmentConfigurationError extends StatelessWidget {
+  const _EnvironmentConfigurationError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      child: Center(
+        child: Padding(padding: const EdgeInsets.all(24), child: Text(message)),
+      ),
+    );
   }
 }
 
@@ -259,11 +299,23 @@ class _AuthGateState extends State<AuthGate> {
   AuthSession? _session;
   bool _pushStarted = false;
   bool _showBiometricLogin = false;
+  bool _pushRegistrationDialogVisible = false;
+  StreamSubscription<Object>? _pushRegistrationErrorSubscription;
 
   @override
   void initState() {
     super.initState();
     _restore = _prepareLogin();
+    _pushRegistrationErrorSubscription = widget
+        .pushCoordinator
+        ?.registrationErrors
+        .listen(_handlePushRegistrationError);
+  }
+
+  @override
+  void dispose() {
+    _pushRegistrationErrorSubscription?.cancel();
+    super.dispose();
   }
 
   Future<AuthSession?> _prepareLogin() async {
@@ -300,6 +352,7 @@ class _AuthGateState extends State<AuthGate> {
         securityRepository: widget.securityRepository,
         profileRepository: widget.profileRepository,
         onUserUpdated: _updateUser,
+        sandbox: widget.sandbox,
         allowedHosts: widget.allowedHosts,
         paymentLinkSource: widget.paymentLinkSource,
         pushSignal: widget.pushSignal,
@@ -329,6 +382,7 @@ class _AuthGateState extends State<AuthGate> {
             securityRepository: widget.securityRepository,
             profileRepository: widget.profileRepository,
             onUserUpdated: _updateUser,
+            sandbox: widget.sandbox,
             allowedHosts: widget.allowedHosts,
             paymentLinkSource: widget.paymentLinkSource,
             pushSignal: widget.pushSignal,
@@ -341,12 +395,14 @@ class _AuthGateState extends State<AuthGate> {
           return BiometricLoginPage(
             authRepository: widget.authRepository,
             onAuthenticated: _authenticated,
+            sandbox: widget.sandbox,
           );
         }
         return SignInPage(
           authRepository: widget.authRepository,
           oauthFlow: widget.oauthFlow,
           onAuthenticated: _authenticated,
+          sandbox: widget.sandbox,
         );
       },
     );
@@ -362,6 +418,49 @@ class _AuthGateState extends State<AuthGate> {
       _pushStarted = false;
       debugPrint('[push] initialization failed: $error');
       // Push is best effort and must never block queue actions.
+    }
+  }
+
+  Future<void> _handlePushRegistrationError(Object error) async {
+    if (!mounted ||
+        error is! ApiException ||
+        error.code != 'SANDBOX_DEVICE_LIMIT' ||
+        _pushRegistrationDialogVisible) {
+      return;
+    }
+    _pushRegistrationDialogVisible = true;
+    final retry = await showOverlay<bool>(
+      context,
+      const DialogConfiguration(),
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('sandbox-device-limit-dialog'),
+        leading: const Icon(LucideIcons.bellOff),
+        title: const Text('Notifications unavailable'),
+        content: const Text(
+          'This Sandbox account already has two active devices. Sign out of another device, then retry notifications here.',
+        ),
+        actions: [
+          GetPrioActionButton.outline(
+            key: const Key('sandbox-device-limit-later'),
+            onPressed: () => closeOverlay(dialogContext, false),
+            child: const Text('Later'),
+          ),
+          GetPrioActionButton.primary(
+            key: const Key('sandbox-device-limit-retry'),
+            onPressed: () => closeOverlay(dialogContext, true),
+            child: const Text('Retry notifications'),
+          ),
+        ],
+      ),
+    ).future;
+    if (!mounted) return;
+    _pushRegistrationDialogVisible = false;
+    if (retry == true) {
+      try {
+        await widget.pushCoordinator?.retryRegistration();
+      } catch (_) {
+        // Push retry is best effort and must not block queue actions.
+      }
     }
   }
 
@@ -537,10 +636,12 @@ class BiometricLoginPage extends StatefulWidget {
     super.key,
     required this.authRepository,
     required this.onAuthenticated,
+    this.sandbox = false,
   });
 
   final AuthRepository authRepository;
   final ValueChanged<AuthSession> onAuthenticated;
+  final bool sandbox;
 
   @override
   State<BiometricLoginPage> createState() => _BiometricLoginPageState();
@@ -562,6 +663,7 @@ class _BiometricLoginPageState extends State<BiometricLoginPage> {
         onAuthenticated: widget.onAuthenticated,
         rememberedUser: snapshot.data,
         biometricLogin: true,
+        sandbox: widget.sandbox,
       );
     },
   );
@@ -633,6 +735,7 @@ class SignInPage extends StatefulWidget {
     this.oauthFlow,
     this.rememberedUser,
     this.biometricLogin = false,
+    this.sandbox = false,
     required this.onAuthenticated,
   });
 
@@ -640,6 +743,7 @@ class SignInPage extends StatefulWidget {
   final OAuthFlow? oauthFlow;
   final AuthUser? rememberedUser;
   final bool biometricLogin;
+  final bool sandbox;
   final ValueChanged<AuthSession> onAuthenticated;
 
   @override
@@ -1015,7 +1119,11 @@ class _SignInPageState extends State<SignInPage>
         case AuthenticatedSession(:final session):
           widget.onAuthenticated(session);
         case final MfaChallenge challenge:
-          setState(() => _challenge = challenge);
+          if (widget.sandbox) {
+            setState(() => _error = 'Sandbox test users do not use MFA.');
+          } else {
+            setState(() => _challenge = challenge);
+          }
       }
     } catch (error) {
       if (mounted) showFormError(error, _authError(error));
@@ -1256,7 +1364,7 @@ class _RegisterPageState extends State<RegisterPage>
             ],
           ),
         ],
-        child: SingleChildScrollView(
+        child: KeyboardAwareScrollView(
           padding: const EdgeInsets.all(24),
           child: challenge == null
               ? _buildRegistrationForm(context)
@@ -1763,7 +1871,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage>
             ],
           ),
         ],
-        child: SingleChildScrollView(
+        child: KeyboardAwareScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1867,6 +1975,7 @@ class _CustomerShellState extends State<CustomerShell>
     with WidgetsBindingObserver {
   CustomerDestination _selectedDestination = CustomerDestination.home;
   Timer? _ticketRefreshTimer;
+  Timer? _invitationRefreshTimer;
 
   @override
   void initState() {
@@ -1882,6 +1991,7 @@ class _CustomerShellState extends State<CustomerShell>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticketRefreshTimer?.cancel();
+    _invitationRefreshTimer?.cancel();
     widget.ticketRepository?.servedTicket.removeListener(_promptServedTicket);
     widget.pushSignal?.removeListener(_handlePushSignal);
     super.dispose();
@@ -1896,6 +2006,8 @@ class _CustomerShellState extends State<CustomerShell>
     } else {
       _ticketRefreshTimer?.cancel();
       _ticketRefreshTimer = null;
+      _invitationRefreshTimer?.cancel();
+      _invitationRefreshTimer = null;
     }
   }
 
@@ -2141,6 +2253,7 @@ class _CustomerShellState extends State<CustomerShell>
                 ticketRepository: widget.ticketRepository,
                 queueRepository: widget.queueRepository,
                 directoryRepository: widget.directoryRepository,
+                sandbox: widget.sandbox,
               ),
               AccountPage(
                 socialRepository: widget.directoryRepository?.social,
@@ -2263,6 +2376,7 @@ class _CustomerShellState extends State<CustomerShell>
               ticketRepository: widget.ticketRepository,
               directoryRepository: widget.directoryRepository,
               queueRepository: widget.queueRepository,
+              sandbox: widget.sandbox,
               showJoinConfirmation: true,
               onCancel:
                   ticket.canBeCancelled &&
@@ -2285,6 +2399,7 @@ class _CustomerShellState extends State<CustomerShell>
           ticketRepository: widget.ticketRepository,
           directoryRepository: widget.directoryRepository,
           queueRepository: widget.queueRepository,
+          sandbox: widget.sandbox,
           onCancel:
               ticket.canBeCancelled &&
                   ticket.tenantSlug != null &&
@@ -2355,6 +2470,7 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   void _selectDestination(CustomerDestination destination) {
+    if (destination == CustomerDestination.explore) return;
     setState(() => _selectedDestination = destination);
     if (destination == CustomerDestination.tickets) {
       widget.ticketRepository?.requestRefresh();
@@ -2795,7 +2911,7 @@ class _ExplorePageState extends State<ExplorePage> {
       child: ListView(
         key: const Key('explore-page'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + keyboardInsetOf(context)),
         children: [
           const Text('Explore vendors').h2(),
           const SizedBox(height: 4),
@@ -4057,12 +4173,12 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
       ),
       child: SafeArea(
         top: false,
-        child: SingleChildScrollView(
+        child: KeyboardAwareScrollView(
           padding: EdgeInsets.fromLTRB(
             24,
             GetPrioTheme.bottomSheetTopPadding,
             24,
-            24 + MediaQuery.viewInsetsOf(context).bottom,
+            24,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4614,11 +4730,13 @@ class TicketsPage extends StatefulWidget {
     this.ticketRepository,
     this.queueRepository,
     this.directoryRepository,
+    this.sandbox = false,
   });
 
   final QueueTicketRepository? ticketRepository;
   final QueueRepository? queueRepository;
   final DirectoryRepository? directoryRepository;
+  final bool sandbox;
 
   @override
   State<TicketsPage> createState() => _TicketsPageState();
@@ -5002,6 +5120,7 @@ class _TicketsPageState extends State<TicketsPage> {
           ticketRepository: widget.ticketRepository,
           directoryRepository: widget.directoryRepository,
           queueRepository: widget.queueRepository,
+          sandbox: widget.sandbox,
           onCancel: ticket.canBeCancelled
               ? () => _confirmCancellation(ticket)
               : null,
@@ -5091,6 +5210,7 @@ class TicketDetailsPage extends StatefulWidget {
     this.ticketRepository,
     this.directoryRepository,
     this.queueRepository,
+    this.sandbox = false,
     this.onCancel,
   });
 
@@ -5099,6 +5219,7 @@ class TicketDetailsPage extends StatefulWidget {
   final QueueTicketRepository? ticketRepository;
   final DirectoryRepository? directoryRepository;
   final QueueRepository? queueRepository;
+  final bool sandbox;
   final Future<QueueTicket?> Function()? onCancel;
 
   @override
@@ -6571,11 +6692,11 @@ class _ProfileSheetContent extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             24,
             GetPrioTheme.bottomSheetTopPadding,
             24,
-            12,
+            12 + keyboardInsetOf(context),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -6684,7 +6805,7 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
           ? 'Personal info'
           : 'Verify your changes',
       closeLabel: 'Close personal info',
-      child: SingleChildScrollView(
+      child: KeyboardAwareScrollView(
         child: switch (_step) {
           _PersonalInfoStep.form => _buildForm(context),
           _PersonalInfoStep.currentEmailCode => _buildEmailCode(
@@ -7390,7 +7511,7 @@ class _SecurityPageState extends State<SecurityPage>
       SecuritySection.mfa => 'MFA Setup',
       null => 'Privacy and security',
     };
-    final content = SingleChildScrollView(
+    final content = KeyboardAwareScrollView(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

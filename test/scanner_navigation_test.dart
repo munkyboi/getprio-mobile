@@ -8,16 +8,20 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
-  testWidgets(
-    'scanner back closes the join flow and returns to the launching tab',
-    (tester) async {
-      await _pumpScannerFlow(tester);
+  testWidgets('scanner back closes the join flow and returns to Home', (
+    tester,
+  ) async {
+    await _pumpScannerFlow(tester);
 
-      await tester.tap(find.text('Explore'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('explore-page')), findsOneWidget);
+    await _openScanner(tester);
 
-      await _openScanner(tester);
+    final joinFlowShell = find.byKey(const Key('join-flow-shell'));
+    final gesture = await tester.startGesture(const Offset(5, 320));
+    await gesture.moveBy(const Offset(120, 0));
+    await tester.pump();
+    expect(tester.getTopLeft(joinFlowShell).dx, greaterThan(0));
+    await gesture.up();
+    await tester.pumpAndSettle();
 
     final joinFlowShell = find.byKey(const Key('join-flow-shell'));
     final gesture = await tester.startGesture(const Offset(5, 320));
