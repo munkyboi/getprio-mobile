@@ -7,6 +7,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import '../app_theme.dart';
 import '../feedback_toast.dart';
 import '../form_validation.dart';
+import '../keyboard_avoidance.dart';
 import '../queue/queue_models.dart';
 import 'vendor_social_repository.dart';
 

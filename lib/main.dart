@@ -78,18 +78,34 @@ class GetPrioApp extends StatelessWidget {
     AuthRepository? authRepository,
     this.firebaseEnabled = false,
     this.onboardingStore = const InstallationOnboardingStore(),
+    MobileEnvironmentConfig? environmentConfig,
     ApprovedVendorStore? approvedVendorStore,
-  }) : authRepository = authRepository ?? _defaultAuthRepository(),
+  }) : authRepository =
+           authRepository ??
+           _defaultAuthRepository(
+             environmentConfig ?? MobileEnvironmentConfig.fromCompileTime(),
+           ),
+       environmentConfig =
+           environmentConfig ?? MobileEnvironmentConfig.fromCompileTime(),
        approvedVendorStore = approvedVendorStore ?? SecureApprovedVendorStore();
 
   final AuthRepository authRepository;
   final bool firebaseEnabled;
   final OnboardingStore onboardingStore;
+  final MobileEnvironmentConfig environmentConfig;
   final ApprovedVendorStore approvedVendorStore;
 
   @override
   Widget build(BuildContext context) {
-    const baseUrl = String.fromEnvironment('GETPRIO_API_BASE_URL');
+    final baseUrl = environmentConfig.apiBaseUrl;
+    final configurationError = environmentConfig.configurationError;
+    if (configurationError != null) {
+      return ShadcnApp(
+        title: environmentConfig.appName,
+        debugShowCheckedModeBanner: false,
+        home: _EnvironmentConfigurationError(message: configurationError),
+      );
+    }
     const appleSignInEnabled = bool.fromEnvironment(
       'GETPRIO_APPLE_SIGN_IN_ENABLED',
       defaultValue: false,
@@ -107,7 +123,7 @@ class GetPrioApp extends StatelessWidget {
       appleEnabled: appleSignInEnabled,
     );
     final ticketRepository = QueueTicketRepository(
-      RestAccountQueueApi(apiClient, sandbox: true),
+      RestAccountQueueApi(apiClient, sandbox: environmentConfig.isSandbox),
     );
     final pushSignal = ValueNotifier<PushSignal?>(null);
     final pushCoordinator = firebaseEnabled
@@ -135,9 +151,7 @@ class GetPrioApp extends StatelessWidget {
       paymentApi: paymentApi,
       ticketRepository: ticketRepository,
       queueRepository: QueueRepository(RestQueueApi(apiClient)),
-      directoryRepository: DirectoryRepository(
-        RestDirectoryApi(apiClient),
-      ),
+      directoryRepository: DirectoryRepository(RestDirectoryApi(apiClient)),
       settingsRepository: AccountSettingsRepository(
         RestAccountSettingsApi(apiClient),
       ),
@@ -168,34 +182,13 @@ class GetPrioApp extends StatelessWidget {
         );
       },
       home: GetPrioTheme.wrap(
-        OnboardingGate(
-          store: onboardingStore,
-          loading: const SplashLoadingScreen(),
-          child: AuthGate(
-            authRepository: authRepository,
-            joinRepository: joinRepository,
-            paymentApi: paymentApi,
-            ticketRepository: ticketRepository,
-            queueRepository: QueueRepository(RestQueueApi(apiClient)),
-            directoryRepository: DirectoryRepository(
-              RestDirectoryApi(apiClient),
-            ),
-            settingsRepository: AccountSettingsRepository(
-              RestAccountSettingsApi(apiClient),
-            ),
-            securityRepository: SecurityRepository(RestSecurityApi(apiClient)),
-            profileRepository: AccountProfileRepository(
-              RestAccountProfileApi(apiClient),
-            ),
-            allowedHosts: _allowedHosts(),
-            sandbox: true,
-            paymentLinkSource: AppPaymentLinkSource(),
-            pushCoordinator: pushCoordinator,
-            pushSignal: pushSignal,
-            oauthFlow: oauthFlow,
-            approvedVendorStore: approvedVendorStore,
-          ),
-        ),
+        environmentConfig.isSandbox
+            ? authGate
+            : OnboardingGate(
+                store: onboardingStore,
+                loading: const SplashLoadingScreen(),
+                child: authGate,
+              ),
       ),
     );
   }
@@ -357,7 +350,6 @@ class _AuthGateState extends State<AuthGate> {
         paymentLinkSource: widget.paymentLinkSource,
         pushSignal: widget.pushSignal,
         approvedVendorStore: widget.approvedVendorStore,
-        sandbox: widget.sandbox,
         onSignOut: () => unawaited(_signOut()),
       );
     }
@@ -387,7 +379,6 @@ class _AuthGateState extends State<AuthGate> {
             paymentLinkSource: widget.paymentLinkSource,
             pushSignal: widget.pushSignal,
             approvedVendorStore: widget.approvedVendorStore,
-            sandbox: widget.sandbox,
             onSignOut: () => unawaited(_signOut()),
           );
         }
@@ -1984,6 +1975,7 @@ class _CustomerShellState extends State<CustomerShell>
     widget.ticketRepository?.servedTicket.addListener(_promptServedTicket);
     widget.pushSignal?.addListener(_handlePushSignal);
     _startTicketRefreshFallback();
+    _startInvitationRefreshFallback();
     _loadPendingInvitationAfterFrame();
   }
 
@@ -2002,6 +1994,7 @@ class _CustomerShellState extends State<CustomerShell>
     if (state == AppLifecycleState.resumed) {
       widget.ticketRepository?.requestRefresh();
       _startTicketRefreshFallback();
+      _startInvitationRefreshFallback();
       _loadPendingInvitationAfterFrame();
     } else {
       _ticketRefreshTimer?.cancel();
@@ -2204,9 +2197,17 @@ class _CustomerShellState extends State<CustomerShell>
     _ticketRefreshTimer?.cancel();
     final repository = widget.ticketRepository;
     if (repository == null) return;
-    _ticketRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _ticketRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       if (!mounted) return;
       if (repository.hasActiveTickets) repository.requestRefresh();
+    });
+  }
+
+  void _startInvitationRefreshFallback() {
+    _invitationRefreshTimer?.cancel();
+    if (widget.ticketRepository == null) return;
+    _invitationRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
       // Push delivery is best-effort. Keep checking pending invitations while
       // the app is foregrounded so a missed invitation push is recoverable.
       unawaited(_presentTicketInvitation());

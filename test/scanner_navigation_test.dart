@@ -23,22 +23,13 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
-    final joinFlowShell = find.byKey(const Key('join-flow-shell'));
-    final gesture = await tester.startGesture(const Offset(5, 320));
-    await gesture.moveBy(const Offset(120, 0));
-    await tester.pump();
-    expect(tester.getTopLeft(joinFlowShell).dx, greaterThan(0));
-    await gesture.up();
-    await tester.pumpAndSettle();
-
     await tester.dragFrom(const Offset(5, 320), const Offset(300, 0));
     await tester.pumpAndSettle();
 
-      expect(find.byType(QrScannerPage), findsNothing);
-      expect(find.byType(JoinPage), findsNothing);
-      expect(find.byKey(const Key('explore-page')), findsOneWidget);
-    },
-  );
+    expect(find.byType(QrScannerPage), findsNothing);
+    expect(find.byType(JoinPage), findsNothing);
+    expect(find.byKey(const Key('home-page')), findsOneWidget);
+  });
 
   testWidgets('successful scan keeps the join flow open for payload handling', (
     tester,
