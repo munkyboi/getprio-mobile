@@ -248,6 +248,32 @@ void main() {
     expect(tokens.refreshToken, 'rotated');
   });
 
+  testWidgets('remembered login keeps OAuth providers available', (
+    tester,
+  ) async {
+    final oauthFlow = OAuthFlow(
+      baseUrl: 'https://api.example.com',
+      authRepository: repository,
+      api: RestOAuthApi(baseUrl: 'https://api.example.com'),
+      appleEnabled: true,
+    );
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: BiometricLoginPage(
+          authRepository: repository,
+          oauthFlow: oauthFlow,
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Continue with Google'), findsOneWidget);
+    expect(find.bySemanticsLabel('Continue with Facebook'), findsOneWidget);
+    expect(find.bySemanticsLabel('Continue with Apple'), findsOneWidget);
+  }, variant: TargetPlatformVariant({TargetPlatform.iOS}));
+
   testWidgets('original login has a recovery link and no biometric button', (
     tester,
   ) async {

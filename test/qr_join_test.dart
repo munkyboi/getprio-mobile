@@ -100,18 +100,46 @@ void main() {
   });
 
   test('recognizes a printed Sandbox ticket verification QR', () {
-    final payload = QrScanPayload.parse('ab12cd34', allowedHosts: hosts);
+    final payload = QrScanPayload.parse(
+      'ab12cd34',
+      allowedHosts: hosts,
+      allowTicketClaims: true,
+    );
 
     expect(payload, isA<QrTicketClaimPayload>());
     expect((payload as QrTicketClaimPayload).verificationCode, 'AB12CD34');
+  });
+
+  test('rejects a printed ticket verification code outside Sandbox', () {
+    expect(
+      () => QrScanPayload.parse('ab12cd34', allowedHosts: hosts),
+      throwsA(isA<QrValidationException>()),
+    );
+  });
+
+  test('blocks direct printed ticket claims outside Sandbox', () async {
+    expect(
+      () =>
+          JoinRepository(_TicketClaimApi())
+              .claimTicket(const QrTicketClaimPayload('AB12CD34')),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.code,
+          'code',
+          'TICKET_CLAIM_UNAVAILABLE',
+        ),
+      ),
+    );
   });
 
   test(
     'claims a printed Sandbox ticket and maps tenant and location context',
     () async {
       final api = _TicketClaimApi();
-      final ticket = await JoinRepository(api)
-          .claimTicket(const QrTicketClaimPayload('AB12CD34'));
+      final ticket = await JoinRepository(
+        api,
+        allowTicketClaims: true,
+      ).claimTicket(const QrTicketClaimPayload('AB12CD34'));
 
       expect(api.lastCode, 'AB12CD34');
       expect(ticket.ticketNumber, 'QUEUE-0001');

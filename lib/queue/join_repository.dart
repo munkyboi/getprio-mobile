@@ -316,9 +316,14 @@ String? _joinPlainText(String? html) {
 abstract class QrScanPayload {
   const QrScanPayload();
 
-  static QrScanPayload parse(String raw, {required Set<String> allowedHosts}) {
+  static QrScanPayload parse(
+    String raw, {
+    required Set<String> allowedHosts,
+    bool allowTicketClaims = false,
+  }) {
     final normalized = raw.trim();
-    if (RegExp(r'^[a-f0-9]{8}$', caseSensitive: false).hasMatch(normalized)) {
+    if (allowTicketClaims &&
+        RegExp(r'^[a-f0-9]{8}$', caseSensitive: false).hasMatch(normalized)) {
       return QrTicketClaimPayload(normalized.toUpperCase());
     }
     return QrJoinPayload.parse(normalized, allowedHosts: allowedHosts);
@@ -436,9 +441,10 @@ class PaymentRequired extends JoinResult {
 }
 
 class JoinRepository {
-  JoinRepository(this.api);
+  JoinRepository(this.api, {this.allowTicketClaims = false});
 
   final JoinApi api;
+  final bool allowTicketClaims;
 
   Stream<void> watchQueue(JoinPreview preview) {
     final source = api;
@@ -455,6 +461,13 @@ class JoinRepository {
   }
 
   Future<QueueTicket> claimTicket(QrTicketClaimPayload payload) async {
+    if (!allowTicketClaims) {
+      throw const ApiException(
+        501,
+        'TICKET_CLAIM_UNAVAILABLE',
+        'Printed ticket QR claims are not configured for this build.',
+      );
+    }
     final claimApi = api is TicketClaimApi ? api as TicketClaimApi : null;
     if (claimApi == null) {
       throw const ApiException(

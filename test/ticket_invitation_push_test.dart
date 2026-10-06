@@ -98,7 +98,7 @@ void main() {
     expect(api.acceptedId, 'invitation-1');
     expect(await store.load(user.id), [
       const ApprovedVendor(
-        key: 'name:sandbox profile',
+        key: 'slug:sandbox-profile',
         name: 'Sandbox profile',
       ),
     ]);
@@ -142,7 +142,7 @@ void main() {
     await store.add(
       'customer-1',
       const ApprovedVendor(
-        key: 'name:sandbox profile',
+        key: 'slug:sandbox-profile',
         name: 'Sandbox profile',
       ),
     );
@@ -160,6 +160,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.acceptedId, 'invitation-1');
+    expect(find.byKey(const Key('ticket-invitation-prompt')), findsNothing);
+  });
+
+  testWidgets('slugless invitations cannot be permanently approved', (
+    tester,
+  ) async {
+    final api = _InvitationApi()..includeTenantSlug = false;
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: CustomerShell(
+          user: const AuthUser(id: 'customer-1', email: 'customer@example.com'),
+          sandbox: true,
+          approvedVendorStore: MemoryApprovedVendorStore(),
+          ticketRepository: QueueTicketRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ticket-invitation-prompt')), findsOneWidget);
+    expect(
+      find.byKey(const Key('always-accept-ticket-invitations')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('invitation refresh failures do not escape the background task', (
+    tester,
+  ) async {
+    final api = _InvitationApi()..failLoading = true;
+
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: CustomerShell(ticketRepository: QueueTicketRepository(api)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
     expect(find.byKey(const Key('ticket-invitation-prompt')), findsNothing);
   });
 
@@ -187,6 +227,8 @@ void main() {
 
 class _InvitationApi implements AccountQueueApi, TicketInvitationApi {
   bool includeInvitation = true;
+  bool includeTenantSlug = true;
+  bool failLoading = false;
   String? acceptedId;
 
   @override
@@ -201,9 +243,12 @@ class _InvitationApi implements AccountQueueApi, TicketInvitationApi {
   };
 
   @override
-  Future<Map<String, dynamic>> loadInvitations() async => {
-    'invitations': includeInvitation ? [_ticket()] : const [],
-  };
+  Future<Map<String, dynamic>> loadInvitations() async {
+    if (failLoading) throw Exception('Invitation refresh failed');
+    return {
+      'invitations': includeInvitation ? [_ticket()] : const [],
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> acceptInvitation(String ticketId) async {
@@ -218,6 +263,7 @@ class _InvitationApi implements AccountQueueApi, TicketInvitationApi {
     'verification_code': 'AB12CD34',
     'status': 'waiting',
     'profile': {
+      if (includeTenantSlug) 'tenant_slug': 'sandbox-profile',
       'queue_name': 'Sandbox profile',
       'location_name': 'Main queue',
       'location_slug': 'main',

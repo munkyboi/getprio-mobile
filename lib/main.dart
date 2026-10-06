@@ -114,7 +114,10 @@ class GetPrioApp extends StatelessWidget {
       baseUrl: baseUrl,
       authRepository: authRepository,
     );
-    final joinRepository = JoinRepository(RestJoinApi(apiClient));
+    final joinRepository = JoinRepository(
+      RestJoinApi(apiClient),
+      allowTicketClaims: environmentConfig.isSandbox,
+    );
     final paymentApi = RestPaymentApi(apiClient);
     final oauthFlow = OAuthFlow(
       baseUrl: baseUrl,
@@ -385,6 +388,7 @@ class _AuthGateState extends State<AuthGate> {
         if (_showBiometricLogin) {
           return BiometricLoginPage(
             authRepository: widget.authRepository,
+            oauthFlow: widget.oauthFlow,
             onAuthenticated: _authenticated,
             sandbox: widget.sandbox,
           );
@@ -627,10 +631,12 @@ class BiometricLoginPage extends StatefulWidget {
     super.key,
     required this.authRepository,
     required this.onAuthenticated,
+    this.oauthFlow,
     this.sandbox = false,
   });
 
   final AuthRepository authRepository;
+  final OAuthFlow? oauthFlow;
   final ValueChanged<AuthSession> onAuthenticated;
   final bool sandbox;
 
@@ -651,6 +657,7 @@ class _BiometricLoginPageState extends State<BiometricLoginPage> {
       }
       return SignInPage(
         authRepository: widget.authRepository,
+        oauthFlow: widget.oauthFlow,
         onAuthenticated: widget.onAuthenticated,
         rememberedUser: snapshot.data,
         biometricLogin: true,
@@ -937,8 +944,7 @@ class _SignInPageState extends State<SignInPage>
                         child: const Text('Forgot password?'),
                       ),
                     ),
-                    if (!widget.biometricLogin &&
-                        (showOAuthButtons || showAppleButton)) ...[
+                    if (showOAuthButtons || showAppleButton) ...[
                       const SizedBox(height: 16),
                       const Text(
                         'Or continue with',
@@ -2043,7 +2049,13 @@ class _CustomerShellState extends State<CustomerShell>
   Future<void> _presentTicketInvitation([PushSignal? signal]) async {
     final repository = widget.ticketRepository;
     if (repository == null) return;
-    var invitations = await repository.loadPendingInvitations();
+    List<TicketInvitation> invitations;
+    try {
+      invitations = await repository.loadPendingInvitations();
+    } catch (error) {
+      debugPrint('[tickets] invitation refresh failed: $error');
+      return;
+    }
     if (!mounted || invitations.isEmpty) return;
 
     invitations = await _acceptApprovedInvitations(repository, invitations);
@@ -2068,14 +2080,15 @@ class _CustomerShellState extends State<CustomerShell>
       DialogConfiguration(),
       builder: (dialogContext) {
         var alwaysAccept = false;
-        final canApproveVendor =
-            widget.sandbox &&
-            widget.approvedVendorStore != null &&
-            widget.user?.id.trim().isNotEmpty == true;
         final approvedVendor = ApprovedVendor.fromTicket(
           tenantSlug: invitation.ticket.tenantSlug,
           vendorName: invitation.ticket.vendorName,
         );
+        final canApproveVendor =
+            widget.sandbox &&
+            widget.approvedVendorStore != null &&
+            widget.user?.id.trim().isNotEmpty == true &&
+            approvedVendor != null;
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             key: const Key('ticket-invitation-prompt'),
@@ -2176,7 +2189,7 @@ class _CustomerShellState extends State<CustomerShell>
         tenantSlug: invitation.ticket.tenantSlug,
         vendorName: invitation.ticket.vendorName,
       );
-      if (!approved.any((item) => item.key == vendor.key)) {
+      if (vendor == null || !approved.any((item) => item.key == vendor.key)) {
         remaining.add(invitation);
         continue;
       }

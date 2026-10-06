@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/account/approved_vendor_store.dart';
 
 void main() {
-  test('identifies a vendor by tenant slug and falls back to its name', () {
+  test('identifies a vendor only when a stable tenant slug is present', () {
     expect(
       ApprovedVendor.fromTicket(
         tenantSlug: 'Dr-Troy-Choi',
@@ -12,7 +12,7 @@ void main() {
     );
     expect(
       ApprovedVendor.fromTicket(tenantSlug: null, vendorName: 'Acme Clinic'),
-      const ApprovedVendor(key: 'name:acme clinic', name: 'Acme Clinic'),
+      isNull,
     );
   });
 

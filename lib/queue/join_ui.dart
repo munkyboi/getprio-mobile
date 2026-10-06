@@ -389,6 +389,7 @@ class _JoinPageState extends State<JoinPage>
     if (error == null) {
       return QrScannerPage(
         allowedHosts: widget.allowedHosts,
+        allowTicketClaims: widget.repository?.allowTicketClaims ?? false,
         showAppBar: false,
         onBack: _closeJoinFlow,
         onPayload: (payload) => unawaited(_handleScannedPayload(payload)),
@@ -1393,12 +1394,14 @@ class QrScannerPage extends StatefulWidget {
   const QrScannerPage({
     super.key,
     required this.allowedHosts,
+    this.allowTicketClaims = false,
     this.showAppBar = true,
     this.onPayload,
     this.onBack,
   });
 
   final Set<String> allowedHosts;
+  final bool allowTicketClaims;
   final bool showAppBar;
   final ValueChanged<QrScanPayload>? onPayload;
   final VoidCallback? onBack;
@@ -1490,6 +1493,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
       final payload = QrScanPayload.parse(
         raw,
         allowedHosts: widget.allowedHosts,
+        allowTicketClaims: widget.allowTicketClaims,
       );
       _handled = true;
       try {
