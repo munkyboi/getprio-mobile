@@ -14,9 +14,10 @@ flutter run \
 ```
 
 `GETPRIO_API_BASE_URL` is the trusted GetPrio API origin. `GETPRIO_APPROVED_HOSTS` is the comma-separated HTTPS host allowlist used by QR and payment-return parsing. The scanner never opens a scanned URL.
-`GETPRIO_APPLE_SIGN_IN_ENABLED=true` enables the native iOS Apple button only after
-the backend Apple credentials and Apple Developer capability are ready. It should
-remain false or omitted in builds that have not completed that setup.
+Production builds always enable the native iOS Apple button because the backend
+credentials and Apple Developer capability are release requirements. The
+`GETPRIO_APPLE_SIGN_IN_ENABLED=true` override is only needed to opt the separate
+Sandbox bundle into Apple sign-in after its own credentials are configured.
 
 ### Physical iPhone testing when debug mode disconnects
 

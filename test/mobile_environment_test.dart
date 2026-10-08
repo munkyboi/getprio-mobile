@@ -45,6 +45,27 @@ void main() {
     expect(config.configurationError, contains('must not use'));
   });
 
+  test('production always enables Apple sign-in for distribution builds', () {
+    const config = MobileEnvironmentConfig(
+      environment: GetPrioEnvironment.production,
+      apiBaseUrl: 'https://api.getprio.online',
+      approvedHosts: 'app.getprio.online',
+    );
+
+    expect(config.appleSignInEnabled(sandboxOverride: false), isTrue);
+  });
+
+  test('sandbox Apple sign-in remains an explicit release opt-in', () {
+    const config = MobileEnvironmentConfig(
+      environment: GetPrioEnvironment.sandbox,
+      apiBaseUrl: 'https://sandbox-api.getprio.online',
+      approvedHosts: 'sandbox.getprio.online',
+    );
+
+    expect(config.appleSignInEnabled(sandboxOverride: false), isFalse);
+    expect(config.appleSignInEnabled(sandboxOverride: true), isTrue);
+  });
+
   test('unknown config environment is rejected', () {
     const config = MobileEnvironmentConfig(
       environment: GetPrioEnvironment.unknown,

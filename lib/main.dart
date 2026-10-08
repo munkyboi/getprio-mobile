@@ -106,9 +106,12 @@ class GetPrioApp extends StatelessWidget {
         home: _EnvironmentConfigurationError(message: configurationError),
       );
     }
-    const appleSignInEnabled = bool.fromEnvironment(
+    const sandboxAppleSignInEnabled = bool.fromEnvironment(
       'GETPRIO_APPLE_SIGN_IN_ENABLED',
       defaultValue: false,
+    );
+    final appleSignInEnabled = environmentConfig.appleSignInEnabled(
+      sandboxOverride: sandboxAppleSignInEnabled,
     );
     final apiClient = AuthenticatedApiClient(
       baseUrl: baseUrl,

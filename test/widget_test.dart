@@ -164,6 +164,32 @@ void main() {
     expect(find.text('Email or username'), findsOneWidget);
   });
 
+  testWidgets(
+    'production iOS distribution shows Google, Facebook, and Apple sign-in',
+    (tester) async {
+      await tester.pumpWidget(
+        GetPrioApp(
+          environmentConfig: const MobileEnvironmentConfig(
+            environment: GetPrioEnvironment.production,
+            apiBaseUrl: 'https://api.getprio.online',
+            approvedHosts: 'app.getprio.online',
+          ),
+          authRepository: AuthRepository(
+            api: UnusedAuthApi(),
+            tokenStore: MemoryTokenStore(),
+          ),
+          onboardingStore: MemoryOnboardingStore(completed: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('Continue with Google'), findsOneWidget);
+      expect(find.bySemanticsLabel('Continue with Facebook'), findsOneWidget);
+      expect(find.bySemanticsLabel('Continue with Apple'), findsOneWidget);
+    },
+    variant: TargetPlatformVariant({TargetPlatform.iOS}),
+  );
+
   testWidgets('labels customer registration fields', (tester) async {
     await tester.pumpWidget(
       ShadcnApp(

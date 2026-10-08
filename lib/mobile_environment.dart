@@ -53,6 +53,11 @@ class MobileEnvironmentConfig {
 
   bool get isSandbox => environment == GetPrioEnvironment.sandbox;
 
+  /// Production always exposes Sign in with Apple on iOS. Sandbox keeps the
+  /// compile-time opt-in because it uses a separate bundle ID and credentials.
+  bool appleSignInEnabled({required bool sandboxOverride}) =>
+      !isSandbox || sandboxOverride;
+
   String get appName => isSandbox ? sandboxAppName : productionAppName;
 
   String get expectedApiHost => isSandbox ? sandboxApiHost : productionApiHost;
