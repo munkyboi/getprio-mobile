@@ -36,7 +36,7 @@ Branch: `codex/mobile-booking-lists-ui`, based on mobile `origin/main` at `0b9fd
 ## Remaining before booking release
 
 - Richer review/expiry outcomes and physical end-to-end vendor payment acceptance. Native payment instructions, reference, proof upload and private proof viewing are implemented.
-- Eligible cancellation, linked queue-ticket navigation and complete lifecycle/refund messaging.
+- Eligible cancellation and complete lifecycle/refund messaging. Linked queue-ticket navigation and vendor-enabled customer arrival are implemented.
 - Booking push delivery/deep links and durable session/interrupted-flow recovery.
 - Physical verification of email OTP autofill, photo upload, keyboard/safe areas, application switching and vendor approval/check-in.
 - End-to-end verification against the selected backend, with a test vendor and customer. Widget tests use fake APIs and do not submit live bookings or send verification emails.

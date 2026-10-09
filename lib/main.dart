@@ -2370,7 +2370,18 @@ class _CustomerShellState extends State<CustomerShell>
   void _openBookings() {
     Navigator.of(context).push(
       SwipeBackPageRoute<void>(
-        builder: (_) => BookingsPage(repository: _bookingRepository),
+        builder: (_) => BookingsPage(
+          repository: _bookingRepository,
+          onCheckedIn: widget.ticketRepository?.requestRefresh,
+          onOpenTicket: (booking) => _openBookingQueueTicket(
+            context,
+            booking,
+            bookingRepository: _bookingRepository!,
+            ticketRepository: widget.ticketRepository,
+            queueRepository: widget.queueRepository,
+            directoryRepository: widget.directoryRepository,
+          ),
+        ),
       ),
     );
   }
@@ -3745,6 +3756,12 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
             builder: (_) => BookingDetailPage(
               repository: widget.bookingRepository!,
               booking: booking,
+              onOpenTicket: (item) => _openBookingQueueTicket(
+                context,
+                item,
+                bookingRepository: widget.bookingRepository!,
+                queueRepository: widget.queueRepository,
+              ),
             ),
           ),
         );
@@ -5376,6 +5393,47 @@ class _TicketsPageState extends State<TicketsPage> {
       return null;
     }
   }
+}
+
+Future<void> _openBookingQueueTicket(
+  BuildContext context,
+  CustomerBooking booking, {
+  required BookingRepository bookingRepository,
+  QueueTicketRepository? ticketRepository,
+  QueueRepository? queueRepository,
+  DirectoryRepository? directoryRepository,
+}) async {
+  final linked = booking.linkedTicket;
+  if (linked == null || '${linked['lookupCode'] ?? ''}'.isEmpty) {
+    throw StateError('The linked queue ticket is unavailable.');
+  }
+  final api = bookingRepository.api;
+  final client = api is RestBookingApi ? api.client : null;
+  final ticket = QueueTicket.fromJson({
+    ...linked,
+    'tenantSlug': booking.data['tenantSlug'],
+    'locationSlug': booking.data['locationSlug'],
+    'tenantName': booking.vendorName,
+    'locationName': booking.locationName,
+    'customerName': booking.data['customerName'],
+  });
+  ticketRepository?.requestRefresh();
+  await Navigator.of(context).push<void>(
+    SwipeBackPageRoute<void>(
+      builder: (_) => TicketDetailsPage(
+        ticket: ticket,
+        ticketRepository: ticketRepository,
+        queueRepository:
+            queueRepository ??
+            (client == null ? null : QueueRepository(RestQueueApi(client))),
+        directoryRepository:
+            directoryRepository ??
+            (client == null
+                ? null
+                : DirectoryRepository(RestDirectoryApi(client))),
+      ),
+    ),
+  );
 }
 
 class TicketDetailsPage extends StatefulWidget {

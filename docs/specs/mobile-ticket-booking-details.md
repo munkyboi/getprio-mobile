@@ -46,3 +46,15 @@ KanbanFlow access remains blocked by admin-policy verification. Pending M28 upda
 ### Booking heading spacing
 
 Removed the heading modifier's automatic 40-pixel top margin between the vendor hero and booking reference. The reference uses the same heading typography directly, retaining the card's normal 20-pixel content padding. Analysis and all six booking presentation/live-refresh tests passed. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Include this small spacing correction in the pending M28 refinement update.
+
+## Alert, linked queue ticket and customer arrival
+
+The booking next-step alert is above the booking card. When the server returns a linked ticket, the alert offers an action to its existing native Ticket Details screen, using the booking's vendor/location and ticket lookup code. Both Lists → Bookings and newly created bookings wire this navigation; returning refreshes the booking.
+
+Customer arrival follows the web/backend contract in `booking-arrival` and the local `origin/main` account route: authenticated POST `/api/account/bookings/:id/arrival`. The button says `I’ve arrived` only for confirmed/rescheduled bookings with `customerSelfCheckInEnabled: true`, no expiry/check-in/ticket, and within the inclusive 15-minute-before/after window based on the root `scheduledStartAt`. Required manual payment must be `paid` or have `paymentVerifiedAt`, matching server rules. Missing opt-in fails closed. Early, staff-only, payment-blocked and late states explain availability; a foreground clock updates the label. The server remains authoritative for ownership, payment, window and queue capacity.
+
+Duplicate arrival requests are blocked. Starting arrival invalidates older polls; successful arrival applies the returned booking and exposes its ticket link. Errors retain details and refetch to reconcile a lost response or concurrent staff check-in before retry. Both polling and the clock stop on disposal; covered/background pages do no periodic work.
+
+Analysis and all 309 tests passed, including inclusive boundaries, root-vs-bundle schedules, vendor/payment/status gates, duplicate suppression, stale-fetch protection, alert placement/link arguments, failure/retry and clock transitions. The final copy/countdown refinement also passed analysis and all five arrival tests. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Tests use fake APIs; no production booking arrival was submitted. Physical end-to-end vendor acceptance remains pending.
+
+KanbanFlow remains inaccessible because browser admin-policy verification failed. Pending M28 update: add top alert, linked native ticket navigation and customer arrival; record verification; retain In Progress for cancellation and physical lifecycle/payment acceptance.

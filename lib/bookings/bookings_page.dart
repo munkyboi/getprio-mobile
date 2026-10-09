@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../auth/auth_repository.dart';
+
 import '../details/detail_pass.dart';
 import '../directory/directory_repository.dart';
 import '../queue/queue_models.dart';
@@ -19,7 +21,14 @@ String bookingDateLabel(DateTime? date) => date == null
 String bookingStatusLabel(String status) => status.replaceAll('_', ' ');
 
 class BookingsPage extends StatefulWidget {
-  const BookingsPage({super.key, this.repository});
+  const BookingsPage({
+    super.key,
+    this.repository,
+    this.onOpenTicket,
+    this.onCheckedIn,
+  });
+  final Future<void> Function(CustomerBooking)? onOpenTicket;
+  final VoidCallback? onCheckedIn;
   final BookingRepository? repository;
   @override
   State<BookingsPage> createState() => _BookingsPageState();
@@ -164,6 +173,8 @@ class _BookingsPageState extends State<BookingsPage>
                             builder: (_) => BookingDetailPage(
                               repository: widget.repository!,
                               booking: item,
+                              onOpenTicket: widget.onOpenTicket,
+                              onCheckedIn: widget.onCheckedIn,
                             ),
                           ),
                         );
@@ -223,12 +234,18 @@ class BookingDetailPage extends StatefulWidget {
     required this.repository,
     required this.booking,
     this.directoryRepository,
+    this.onOpenTicket,
+    this.onCheckedIn,
+    this.now,
     this.pollInterval = const Duration(seconds: 15),
   });
   final BookingRepository repository;
   final CustomerBooking booking;
   final DirectoryRepository? directoryRepository;
   final Duration pollInterval;
+  final Future<void> Function(CustomerBooking)? onOpenTicket;
+  final VoidCallback? onCheckedIn;
+  final DateTime Function()? now;
   @override
   State<BookingDetailPage> createState() => _BookingDetailPageState();
 }
@@ -237,7 +254,10 @@ class _BookingDetailPageState extends State<BookingDetailPage>
     with WidgetsBindingObserver {
   late CustomerBooking _item;
   VendorSummary? _vendor;
-  Timer? _poll;
+  Timer? _poll, _clock;
+  bool _arriving = false, _openingTicket = false;
+  String? _arrivalError;
+  DateTime get _now => widget.now?.call() ?? DateTime.now();
   final Map<String, String> _serviceImages = {};
   bool _imagesRequested = false;
   bool _fetching = false, _foreground = true, _vendorRequested = false;
@@ -249,6 +269,11 @@ class _BookingDetailPageState extends State<BookingDetailPage>
     _item = widget.booking;
     WidgetsBinding.instance.addObserver(this);
     _refresh();
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_foreground && (ModalRoute.of(context)?.isCurrent ?? true)) {
+        setState(() {});
+      }
+    });
     _poll = Timer.periodic(widget.pollInterval, (_) {
       if (_foreground && (ModalRoute.of(context)?.isCurrent ?? true)) {
         _refresh();
@@ -259,6 +284,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
   @override
   void dispose() {
     _poll?.cancel();
+    _clock?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -310,7 +336,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
   }
 
   Future<void> _refresh() async {
-    if (_fetching || !mounted) return;
+    if (_fetching || _arriving || !mounted) return;
     final request = ++_request;
     setState(() => _fetching = true);
     try {
@@ -340,6 +366,55 @@ class _BookingDetailPageState extends State<BookingDetailPage>
       _item = updated;
       _syncError = null;
     });
+  }
+
+  Future<void> _checkIn() async {
+    if (_arriving || !_item.canCheckIn(_now)) return;
+    _request++;
+    setState(() {
+      _arriving = true;
+      _arrivalError = null;
+    });
+    try {
+      final updated = await widget.repository.checkIn(_item, _now);
+      if (!mounted) return;
+      _proofSubmitted(updated);
+      widget.onCheckedIn?.call();
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _arrivalError = error is ApiException
+              ? error.message
+              : 'Could not record arrival. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _arriving = false);
+    }
+    // Reconcile a lost response or a concurrent staff check-in before retrying.
+    if (_arrivalError != null && mounted) await _refresh();
+  }
+
+  Future<void> _openTicket() async {
+    if (_openingTicket ||
+        _item.linkedTicket == null ||
+        widget.onOpenTicket == null) {
+      return;
+    }
+    setState(() => _openingTicket = true);
+    try {
+      await widget.onOpenTicket!(_item);
+      if (mounted) await _refresh();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _arrivalError =
+              'Could not open your queue ticket. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingTicket = false);
+    }
   }
 
   @override
@@ -402,6 +477,60 @@ class _BookingDetailPageState extends State<BookingDetailPage>
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Container(
+                  key: const Key('booking-details-alert'),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: GetPrioTheme.info.withValues(alpha: .08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: GetPrioTheme.info.withValues(alpha: .2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            LucideIcons.info,
+                            size: 20,
+                            color: GetPrioTheme.info,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              item.canCheckIn(_now)
+                                  ? 'When you are at the location, tap I’ve arrived to get your queue ticket. Your booked time is the earliest the vendor can call it.'
+                                  : item.nextStep,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (item.linkedTicket != null) ...[
+                        const SizedBox(height: 8),
+                        LinkButton(
+                          key: const Key('booking-queue-link'),
+                          onPressed:
+                              _openingTicket || widget.onOpenTicket == null
+                              ? null
+                              : _openTicket,
+                          child: Text(
+                            _openingTicket
+                                ? 'Opening ticket...'
+                                : 'Open queue ticket ${item.linkedTicket!['ticketNumber'] ?? ''}',
+                          ),
+                        ),
+                      ],
+                      if (_arrivalError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(_arrivalError!),
+                      ],
+                    ],
+                  ),
+                ),
                 DetailPassCard(
                   key: const Key('booking-details-card'),
                   vendor: vendor,
@@ -498,18 +627,19 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          LucideIcons.info,
-                          size: 18,
-                          color: GetPrioTheme.info,
+                    if (item.linkedTicket == null) ...[
+                      PrimaryButton(
+                        key: const Key('booking-check-in'),
+                        onPressed: _arriving || !item.canCheckIn(_now)
+                            ? null
+                            : _checkIn,
+                        child: Text(
+                          _arriving
+                              ? 'Recording arrival...'
+                              : item.checkInLabel(_now),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(child: Text(item.nextStep)),
-                      ],
-                    ),
+                      ),
+                    ],
                     const DetailPassDivider(),
                     const Text('Booked services').h3(),
                     for (final service in services)

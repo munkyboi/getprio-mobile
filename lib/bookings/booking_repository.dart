@@ -40,6 +40,48 @@ class CustomerBooking {
   String get paymentStatus => data['paymentStatus'] as String? ?? 'unknown';
   DateTime? get startAt =>
       DateTime.tryParse('${data['scheduledStartAt']}')?.toLocal();
+  Map<String, dynamic>? get linkedTicket =>
+      data['linkedTicket'] is Map<String, dynamic>
+      ? data['linkedTicket'] as Map<String, dynamic>
+      : null;
+  bool get arrivalPaymentBlocked =>
+      requiresManualPayment &&
+      paymentStatus != 'paid' &&
+      data['paymentVerifiedAt'] == null;
+  bool canCheckIn(DateTime now) =>
+      data['customerSelfCheckInEnabled'] == true &&
+      ['confirmed', 'rescheduled'].contains(status) &&
+      data['expiredAt'] == null &&
+      data['checkedInAt'] == null &&
+      linkedTicket == null &&
+      data['queueTicketId'] == null &&
+      !arrivalPaymentBlocked &&
+      startAt != null &&
+      !now.isBefore(startAt!.subtract(const Duration(minutes: 15))) &&
+      !now.isAfter(startAt!.add(const Duration(minutes: 15)));
+  String checkInLabel(DateTime now) {
+    if (linkedTicket != null) return 'Open queue ticket';
+    if (!['confirmed', 'rescheduled'].contains(status) ||
+        data['expiredAt'] != null) {
+      return 'Check-in unavailable';
+    }
+    if (data['checkedInAt'] != null) return 'Checked in';
+    final start = startAt;
+    if (start == null) return 'Ask the vendor about check-in';
+    final opening = start.subtract(const Duration(minutes: 15));
+    if (now.isBefore(opening)) {
+      final minutes = (opening.difference(now).inMilliseconds / 60000).ceil();
+      return 'Check-in available in ${minutes >= 60 ? '${(minutes / 60).ceil()}h' : '${minutes}m'}';
+    }
+    if (canCheckIn(now)) return 'I’ve arrived';
+    if (now.isAfter(start.add(const Duration(minutes: 15)))) {
+      return 'Arrival window closed · Contact vendor';
+    }
+    return data['customerSelfCheckInEnabled'] == true && arrivalPaymentBlocked
+        ? 'Waiting for payment verification'
+        : 'Waiting for vendor check-in';
+  }
+
   bool get requiresManualPayment =>
       data['serviceManualPaymentRequired'] == true;
   bool get hasPaymentProof => data['paymentProof'] is Map;
@@ -70,10 +112,13 @@ class CustomerBooking {
     if (status == 'pending') {
       return 'Request submitted. Awaiting vendor confirmation.';
     }
-    if (data['checkedInAt'] != null || data['linkedTicket'] != null) {
-      return 'The vendor has checked you in. Follow your queue ticket for service updates.';
+    if (data['checkedInAt'] != null || linkedTicket != null) {
+      return 'You’re checked in. Follow your queue ticket for service updates.';
     }
     if (status == 'confirmed' || status == 'rescheduled') {
+      if (data['customerSelfCheckInEnabled'] == true) {
+        return 'Your booking is confirmed. At the location, tap I’ve arrived during the check-in window to get your queue ticket.';
+      }
       return 'Your booking is confirmed. Keep this booking ready for vendor check-in.';
     }
     return 'Booking: $status · Payment: $paymentStatus';
@@ -149,6 +194,17 @@ class BookingRepository {
       throw StateError('Payment proof is unavailable.');
     }
     return url as String;
+  }
+
+  Future<CustomerBooking> checkIn(CustomerBooking booking, DateTime now) async {
+    if (!booking.canCheckIn(now)) {
+      throw StateError('Customer check-in is unavailable for this booking.');
+    }
+    final response = await api.post(
+      '/api/account/bookings/${Uri.encodeComponent(booking.id)}/arrival',
+      {},
+    );
+    return CustomerBooking(response['booking'] as Map<String, dynamic>);
   }
 
   Future<CustomerBooking> submitPaymentProof(
