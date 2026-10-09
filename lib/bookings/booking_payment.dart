@@ -3,6 +3,8 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../auth/auth_repository.dart';
 import 'booking_repository.dart';
+import 'image_viewer.dart';
+import '../navigation/swipe_back_page_route.dart';
 
 /// Evidence goes through the authenticated API and stays pending vendor review.
 class BookingPayment extends StatefulWidget {
@@ -138,14 +140,30 @@ class _BookingPaymentState extends State<BookingPayment> {
           ).bold(),
           if ('${details['qrImageUrl'] ?? ''}'.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Image.network(
-              '${details['qrImageUrl']}',
-              height: 240,
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => const Text(
-                'Could not load payment QR. Refresh or contact the vendor before paying.',
+            Semantics(
+              label: 'View larger payment QR',
+              button: true,
+              child: GestureDetector(
+                key: const Key('booking-payment-qr'),
+                onTap: () => Navigator.of(context).push(
+                  SwipeBackPageRoute<void>(
+                    builder: (_) => BookingImageViewer(
+                      imageUrl: '${details['qrImageUrl']}',
+                      title: 'Payment QR',
+                    ),
+                  ),
+                ),
+                child: Image.network(
+                  '${details['qrImageUrl']}',
+                  height: 240,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const Text(
+                    'Could not load payment QR. Refresh or contact the vendor before paying.',
+                  ),
+                ),
               ),
             ),
+            const Text('Tap the QR to enlarge. Pinch to zoom.'),
           ],
         ],
         const SizedBox(height: 16),

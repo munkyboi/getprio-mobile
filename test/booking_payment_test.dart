@@ -78,6 +78,44 @@ class PaymentApi implements BookingApi, BookingProofApi {
 }
 
 void main() {
+  testWidgets('unpaid payment QR opens a zoom viewer and preserves reference', (
+    tester,
+  ) async {
+    final data = paymentBooking();
+    (data['manualPaymentDestination'] as Map)['qrImageUrl'] =
+        'https://example.com/qr.png';
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: Scaffold(
+          child: SingleChildScrollView(
+            child: BookingPayment(
+              repository: BookingRepository(PaymentApi()),
+              booking: CustomerBooking(data),
+              onSubmitted: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('booking-payment-reference')),
+      'REF-123',
+    );
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('booking-payment-qr'))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('booking-payment-qr')));
+    await tester.pumpAndSettle();
+    expect(find.text('Payment QR'), findsOneWidget);
+    expect(find.byKey(const Key('booking-image-viewer')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('booking-image-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('booking-image-viewer')), findsNothing);
+    expect(find.text('REF-123'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   test('manual evidence eligibility follows the server lifecycle', () {
     expect(CustomerBooking(paymentBooking()).canSubmitProof, isTrue);
     for (final change in [

@@ -45,11 +45,11 @@ void main() {
     expect(find.byKey(const ValueKey('service-thumbnail-plain')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('service-thumbnail-consult')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('service-image-viewer')), findsOneWidget);
+    expect(find.byKey(const Key('booking-image-viewer')), findsOneWidget);
     expect(toggles, 0);
-    await tester.tap(find.byKey(const Key('service-image-close')));
+    await tester.tap(find.byKey(const Key('booking-image-close')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('service-image-viewer')), findsNothing);
+    expect(find.byKey(const Key('booking-image-viewer')), findsNothing);
     expect(
       find.byKey(const ValueKey('service-toggle-consult')),
       findsOneWidget,

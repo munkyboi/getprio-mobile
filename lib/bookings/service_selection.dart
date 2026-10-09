@@ -3,6 +3,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import '../app_theme.dart';
 import '../navigation/swipe_back_page_route.dart';
 import 'booking_repository.dart';
+import 'image_viewer.dart';
 
 class ServiceSelection extends StatelessWidget {
   const ServiceSelection({
@@ -51,8 +52,10 @@ class ServiceSelection extends StatelessWidget {
                         style: const ButtonStyle.ghost(),
                         onPressed: () => Navigator.of(context).push(
                           SwipeBackPageRoute<void>(
-                            builder: (_) =>
-                                ServiceImageViewer(service: service),
+                            builder: (_) => BookingImageViewer(
+                              imageUrl: service.imageUrl,
+                              title: service.name,
+                            ),
                           ),
                         ),
                         child: ClipRRect(
@@ -151,49 +154,5 @@ class ServiceSelection extends StatelessWidget {
           ),
         ),
     ],
-  );
-}
-
-class ServiceImageViewer extends StatelessWidget {
-  const ServiceImageViewer({super.key, required this.service});
-  final BookingService service;
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    headers: [
-      AppBar(
-        title: Text(service.name),
-        leading: [
-          IconButton.ghost(
-            key: const Key('service-image-close'),
-            icon: const Icon(LucideIcons.x),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    ],
-    child: SafeArea(
-      top: false,
-      child: Center(
-        child: InteractiveViewer(
-          key: const Key('service-image-viewer'),
-          minScale: 1,
-          maxScale: 5,
-          child: Image.network(
-            service.imageUrl,
-            fit: BoxFit.contain,
-            semanticLabel: service.name,
-            loadingBuilder: (_, child, progress) => progress == null
-                ? child
-                : const Center(child: CircularProgressIndicator()),
-            errorBuilder: (_, _, _) => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Could not load service image. Close the viewer and tap the thumbnail to try again.',
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
   );
 }
