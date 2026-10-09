@@ -33,9 +33,9 @@ class DetailPassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     decoration: BoxDecoration(
-      color: GetPrioTheme.card,
+      color: GetPrioTheme.colors(context).card,
       borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: GetPrioTheme.line),
+      border: Border.all(color: GetPrioTheme.colors(context).line),
       boxShadow: const [
         BoxShadow(
           color: Color(0x145B422A),
@@ -85,7 +85,7 @@ class DetailPassField extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).typography.small
-              .copyWith(color: GetPrioTheme.mutedInk),
+              .copyWith(color: GetPrioTheme.colors(context).mutedInk),
         ),
         const SizedBox(height: 4),
         Text(value).bold(),
@@ -106,7 +106,10 @@ class DetailPassDivider extends StatelessWidget {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Container(height: 1, color: GetPrioTheme.line),
+                child: Container(
+                  height: 1,
+                  color: GetPrioTheme.colors(context).line,
+                ),
               ),
             ),
         ],

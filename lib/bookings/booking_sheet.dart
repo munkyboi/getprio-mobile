@@ -582,7 +582,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                   ),
                 ),
                 Container(
-                  color: GetPrioTheme.paper,
+                  color: GetPrioTheme.colors(context).paper,
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -52,7 +52,7 @@ class ListsPage extends StatelessWidget {
                 label: 'Bookings',
                 subtitle: 'Scheduled visits',
                 icon: LucideIcons.calendarDays,
-                color: GetPrioTheme.teal,
+                color: GetPrioTheme.colors(context).teal,
                 onPressed: onBookings,
               ),
             ),
@@ -91,9 +91,9 @@ class _ListCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: GetPrioTheme.card,
+        color: GetPrioTheme.colors(context).card,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: GetPrioTheme.line),
+        border: Border.all(color: GetPrioTheme.colors(context).line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,10 +101,10 @@ class _ListCard extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(label).bold()),
-              const Icon(
+              Icon(
                 LucideIcons.chevronRight,
                 size: 16,
-                color: GetPrioTheme.mutedInk,
+                color: GetPrioTheme.colors(context).mutedInk,
               ),
             ],
           ),
@@ -112,7 +112,7 @@ class _ListCard extends StatelessWidget {
           Text(
             subtitle,
             style: Theme.of(context).typography.small
-                .copyWith(color: GetPrioTheme.mutedInk),
+                .copyWith(color: GetPrioTheme.colors(context).mutedInk),
           ),
           const Spacer(),
           const SizedBox(height: 26),

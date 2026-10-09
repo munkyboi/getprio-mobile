@@ -393,7 +393,7 @@ class _JoinPageState extends State<JoinPage>
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: GetPrioTheme.paperAccent,
+                    color: GetPrioTheme.colors(context).paperAccent,
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Icon(LucideIcons.scanLine, size: 32),
@@ -868,8 +868,8 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
         label: 'Secure checkout',
         child: Container(
           clipBehavior: Clip.antiAlias,
-          decoration: const BoxDecoration(
-            color: GetPrioTheme.card,
+          decoration: BoxDecoration(
+            color: GetPrioTheme.colors(context).card,
             borderRadius: CheckoutBottomSheet.borderRadius,
           ),
           child: SafeArea(
@@ -909,7 +909,7 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
                   Text(
                     'Your ticket is created only after the server confirms payment.',
                     style: theme.typography.p.copyWith(
-                      color: GetPrioTheme.mutedInk,
+                      color: GetPrioTheme.colors(context).mutedInk,
                     ),
                   ),
                   const SizedBox(height: 22),
@@ -919,7 +919,7 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
                       vertical: 16,
                     ),
                     decoration: BoxDecoration(
-                      color: GetPrioTheme.paperAccent,
+                      color: GetPrioTheme.colors(context).paperAccent,
                       borderRadius: BorderRadius.circular(18),
                     ),
                     child: Row(
@@ -933,7 +933,7 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
                               Text(
                                 'Queue fee',
                                 style: theme.typography.small.copyWith(
-                                  color: GetPrioTheme.mutedInk,
+                                  color: GetPrioTheme.colors(context).mutedInk,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -1025,8 +1025,8 @@ class JoinPreviewContent extends StatelessWidget {
                 key: const Key('join-preview-surface'),
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(24, 30, 24, 32),
-                decoration: const BoxDecoration(
-                  color: GetPrioTheme.paper,
+                decoration: BoxDecoration(
+                  color: GetPrioTheme.colors(context).paper,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
                   boxShadow: [
                     BoxShadow(
@@ -1100,7 +1100,7 @@ class JoinPreviewContent extends StatelessWidget {
         ),
         Container(
           key: const Key('join-preview-bottom-action'),
-          color: GetPrioTheme.paper,
+          color: GetPrioTheme.colors(context).paper,
           child: SafeArea(
             top: false,
             child: Padding(
@@ -1242,7 +1242,7 @@ class _JoinVendorProfileMedia extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _cover(),
+                  _cover(context),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -1253,13 +1253,17 @@ class _JoinVendorProfileMedia extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const DecoratedBox(
+                  DecoratedBox(
                     key: Key('join-profile-cover-surface-fade'),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
-                        colors: [GetPrioTheme.paper, Color(0x00FBF7F1)],
+                        colors: [
+                          GetPrioTheme.colors(context).paper,
+                          GetPrioTheme.colors(context).paper
+                              .withValues(alpha: 0),
+                        ],
                         stops: [0.0, 0.3],
                       ),
                     ),
@@ -1296,8 +1300,8 @@ class _JoinVendorProfileMedia extends StatelessWidget {
                   width: logoSize,
                   height: logoSize,
                   padding: const EdgeInsets.all(5),
-                  decoration: const BoxDecoration(
-                    color: GetPrioTheme.card,
+                  decoration: BoxDecoration(
+                    color: GetPrioTheme.colors(context).card,
                     shape: BoxShape.circle,
                     border: Border.fromBorderSide(
                       BorderSide(color: Color(0xF2FFFFFF), width: 4),
@@ -1310,7 +1314,7 @@ class _JoinVendorProfileMedia extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: ClipOval(child: _logo()),
+                  child: ClipOval(child: _logo(context)),
                 ),
               ),
             ),
@@ -1320,11 +1324,11 @@ class _JoinVendorProfileMedia extends StatelessWidget {
     );
   }
 
-  Widget _cover() {
+  Widget _cover(BuildContext context) {
     final imageUrl = profile?.coverImageUrl;
     if (imageUrl == null) {
       return Container(
-        color: GetPrioTheme.paperAccent,
+        color: GetPrioTheme.colors(context).paperAccent,
         padding: const EdgeInsets.all(24),
         child: const Image(
           image: AssetImage(
@@ -1340,17 +1344,17 @@ class _JoinVendorProfileMedia extends StatelessWidget {
       fit: _joinProfileBoxFit(profile?.coverImageFit, BoxFit.cover),
       semanticLabel: '$vendorName profile cover',
       errorBuilder: (context, error, stackTrace) => Container(
-        color: GetPrioTheme.paperAccent,
+        color: GetPrioTheme.colors(context).paperAccent,
         child: const Icon(LucideIcons.store, size: 48),
       ),
     );
   }
 
-  Widget _logo() {
+  Widget _logo(BuildContext context) {
     final logoUrl = profile?.logoUrl;
     if (logoUrl == null) {
-      return const ColoredBox(
-        color: GetPrioTheme.card,
+      return ColoredBox(
+        color: GetPrioTheme.colors(context).card,
         child: Icon(LucideIcons.store, size: 38),
       );
     }
@@ -1358,8 +1362,8 @@ class _JoinVendorProfileMedia extends StatelessWidget {
       logoUrl,
       fit: _joinProfileBoxFit(profile?.logoFit, BoxFit.cover),
       semanticLabel: '$vendorName logo',
-      errorBuilder: (context, error, stackTrace) => const ColoredBox(
-        color: GetPrioTheme.card,
+      errorBuilder: (context, error, stackTrace) => ColoredBox(
+        color: GetPrioTheme.colors(context).card,
         child: Icon(LucideIcons.store, size: 38),
       ),
     );

@@ -106,6 +106,7 @@ class _TicketUpdates extends StatelessWidget {
   const _TicketUpdates();
 
   Widget _row(
+    BuildContext context,
     IconData icon,
     String title,
     String subtitle,
@@ -116,7 +117,7 @@ class _TicketUpdates extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 5),
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 15),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
+        color: GetPrioTheme.colors(context).card,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -144,18 +145,18 @@ class _TicketUpdates extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: GetPrioTheme.ink,
+                    color: GetPrioTheme.colors(context).ink,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
-                    color: GetPrioTheme.mutedInk,
+                    color: GetPrioTheme.colors(context).mutedInk,
                   ),
                 ),
               ],
@@ -165,14 +166,18 @@ class _TicketUpdates extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: active ? const Color(0xFF282729) : const Color(0xFFF2EEE8),
+              color: active
+                  ? const Color(0xFF282729)
+                  : GetPrioTheme.colors(context).paperAccent,
               borderRadius: BorderRadius.circular(24),
             ),
             child: Text(
               status,
               style: TextStyle(
                 fontSize: 10,
-                color: active ? const Color(0xFFFFFFFF) : GetPrioTheme.mutedInk,
+                color: active
+                    ? const Color(0xFFFFFFFF)
+                    : GetPrioTheme.colors(context).mutedInk,
               ),
             ),
           ),
@@ -198,12 +203,14 @@ class _TicketUpdates extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               _row(
+                context,
                 LucideIcons.ticketCheck,
                 'You’ve joined',
                 'Your ticket is ready',
                 'A–024',
               ),
               _row(
+                context,
                 LucideIcons.users,
                 '3 people ahead',
                 'You’re in the queue',
@@ -211,6 +218,7 @@ class _TicketUpdates extends StatelessWidget {
                 active: true,
               ),
               _row(
+                context,
                 LucideIcons.refreshCw,
                 'Stay up to date',
                 'Check your latest status',

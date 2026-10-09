@@ -138,3 +138,15 @@ The vendor rating comment explicitly unfocuses on an outside pointer tap, includ
 KanbanFlow M28 update pending: record the tab dependency removal, review keyboard fix and verified checks, retaining In Progress and the existing remaining lifecycle/physical acceptance work. Board access remains blocked because the browser cannot verify its admin-enforced access policy.
 
 Verification: Flutter analysis passed and all 18 affected social/booking UI tests passed. The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Review submission used a fake API in tests; physical keyboard interaction and live review acceptance remain to be checked.
+
+## Appearance and matching booking rows
+
+Profile → Settings now contains Appearance. Its bottom sheet offers Light, Dark and System using phone previews and a selected outline/badge. System is the default and follows device brightness changes. The choice is stored locally through the existing secure-storage dependency; it is independent of the signed-in account and preserved across relaunches. Failed saves retain the prior mode and show an inline retry message. A late preference read cannot overwrite a newer choice.
+
+The root supplies both shadcn themes and changes appearance without recreating API/session repositories. Custom surfaces, borders, text, OTP cells, navigation, headers, detail passes, sheets, service rows and loading placeholders now use shared context-aware colors. Dark mode uses warm dark surfaces, light text and readable status badges; the existing dark logo asset is used on dark surfaces. Barcode/QR scan surfaces retain black codes on white. Brand artwork remains image content rather than being recolored.
+
+The shell’s safe-area top spacing is now 20 logical pixels for Home, Explore, Lists and Profile. Booking rows and queue history rows share the same plain-row component, with a leading icon, details and trailing status/chevron area; booking and payment statuses remain separate. The complete row is an accessible shadcn button, including whitespace, and booking rows retain line separators. Status width is bounded so long labels cannot squeeze the details out on small phones.
+
+KanbanFlow M28 synchronization remains pending: add the Appearance setting, persisted theme behavior, shared booking rows and 20-pixel spacing, plus final verification. Preserve In Progress, estimates/labels and remaining booking lifecycle/physical acceptance work. Browser access is blocked by admin-enforced policy verification.
+
+Verification: Flutter analysis passed and the complete 316-test suite passed. After tightening the late-read guard for an explicit System selection, all seven affected Appearance/navigation tests passed again. The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Device screenshots and physical visual/light-dark/relaunch acceptance remain to be checked; tests use a fake preference store and fake APIs. No production review, booking, payment proof or arrival was submitted.

@@ -146,8 +146,10 @@ class _ListsOverviewState extends State<ListsOverview>
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: GetPrioTheme.line)),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: GetPrioTheme.colors(context).line),
+              ),
             ),
             child: Row(
               children: [
@@ -177,10 +179,10 @@ class _ListsOverviewState extends State<ListsOverview>
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Icon(
+                Icon(
                   LucideIcons.chevronRight,
                   size: 18,
-                  color: GetPrioTheme.mutedInk,
+                  color: GetPrioTheme.colors(context).mutedInk,
                 ),
               ],
             ),

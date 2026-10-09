@@ -25,14 +25,14 @@ class VendorProfileCover extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           if (imageUrl == null)
-            _vendorCoverFallback()
+            _vendorCoverFallback(context)
           else
             Image.network(
               imageUrl,
               fit: vendorBoxFit(vendor.coverImageFit, BoxFit.cover),
               semanticLabel: '${vendor.name} profile cover',
               errorBuilder: (context, error, stackTrace) =>
-                  _vendorCoverFallback(),
+                  _vendorCoverFallback(context),
             ),
           const DecoratedBox(
             decoration: BoxDecoration(
@@ -44,13 +44,16 @@ class VendorProfileCover extends StatelessWidget {
               ),
             ),
           ),
-          const DecoratedBox(
+          DecoratedBox(
             key: Key('profile-cover-surface-fade'),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
-                colors: [GetPrioTheme.paper, Color(0x00FBF7F1)],
+                colors: [
+                  GetPrioTheme.colors(context).paper,
+                  GetPrioTheme.colors(context).paper.withValues(alpha: 0),
+                ],
                 stops: [0.0, 0.3],
               ),
             ),
@@ -60,9 +63,9 @@ class VendorProfileCover extends StatelessWidget {
     );
   }
 
-  Widget _vendorCoverFallback() {
+  Widget _vendorCoverFallback(BuildContext context) {
     return Container(
-      color: GetPrioTheme.paperAccent,
+      color: GetPrioTheme.colors(context).paperAccent,
       padding: const EdgeInsets.fromLTRB(48, 64, 48, 36),
       child: const Image(
         image: AssetImage(
@@ -93,8 +96,8 @@ class VendorProfileLogo extends StatelessWidget {
       width: size,
       height: size,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: GetPrioTheme.card,
+        decoration: BoxDecoration(
+          color: GetPrioTheme.colors(context).card,
           shape: BoxShape.circle,
           border: Border.fromBorderSide(
             BorderSide(color: Color(0xF2FFFFFF), width: 4),

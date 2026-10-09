@@ -86,9 +86,9 @@ class BookingServiceCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: GetPrioTheme.paper,
+        color: GetPrioTheme.colors(context).paper,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: GetPrioTheme.line),
+        border: Border.all(color: GetPrioTheme.colors(context).line),
       ),
       child: Row(
         children: [
@@ -135,7 +135,7 @@ class BookingServiceCard extends StatelessWidget {
                     item['scheduledEndAt'],
                   ),
                   style: Theme.of(context).typography.small
-                      .copyWith(color: GetPrioTheme.mutedInk),
+                      .copyWith(color: GetPrioTheme.colors(context).mutedInk),
                 ),
                 if (price is num) ...[
                   const SizedBox(height: 4),
@@ -162,11 +162,20 @@ class BookingStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (status) {
-      'confirmed' || 'verified' => const Color(0xFF187C58),
-      'canceled' || 'rejected' || 'expired' => const Color(0xFFB43C35),
+      'confirmed' || 'verified' =>
+        GetPrioTheme.colors(context).dark
+            ? const Color(0xFF69D5A7)
+            : const Color(0xFF187C58),
+      'canceled' || 'rejected' || 'expired' =>
+        GetPrioTheme.colors(context).dark
+            ? const Color(0xFFFF8C84)
+            : const Color(0xFFB43C35),
       'rescheduled' => GetPrioTheme.info,
-      'pending' || 'unpaid' => const Color(0xFF9A5E12),
-      _ => GetPrioTheme.mutedInk,
+      'pending' || 'unpaid' =>
+        GetPrioTheme.colors(context).dark
+            ? const Color(0xFFFFC775)
+            : const Color(0xFF9A5E12),
+      _ => GetPrioTheme.colors(context).mutedInk,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -190,9 +199,9 @@ class BookingSection extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(20),
     decoration: BoxDecoration(
-      color: GetPrioTheme.card,
+      color: GetPrioTheme.colors(context).card,
       borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: GetPrioTheme.line),
+      border: Border.all(color: GetPrioTheme.colors(context).line),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

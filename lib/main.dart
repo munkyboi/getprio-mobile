@@ -1,3 +1,5 @@
+import 'navigation/pass_list_row.dart';
+import 'appearance.dart';
 import 'navigation/tab_page_header.dart';
 import 'directory/vendor_profile_hero.dart';
 import 'details/detail_pass.dart';
@@ -90,6 +92,7 @@ class GetPrioApp extends StatelessWidget {
     AuthRepository? authRepository,
     this.appVersion = '1.0.1',
     this.firebaseEnabled = false,
+    this.appearanceController,
     this.onboardingStore = const InstallationOnboardingStore(),
     MobileEnvironmentConfig? environmentConfig,
     ApprovedVendorStore? approvedVendorStore,
@@ -102,6 +105,7 @@ class GetPrioApp extends StatelessWidget {
            environmentConfig ?? MobileEnvironmentConfig.fromCompileTime(),
        approvedVendorStore = approvedVendorStore ?? SecureApprovedVendorStore();
 
+  final AppearanceController? appearanceController;
   final AuthRepository authRepository;
   final String appVersion;
   final bool firebaseEnabled;
@@ -184,22 +188,32 @@ class GetPrioApp extends StatelessWidget {
       oauthFlow: oauthFlow,
       approvedVendorStore: approvedVendorStore,
     );
-    return ShadcnApp(
-      title: environmentConfig.appName,
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.light,
-      background: lightTheme.colorScheme.background,
-      theme: lightTheme,
-      onUnknownRoute: (settings) {
-        if (settings.name?.startsWith('/callback') != true) return null;
-        return PageRouteBuilder<void>(
-          settings: settings,
-          opaque: false,
-          pageBuilder: (_, _, _) => const _OAuthCallbackRoute(),
-        );
-      },
-      home: GetPrioTheme.wrap(
-        environmentConfig.isSandbox
+    return AppearanceHost(
+      controller: appearanceController,
+      builder: (mode) => ShadcnApp(
+        title: environmentConfig.appName,
+        debugShowCheckedModeBanner: false,
+        themeMode: mode,
+        darkTheme: GetPrioTheme.dark(),
+        builder: (context, child) => GetPrioTheme.wrap(
+          AnnotatedRegion<SystemUiOverlayStyle>(
+            value: GetPrioTheme.systemUi(context),
+            child: ColoredBox(
+              color: GetPrioTheme.colors(context).paper,
+              child: child!,
+            ),
+          ),
+        ),
+        theme: lightTheme,
+        onUnknownRoute: (settings) {
+          if (settings.name?.startsWith('/callback') != true) return null;
+          return PageRouteBuilder<void>(
+            settings: settings,
+            opaque: false,
+            pageBuilder: (_, _, _) => const _OAuthCallbackRoute(),
+          );
+        },
+        home: environmentConfig.isSandbox
             ? authGate
             : OnboardingGate(
                 store: onboardingStore,
@@ -509,10 +523,12 @@ class SplashLoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       key: const Key('splash-loading-screen'),
-      color: GetPrioTheme.paper,
+      color: GetPrioTheme.colors(context).paper,
       child: Center(
         child: SvgPicture.asset(
-          'assets/branding/logo.svg',
+          GetPrioTheme.colors(context).dark
+              ? 'assets/branding/logo-dark.svg'
+              : 'assets/branding/logo.svg',
           key: const Key('splash-logo'),
           width: 180,
           fit: BoxFit.contain,
@@ -621,7 +637,9 @@ class _LabeledTextFieldState extends State<_LabeledTextField> {
           Text(
             widget.supportingText!,
             style: theme.typography.small.copyWith(
-              color: widget.supportingTextColor ?? GetPrioTheme.mutedInk,
+              color:
+                  widget.supportingTextColor ??
+                  GetPrioTheme.colors(context).mutedInk,
             ),
           ),
         ],
@@ -749,7 +767,7 @@ class _RememberedLoginProfile extends StatelessWidget {
               key: const Key('biometric-profile-avatar'),
               width: 72,
               height: 72,
-              color: GetPrioTheme.paperAccent,
+              color: GetPrioTheme.colors(context).paperAccent,
               child: url == null || url.isEmpty
                   ? fallback
                   : CachedNetworkImage(
@@ -1445,8 +1463,8 @@ class _RegisterPageState extends State<RegisterPage>
               ? null
               : _usernameMessage,
           supportingTextColor: _checkingUsername
-              ? GetPrioTheme.mutedInk
-              : GetPrioTheme.teal,
+              ? GetPrioTheme.colors(context).mutedInk
+              : GetPrioTheme.colors(context).teal,
         ),
         const SizedBox(height: 12),
         _LabeledTextField(
@@ -1782,7 +1800,7 @@ class _PasswordStrengthIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final progressColor = strength.isValid
-        ? GetPrioTheme.teal
+        ? GetPrioTheme.colors(context).teal
         : strength.score >= 3
         ? GetPrioTheme.orange
         : theme.colorScheme.destructive;
@@ -1809,7 +1827,7 @@ class _PasswordStrengthIndicator extends StatelessWidget {
           value: strength.score / 5,
           minHeight: 6,
           color: progressColor,
-          backgroundColor: GetPrioTheme.paperAccent,
+          backgroundColor: GetPrioTheme.colors(context).paperAccent,
         ),
         const SizedBox(height: 8),
         _PasswordRequirement(
@@ -1853,13 +1871,17 @@ class _PasswordRequirement extends StatelessWidget {
           Icon(
             met ? LucideIcons.circleCheck : LucideIcons.circleX,
             size: 14,
-            color: met ? GetPrioTheme.teal : GetPrioTheme.mutedInk,
+            color: met
+                ? GetPrioTheme.colors(context).teal
+                : GetPrioTheme.colors(context).mutedInk,
           ),
           const SizedBox(width: 6),
           Text(
             label,
             style: theme.typography.small.copyWith(
-              color: met ? GetPrioTheme.teal : GetPrioTheme.mutedInk,
+              color: met
+                  ? GetPrioTheme.colors(context).teal
+                  : GetPrioTheme.colors(context).mutedInk,
             ),
           ),
         ],
@@ -2271,11 +2293,7 @@ class _CustomerShellState extends State<CustomerShell>
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: const Color(0x00000000),
-        systemNavigationBarColor: GetPrioTheme.paper,
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
+      value: GetPrioTheme.systemUi(context),
       child: Scaffold(
         footers: [
           CustomerNavigationBar(
@@ -3370,14 +3388,15 @@ class _VendorDirectoryMedia extends StatelessWidget {
           width: 64,
           height: 64,
           child: ColoredBox(
-            color: GetPrioTheme.paperAccent,
+            color: GetPrioTheme.colors(context).paperAccent,
             child: imageUrl == null
-                ? _fallback()
+                ? _fallback(context)
                 : Image.network(
                     imageUrl,
                     fit: vendorBoxFit(vendor.logoFit, BoxFit.cover),
                     excludeFromSemantics: true,
-                    errorBuilder: (context, error, stackTrace) => _fallback(),
+                    errorBuilder: (context, error, stackTrace) =>
+                        _fallback(context),
                   ),
           ),
         ),
@@ -3385,11 +3404,13 @@ class _VendorDirectoryMedia extends StatelessWidget {
     );
   }
 
-  Widget _fallback() {
+  Widget _fallback(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(14),
       child: SvgPicture.asset(
-        'assets/branding/logo.svg',
+        GetPrioTheme.colors(context).dark
+            ? 'assets/branding/logo-dark.svg'
+            : 'assets/branding/logo.svg',
         fit: BoxFit.contain,
         excludeFromSemantics: true,
       ),
@@ -3465,11 +3486,7 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
 
   Widget _refreshableMessage(Widget child) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: const Color(0x00000000),
-        systemNavigationBarColor: GetPrioTheme.paper,
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
+      value: GetPrioTheme.systemUi(context),
       child: Stack(
         children: [
           CustomScrollView(
@@ -3845,8 +3862,8 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
         key: const Key('vendor-detail-surface'),
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(24, 30, 24, 48),
-        decoration: const BoxDecoration(
-          color: GetPrioTheme.paper,
+        decoration: BoxDecoration(
+          color: GetPrioTheme.colors(context).paper,
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: [
             BoxShadow(
@@ -3872,7 +3889,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
                         Text(
                           vendor.category!,
                           style: theme.typography.p.copyWith(
-                            color: GetPrioTheme.mutedInk,
+                            color: GetPrioTheme.colors(context).mutedInk,
                           ),
                         ),
                       ],
@@ -3996,7 +4013,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
               key: const Key('vendor-join-instructions'),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: GetPrioTheme.paperAccent,
+                color: GetPrioTheme.colors(context).paperAccent,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: const Row(
@@ -4019,8 +4036,10 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: const Color(0x00000000),
-        systemNavigationBarColor: GetPrioTheme.paper,
-        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: GetPrioTheme.colors(context).paper,
+        systemNavigationBarIconBrightness: GetPrioTheme.colors(context).dark
+            ? Brightness.light
+            : Brightness.dark,
       ),
       child: _VendorProfileParallax(
         scrollController: _locationScrollController,
@@ -4186,7 +4205,7 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
           bottom: 0,
           child: Container(
             key: const Key('vendor-join-queue-action-surface'),
-            color: GetPrioTheme.paper,
+            color: GetPrioTheme.colors(context).paper,
             padding: EdgeInsets.fromLTRB(
               20,
               12,
@@ -4234,9 +4253,11 @@ class _VendorBackButton extends StatelessWidget {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: onImage ? GetPrioTheme.card.withAlpha(224) : GetPrioTheme.card,
+          color: onImage
+              ? GetPrioTheme.colors(context).card.withAlpha(224)
+              : GetPrioTheme.colors(context).card,
           shape: BoxShape.circle,
-          border: Border.all(color: GetPrioTheme.line),
+          border: Border.all(color: GetPrioTheme.colors(context).line),
           boxShadow: const [
             BoxShadow(
               color: Color(0x245B422A),
@@ -4271,10 +4292,12 @@ class _VendorContactButton extends StatelessWidget {
       child: Container(
         width: 52,
         height: 52,
-        decoration: const BoxDecoration(
-          color: GetPrioTheme.card,
+        decoration: BoxDecoration(
+          color: GetPrioTheme.colors(context).card,
           shape: BoxShape.circle,
-          border: Border.fromBorderSide(BorderSide(color: GetPrioTheme.line)),
+          border: Border.fromBorderSide(
+            BorderSide(color: GetPrioTheme.colors(context).line),
+          ),
           boxShadow: [
             BoxShadow(
               color: Color(0x1F5B422A),
@@ -4291,7 +4314,7 @@ class _VendorContactButton extends StatelessWidget {
             LucideIcons.messageCircle,
             size: 23,
             color: onPressed == null
-                ? GetPrioTheme.disabled
+                ? GetPrioTheme.colors(context).disabled
                 : GetPrioTheme.orange,
           ),
         ),
@@ -4384,8 +4407,8 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
     return Container(
       key: const Key('vendor-contact-sheet'),
       clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(
-        color: GetPrioTheme.card,
+      decoration: BoxDecoration(
+        color: GetPrioTheme.colors(context).card,
         borderRadius: _VendorContactSheet.borderRadius,
       ),
       child: SafeArea(
@@ -4424,7 +4447,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
               Text(
                 'Write your message here, then continue in your email app.',
                 style: theme.typography.p.copyWith(
-                  color: GetPrioTheme.mutedInk,
+                  color: GetPrioTheme.colors(context).mutedInk,
                 ),
               ),
               const SizedBox(height: 18),
@@ -4434,7 +4457,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: GetPrioTheme.paperAccent,
+                  color: GetPrioTheme.colors(context).paperAccent,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
@@ -4569,14 +4592,14 @@ class _VendorLocationRow extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: selected
                         ? GetPrioTheme.primary.withValues(alpha: .12)
-                        : GetPrioTheme.paperAccent,
+                        : GetPrioTheme.colors(context).paperAccent,
                   ),
                   child: Icon(
                     LucideIcons.mapPin,
                     size: 20,
                     color: selected
                         ? GetPrioTheme.primary
-                        : GetPrioTheme.mutedInk,
+                        : GetPrioTheme.colors(context).mutedInk,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -4590,7 +4613,7 @@ class _VendorLocationRow extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           color: selected
                               ? GetPrioTheme.primary
-                              : GetPrioTheme.ink,
+                              : GetPrioTheme.colors(context).ink,
                         ),
                       ),
                       if (location.address != null)
@@ -4653,8 +4676,8 @@ class _VendorStoreHoursSheet extends StatelessWidget {
     return Container(
       key: const Key('vendor-store-hours-sheet'),
       clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(
-        color: GetPrioTheme.card,
+      decoration: BoxDecoration(
+        color: GetPrioTheme.colors(context).card,
         borderRadius: borderRadius,
       ),
       child: SafeArea(
@@ -4681,7 +4704,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                         Text(
                           location.name,
                           style: theme.typography.p.copyWith(
-                            color: GetPrioTheme.mutedInk,
+                            color: GetPrioTheme.colors(context).mutedInk,
                           ),
                         ),
                       ],
@@ -4703,7 +4726,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: GetPrioTheme.paperAccent,
+                    color: GetPrioTheme.colors(context).paperAccent,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
@@ -4717,9 +4740,11 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: GetPrioTheme.paper,
+                    color: GetPrioTheme.colors(context).paper,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: GetPrioTheme.line),
+                    border: Border.all(
+                      color: GetPrioTheme.colors(context).line,
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -4782,8 +4807,8 @@ class _VendorStoreHoursRow extends StatelessWidget {
                     color: isToday
                         ? GetPrioTheme.primary
                         : hour.isClosed
-                        ? GetPrioTheme.mutedInk
-                        : GetPrioTheme.ink,
+                        ? GetPrioTheme.colors(context).mutedInk
+                        : GetPrioTheme.colors(context).ink,
                   ),
                 ),
             ],
@@ -5293,50 +5318,22 @@ class _TicketsPageState extends State<TicketsPage> {
     );
   }
 
-  Widget _historyTicketRow(QueueTicket ticket) {
-    return GestureDetector(
-      onTap: () => _openTicketDetails(ticket),
-      child: Semantics(
-        button: true,
-        label: 'Open ticket details for ${ticket.vendorName ?? 'queue'}',
-        child: Padding(
-          key: ValueKey('history-ticket-${ticket.id}'),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: GetPrioTheme.paperAccent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(LucideIcons.ticket, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(ticket.vendorName ?? 'Queue ticket').h4(),
-                    const SizedBox(height: 4),
-                    Text('Ticket #${ticket.ticketNumber ?? ticket.lookupCode}'),
-                    if (ticket.locationName != null) Text(ticket.locationName!),
-                    if (ticket.joinedAt != null) ...[
-                      const SizedBox(height: 4),
-                      Text(_formatTicketDate(ticket.joinedAt!)),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _TicketStatusBadge(ticket: ticket),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _historyTicketRow(QueueTicket ticket) => PassListRow(
+    key: ValueKey('history-ticket-${ticket.id}'),
+    icon: LucideIcons.ticket,
+    onPressed: () => _openTicketDetails(ticket),
+    statuses: [_TicketStatusBadge(ticket: ticket)],
+    children: [
+      Text(ticket.vendorName ?? 'Queue ticket').h4(),
+      const SizedBox(height: 4),
+      Text('Ticket #${ticket.ticketNumber ?? ticket.lookupCode}'),
+      if (ticket.locationName != null) Text(ticket.locationName!),
+      if (ticket.joinedAt != null) ...[
+        const SizedBox(height: 4),
+        Text(_formatTicketDate(ticket.joinedAt!)),
+      ],
+    ],
+  );
 
   void _openTicketDetails(QueueTicket ticket) {
     Navigator.of(context).push(
@@ -5639,11 +5636,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
 
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: SystemUiOverlayStyle.dark.copyWith(
-      statusBarColor: const Color(0x00000000),
-      systemNavigationBarColor: GetPrioTheme.paper,
-      systemNavigationBarIconBrightness: Brightness.dark,
-    ),
+    value: GetPrioTheme.systemUi(context),
     child: Scaffold(
       headers: const [
         DetailPassAppBar(
@@ -5840,7 +5833,7 @@ class _TicketJoinSuccessNotice extends StatelessWidget {
       key: const Key('ticket-join-success-notice'),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: GetPrioTheme.teal,
+        color: GetPrioTheme.colors(context).teal,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -5919,7 +5912,7 @@ class _TicketDetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(color: GetPrioTheme.mutedInk),
+              style: TextStyle(color: GetPrioTheme.colors(context).mutedInk),
             ),
           ),
           const SizedBox(width: 16),
@@ -5957,7 +5950,7 @@ class _TicketQueueStatusCard extends StatelessWidget {
       key: const Key('ticket-details-queue-status'),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: GetPrioTheme.paperAccent,
+        color: GetPrioTheme.colors(context).paperAccent,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -6091,7 +6084,7 @@ class _TicketProgress extends StatelessWidget {
                     : LucideIcons.circleDot)
               : null,
           caption: _statusCaption(ticket),
-          color: _statusColor(ticket.status),
+          color: _statusColor(context, ticket.status),
           isLast: true,
         ),
       ],
@@ -6118,17 +6111,17 @@ class _TicketProgress extends StatelessWidget {
     };
   }
 
-  Color _statusColor(TicketStatus status) {
+  Color _statusColor(BuildContext context, TicketStatus status) {
     return switch (status) {
       TicketStatus.called => GetPrioTheme.orange,
       TicketStatus.pendingCarryOver => GetPrioTheme.warning,
-      TicketStatus.waiting => GetPrioTheme.teal,
+      TicketStatus.waiting => GetPrioTheme.colors(context).teal,
       TicketStatus.served => GetPrioTheme.success,
       TicketStatus.skipped ||
       TicketStatus.cancelled ||
       TicketStatus.unserved ||
       TicketStatus.expired => GetPrioTheme.destructive,
-      TicketStatus.unknown => GetPrioTheme.disabled,
+      TicketStatus.unknown => GetPrioTheme.colors(context).disabled,
     };
   }
 
@@ -6183,7 +6176,7 @@ class _TimelineStep extends StatelessWidget {
                       width: 2,
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
-                        color: GetPrioTheme.line,
+                        color: GetPrioTheme.colors(context).line,
                         borderRadius: BorderRadius.circular(1),
                       ),
                     ),
@@ -6206,7 +6199,9 @@ class _TimelineStep extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     caption,
-                    style: const TextStyle(color: GetPrioTheme.mutedInk),
+                    style: TextStyle(
+                      color: GetPrioTheme.colors(context).mutedInk,
+                    ),
                   ),
                 ],
               ),
@@ -6233,7 +6228,11 @@ class _TimelineStep extends StatelessWidget {
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
               if (!isLast)
-                Container(width: 2, height: 34, color: GetPrioTheme.line),
+                Container(
+                  width: 2,
+                  height: 34,
+                  color: GetPrioTheme.colors(context).line,
+                ),
             ],
           ),
         ),
@@ -6376,6 +6375,16 @@ class _AccountPageState extends State<AccountPage> {
               const SizedBox(height: 20),
               const Text('Settings').h3(),
               const SizedBox(height: 8),
+              _AccountAction(
+                key: const Key('profile-appearance'),
+                icon: LucideIcons.palette,
+                title: 'Appearance',
+                subtitle: 'Light, Dark, or follow your device.',
+                onPressed: AppearanceScope.maybeOf(context) == null
+                    ? null
+                    : () => showAppearanceSheet(overlayContext),
+              ),
+              const Divider(),
               if (widget.approvedVendorStore != null) ...[
                 _AccountAction(
                   key: const Key('profile-approved-vendors'),
@@ -6853,7 +6862,7 @@ class _ProfileAvatar extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: GetPrioTheme.paperAccent,
+                color: GetPrioTheme.colors(context).paperAccent,
                 shape: BoxShape.circle,
                 image: hasAvatar
                     ? DecorationImage(
@@ -6879,7 +6888,10 @@ class _ProfileAvatar extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: GetPrioTheme.orange,
                   shape: BoxShape.circle,
-                  border: Border.all(color: GetPrioTheme.paper, width: 3),
+                  border: Border.all(
+                    color: GetPrioTheme.colors(context).paper,
+                    width: 3,
+                  ),
                 ),
                 child: Icon(
                   busy ? LucideIcons.loaderCircle : LucideIcons.camera,
@@ -7120,7 +7132,7 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
                     : 'This email address is not verified yet.',
                 style: Theme.of(context).typography.small.copyWith(
                   color: _currentUser.emailVerified
-                      ? GetPrioTheme.mutedInk
+                      ? GetPrioTheme.colors(context).mutedInk
                       : GetPrioTheme.destructive,
                 ),
               ),
@@ -7613,7 +7625,9 @@ class _AccountAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = destructive ? GetPrioTheme.destructive : GetPrioTheme.ink;
+    final color = destructive
+        ? GetPrioTheme.destructive
+        : GetPrioTheme.colors(context).ink;
     return SizedBox(
       width: double.infinity,
       child: GhostButton(

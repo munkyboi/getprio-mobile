@@ -22,7 +22,7 @@ class CustomerNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return NavigationBar(
       key: const Key('customer-main-menu'),
-      backgroundColor: GetPrioTheme.paper,
+      backgroundColor: GetPrioTheme.colors(context).paper,
       alignment: NavigationBarAlignment.spaceBetween,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       spacing: 0,
@@ -74,8 +74,8 @@ class CustomerNavigationBar extends StatelessWidget {
     final color = selected
         ? GetPrioTheme.orange
         : enabled
-        ? GetPrioTheme.ink
-        : GetPrioTheme.disabled;
+        ? GetPrioTheme.colors(context).ink
+        : GetPrioTheme.colors(context).disabled;
     return NavigationItem(
       key: ValueKey(destination),
       enabled: enabled,

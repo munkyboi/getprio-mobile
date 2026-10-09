@@ -51,11 +51,11 @@ class GetPrioOtpInput extends StatelessWidget {
                 width: width,
                 height: 56,
                 textStyle: Theme.of(context).typography.h3
-                    .copyWith(color: GetPrioTheme.ink),
+                    .copyWith(color: GetPrioTheme.colors(context).ink),
                 decoration: BoxDecoration(
-                  color: GetPrioTheme.card,
+                  color: GetPrioTheme.colors(context).card,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: GetPrioTheme.line),
+                  border: Border.all(color: GetPrioTheme.colors(context).line),
                 ),
               );
               PinTheme themed(Color border, Color background) => base.copyWith(
@@ -84,19 +84,19 @@ class GetPrioOtpInput extends StatelessWidget {
                       defaultPinTheme: base,
                       focusedPinTheme: themed(
                         GetPrioTheme.primary,
-                        GetPrioTheme.card,
+                        GetPrioTheme.colors(context).card,
                       ),
                       submittedPinTheme: themed(
-                        GetPrioTheme.teal,
-                        GetPrioTheme.paper,
+                        GetPrioTheme.colors(context).teal,
+                        GetPrioTheme.colors(context).paper,
                       ),
                       errorPinTheme: themed(
                         GetPrioTheme.destructive,
-                        GetPrioTheme.card,
+                        GetPrioTheme.colors(context).card,
                       ),
                       disabledPinTheme: themed(
-                        GetPrioTheme.line,
-                        GetPrioTheme.paper,
+                        GetPrioTheme.colors(context).line,
+                        GetPrioTheme.colors(context).paper,
                       ),
                       forceErrorState: error != null,
                       separatorBuilder: (_) => const SizedBox(width: gap),

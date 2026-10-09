@@ -117,7 +117,7 @@ void main() {
     }
   });
 
-  testWidgets('uses the light theme by default', (tester) async {
+  testWidgets('follows the system theme by default', (tester) async {
     await tester.pumpWidget(
       GetPrioApp(
         onboardingStore: MemoryOnboardingStore(completed: true),
@@ -131,7 +131,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final app = tester.widget<ShadcnApp>(find.byType(ShadcnApp));
-    expect(app.themeMode, ThemeMode.light);
+    expect(app.themeMode, ThemeMode.system);
     expect(find.byType(SvgPicture), findsNothing);
     expect(
       find.image(const AssetImage('assets/branding/login-biometric-scene.png')),

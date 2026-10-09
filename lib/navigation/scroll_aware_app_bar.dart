@@ -16,7 +16,7 @@ class ScrollAwareAppBar extends StatelessWidget {
   final List<Widget> leading, trailing;
   @override
   Widget build(BuildContext context) => AppBar(
-    backgroundColor: GetPrioTheme.paper,
+    backgroundColor: GetPrioTheme.colors(context).paper,
     surfaceBlur: 0,
     surfaceOpacity: 0,
     child: SizedBox(

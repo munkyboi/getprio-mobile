@@ -548,7 +548,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: GetPrioTheme.paperAccent,
+                        color: GetPrioTheme.colors(context).paperAccent,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Column(
@@ -705,7 +705,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                 Text(
                   'Status updates automatically while this screen is open.',
                   style: Theme.of(context).typography.small
-                      .copyWith(color: GetPrioTheme.mutedInk),
+                      .copyWith(color: GetPrioTheme.colors(context).mutedInk),
                   textAlign: TextAlign.center,
                 ),
               ],

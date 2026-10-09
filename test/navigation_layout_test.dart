@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/app_theme.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
@@ -25,6 +26,9 @@ void main() {
         ),
       ),
     );
+
+    expect(GetPrioTheme.safeAreaTopSpacing, 20);
+    expect(tester.getTopLeft(find.byKey(const Key('home-page'))).dy, 44);
 
     final navigationBar = tester.widget<NavigationBar>(
       find.byKey(const Key('customer-main-menu')),

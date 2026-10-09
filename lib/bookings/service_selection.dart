@@ -30,12 +30,12 @@ class ServiceSelection extends StatelessWidget {
             decoration: BoxDecoration(
               color: selected.contains(service.slug)
                   ? GetPrioTheme.primary.withValues(alpha: .08)
-                  : GetPrioTheme.card,
+                  : GetPrioTheme.colors(context).card,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: selected.contains(service.slug)
                     ? GetPrioTheme.primary
-                    : GetPrioTheme.line,
+                    : GetPrioTheme.colors(context).line,
               ),
             ),
             child: Row(
