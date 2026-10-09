@@ -220,3 +220,11 @@ Regression tests exercise first focus, keyboard opening, repeated taps, filled-i
 KanbanFlow M28 update pending: record the reproduced oversized-wrapper scroll cause, removed duplicate login handler and 50-test/analysis verification. Keep In Progress and preserve remaining work, labels and estimates. Normal browser access failed because the admin-enforced policy could not be verified; no workaround was used.
 
 Device verification: signed main Runner Profile build with production API configuration passed codesign verification, installed and launched on Zero32 (00008120-001A3D101E68C01E). Physical repeated-tap keyboard interaction remains for customer acceptance; install/launch does not establish interactive device QA.
+
+## Booking list empty card — 9 October 2026
+
+Bookings now matches the Tickets list's empty-state card: a 40-pixel calendar icon, heading and short hint with the same vertical spacing. Upcoming shows “No upcoming bookings” and “Choose a vendor to plan a visit.” History uses the same card with past-booking copy. Existing loading, error/retry and populated-list behavior remain intact; shadcn Card follows the effective appearance theme.
+
+Verification: all seven existing mobile booking UI tests pass and Flutter analysis reports no issues. KanbanFlow M28 update pending: record the matching booking empty-state cards and this verification while retaining In Progress and remaining work. Browser access remains blocked because the admin-enforced policy could not be verified; no workaround was used.
+
+Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched on Zero32. Physical visual acceptance remains pending.

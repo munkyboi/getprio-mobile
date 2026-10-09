@@ -141,10 +141,25 @@ class _BookingsPageState extends State<BookingsPage>
                 if (!_loading &&
                     _error == null &&
                     _items.where((item) => item.isUpcoming != _history).isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: Text(
-                      _history ? 'No past bookings yet.' : 'No upcoming bookings. Choose a vendor to plan a visit.',
+                  Card(
+                    child: Column(
+                      children: [
+                        const Icon(LucideIcons.calendarDays, size: 40),
+                        const SizedBox(height: 12),
+                        Text(
+                          _history
+                              ? 'No past bookings yet'
+                              : 'No upcoming bookings',
+                          textAlign: TextAlign.center,
+                        ).h3(),
+                        const SizedBox(height: 4),
+                        Text(
+                          _history
+                              ? 'Your past bookings will appear here.'
+                              : 'Choose a vendor to plan a visit.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   ),
                 for (final item in _items.where(
