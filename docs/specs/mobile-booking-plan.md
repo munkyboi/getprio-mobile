@@ -266,3 +266,11 @@ The Lists upcoming booking row displayed raw confirmed status even after arrival
 Verification: the Lists widget regression failed before the fix and passes afterward. All 21 affected booking, check-in, payment and Lists tests pass, including evidence-source and terminal-status boundaries; Flutter analysis reports no issues. Signed production-configured main Runner Profile build passed signature verification, installed and launched com.getprio.getprioMobile on Zero32. Physical visual acceptance remains pending.
 
 KanbanFlow M28 description was updated and visibly verified, preserving In Progress, previous history, labels, estimates and remaining release work. Screenshot evidence: /tmp/getprio-m28-booking-check-in.png.
+
+## Barcode inversion reverted — 10 October 2026
+
+The customer reported that inverted dark-mode queue ticket barcodes were unreadable by scanners. Restored the original dark ink bars on a white background for Light, Dark and System appearance. Barcode data, size and surrounding appearance remain unchanged. This supersedes the earlier dark barcode inversion requirement.
+
+Verification: all 16 affected ticket-details and appearance tests pass; Flutter analysis is clean. KanbanFlow M28 was updated and visibly verified while preserving In Progress, labels, estimates, history and remaining acceptance work. Screenshot: /tmp/getprio-m28-barcode-revert.png. Physical scanner acceptance remains pending.
+
+Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched com.getprio.getprioMobile on Zero32.

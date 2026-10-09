@@ -5690,9 +5690,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                     const SizedBox(height: 12),
                     Container(
                       key: const Key('ticket-details-barcode'),
-                      color: GetPrioTheme.colors(context).dark
-                          ? Colors.black
-                          : Colors.white,
+                      color: Colors.white,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 12,
@@ -5702,9 +5700,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                         barcode: Barcode.code128(),
                         height: 72,
                         drawText: false,
-                        color: GetPrioTheme.colors(context).dark
-                            ? Colors.white
-                            : GetPrioTheme.ink,
+                        color: GetPrioTheme.ink,
                       ),
                     ),
                     const SizedBox(height: 8),
