@@ -186,3 +186,17 @@ Verification: flutter analyze reports no issues; all 318 mobile tests pass, incl
 KanbanFlow update pending: M28 remains In Progress. Record the shared Lists rows, service lifecycle presentation and refresh behavior, 318 mobile/24 API checks, and the separate API response deployment dependency. Board access is blocked because the admin-enforced browser policy could not be verified; do not bypass its security controls. Remaining lifecycle/release acceptance work stays open.
 
 Device verification: the signed main Runner Profile build with production API defines passed codesign verification, installed and launched as com.getprio.getprioMobile on Zero32 (00008120-001A3D101E68C01E). Live vendor-driven service acceptance remains pending API deployment; installation/launch is not that acceptance. Backend response fix commit: 9ecf6838 (local, not pushed/deployed).
+
+## Dark appearance artwork compatibility — 9 October 2026
+
+Added dark RGBA illustrations for login, Home's empty active-ticket card, and the vendor fallback cover. They preserve the original hand-drawn scenes and orange accents with charcoal shading, ivory outlines and transparent surroundings; the original light-mode assets remain in place. The login dark scene deliberately omits the generated central logo and overlays the existing logo-dark.svg at the original brand position to preserve its exact shape.
+
+GetPrioArtwork centralizes selection from the effective Shadcn theme so Light, Dark and System appearance changes update the graphics immediately. Vendor profile logo placeholders and failed-logo loads use the existing dark SVG; the logo ring also uses a subdued dark-theme border. Directory tiles, ticket details and booking details inherit the shared vendor components. Customer-provided images are preserved.
+
+Assets: assets/branding/login-biometric-scene-dark.png, assets/illustrations/dashboard-empty-dark.png, assets/illustrations/hero-queue-scene-dark-transparent.png. Generated with the built-in imagegen tool; final prompt set is saved in assets/dark-artwork-prompts.md. All three assets are bundled explicitly in pubspec.yaml and verified as 1536x1024 RGBA with alpha transparency.
+
+Verification: flutter analyze reports no issues; all 55 affected tests pass, covering theme switching on login with draft preservation, Home empty artwork, vendor cover/logo fallback selection, appearance controls, ticket details, booking details and navigation.
+
+KanbanFlow update pending for M28: record dark illustrations, theme-aware fallback logos/ring, asset bundling and verification. Keep In Progress and preserve remaining lifecycle/API/release acceptance dependencies. Board access remains blocked because the admin-enforced browser policy could not be verified; no security workaround was used.
+
+Device verification: the signed main Runner Profile build with production API defines passed codesign verification, contains all three dark assets in its Flutter bundle, and installed/launched successfully as com.getprio.getprioMobile on Zero32 (00008120-001A3D101E68C01E). Physical visual acceptance remains with the customer.

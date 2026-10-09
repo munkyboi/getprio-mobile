@@ -80,9 +80,12 @@ flutter:
     - assets/branding/logo-dark.svg
     - assets/auth/
     - assets/branding/login-biometric-scene.png
+    - assets/branding/login-biometric-scene-dark.png
     - assets/illustrations/customer-onboarding.png
     - assets/illustrations/hero-queue-scene-transparent.png
+    - assets/illustrations/hero-queue-scene-dark-transparent.png
     - assets/illustrations/dashboard-empty.png
+    - assets/illustrations/dashboard-empty-dark.png
     - assets/illustrations/scan-invalid-qr-half-body-transparent-v3.png
     - shorebird.yaml
 

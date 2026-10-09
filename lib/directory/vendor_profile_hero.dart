@@ -2,6 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../app_theme.dart';
+import '../theme_artwork.dart';
 import '../queue/queue_models.dart';
 
 class VendorProfileCover extends StatelessWidget {
@@ -67,10 +68,8 @@ class VendorProfileCover extends StatelessWidget {
     return Container(
       color: GetPrioTheme.colors(context).paperAccent,
       padding: const EdgeInsets.fromLTRB(48, 64, 48, 36),
-      child: const Image(
-        image: AssetImage(
-          'assets/illustrations/hero-queue-scene-transparent.png',
-        ),
+      child: Image(
+        image: AssetImage(GetPrioArtwork.vendorCover(context)),
         fit: BoxFit.contain,
         semanticLabel: 'Illustration of a customer at a queue',
       ),
@@ -100,7 +99,12 @@ class VendorProfileLogo extends StatelessWidget {
           color: GetPrioTheme.colors(context).card,
           shape: BoxShape.circle,
           border: Border.fromBorderSide(
-            BorderSide(color: Color(0xF2FFFFFF), width: 4),
+            BorderSide(
+              color: GetPrioTheme.colors(context).dark
+                  ? GetPrioTheme.colors(context).line
+                  : const Color(0xF2FFFFFF),
+              width: 4,
+            ),
           ),
           boxShadow: [
             BoxShadow(
@@ -117,7 +121,7 @@ class VendorProfileLogo extends StatelessWidget {
                 ? Padding(
                     padding: const EdgeInsets.all(18),
                     child: SvgPicture.asset(
-                      'assets/branding/logo.svg',
+                      GetPrioArtwork.logo(context),
                       fit: BoxFit.contain,
                       semanticsLabel: 'GetPrio vendor logo placeholder',
                     ),
@@ -129,7 +133,7 @@ class VendorProfileLogo extends StatelessWidget {
                     errorBuilder: (context, error, stackTrace) => Padding(
                       padding: const EdgeInsets.all(18),
                       child: SvgPicture.asset(
-                        'assets/branding/logo.svg',
+                        GetPrioArtwork.logo(context),
                         fit: BoxFit.contain,
                         semanticsLabel: 'GetPrio vendor logo placeholder',
                       ),

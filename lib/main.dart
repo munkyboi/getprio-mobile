@@ -1,3 +1,4 @@
+import 'theme_artwork.dart';
 import 'navigation/list_filter_tabs.dart';
 import 'queue/ticket_list_row.dart';
 import 'appearance.dart';
@@ -527,9 +528,7 @@ class SplashLoadingScreen extends StatelessWidget {
       color: GetPrioTheme.colors(context).paper,
       child: Center(
         child: SvgPicture.asset(
-          GetPrioTheme.colors(context).dark
-              ? 'assets/branding/logo-dark.svg'
-              : 'assets/branding/logo.svg',
+          GetPrioArtwork.logo(context),
           key: const Key('splash-logo'),
           width: 180,
           fit: BoxFit.contain,
@@ -899,15 +898,31 @@ class _SignInPageState extends State<SignInPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const AspectRatio(
+                  AspectRatio(
                     aspectRatio: 3 / 2,
-                    child: Image(
-                      image: AssetImage(
-                        'assets/branding/login-biometric-scene.png',
-                      ),
-                      fit: BoxFit.contain,
-                      semanticLabel:
-                          'GetPrio customers waiting and checking in',
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image(
+                          image: AssetImage(GetPrioArtwork.login(context)),
+                          fit: BoxFit.contain,
+                          semanticLabel:
+                              'GetPrio customers waiting and checking in',
+                        ),
+                        if (GetPrioTheme.colors(context).dark)
+                          Align(
+                            alignment: const Alignment(-.02, -.1),
+                            child: FractionallySizedBox(
+                              widthFactor: .21,
+                              heightFactor: .29,
+                              child: SvgPicture.asset(
+                                GetPrioArtwork.logo(context),
+                                fit: BoxFit.contain,
+                                excludeFromSemantics: true,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -2855,10 +2870,10 @@ class _ActiveTicketCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Text('Active ticket', textAlign: TextAlign.center).h3(),
-          const SizedBox(
+          SizedBox(
             height: 130,
             child: Image(
-              image: AssetImage('assets/illustrations/dashboard-empty.png'),
+              image: AssetImage(GetPrioArtwork.emptyTickets(context)),
               fit: BoxFit.contain,
               semanticLabel: 'Illustration of an empty queue dashboard',
             ),
@@ -3386,9 +3401,7 @@ class _VendorDirectoryMedia extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(14),
       child: SvgPicture.asset(
-        GetPrioTheme.colors(context).dark
-            ? 'assets/branding/logo-dark.svg'
-            : 'assets/branding/logo.svg',
+        GetPrioArtwork.logo(context),
         fit: BoxFit.contain,
         excludeFromSemantics: true,
       ),

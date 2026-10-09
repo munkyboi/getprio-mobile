@@ -94,10 +94,40 @@ void main() {
               .colorScheme
               .background;
       expect(background(), GetPrioPalette(true).paper);
+      expect(
+        (tester
+                    .widget<Image>(
+                      find.byWidgetPredicate(
+                        (w) =>
+                            w is Image &&
+                            w.semanticLabel ==
+                                'GetPrio customers waiting and checking in',
+                      ),
+                    )
+                    .image
+                as AssetImage)
+            .assetName,
+        'assets/branding/login-biometric-scene-dark.png',
+      );
       await tester.enterText(find.byType(TextField).first, 'saved@example.com');
       await controller.select(ThemeMode.light);
       await tester.pumpAndSettle();
       expect(background(), GetPrioTheme.paper);
+      expect(
+        (tester
+                    .widget<Image>(
+                      find.byWidgetPredicate(
+                        (w) =>
+                            w is Image &&
+                            w.semanticLabel ==
+                                'GetPrio customers waiting and checking in',
+                      ),
+                    )
+                    .image
+                as AssetImage)
+            .assetName,
+        'assets/branding/login-biometric-scene.png',
+      );
       tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
       await controller.select(ThemeMode.dark);
       await tester.pumpAndSettle();
