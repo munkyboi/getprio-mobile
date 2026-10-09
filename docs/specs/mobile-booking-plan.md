@@ -210,3 +210,13 @@ KeyboardAwareScrollView now has reserveKeyboardSpace (default true for existing 
 Verification: flutter analyze reports no issues; all 75 affected keyboard, validation, registration, MFA, appearance, booking, social/review and navigation tests pass. KanbanFlow M28 update pending: record standard form resizing/safe-area consistency and duplicate-padding fix with this evidence, retaining In Progress and existing remaining work. Board access is blocked by the unavailable admin-enforced browser policy check; no workaround was used.
 
 Device verification: signed production-configured main Runner Profile build passed codesign verification, installed and launched on Zero32 (00008120-001A3D101E68C01E). Physical keyboard interaction acceptance remains pending customer testing.
+
+## Login repeated-tap scrolling fix — 9 October 2026
+
+Reproduced the reported login issue in phone-sized widget tests with a 300-pixel keyboard: the second tap placed both the identifier and password input above the screen. The login-specific tap handler measured the validated wrapper, including the shared keyboard spacer (675/677 pixels instead of the input's 39/41 pixels), then scrolled the input out of view. Removed that duplicate handler, retry timer and unused private tap forwarding; login and MFA fields retain shared focus visibility handling and native editing/selection behavior.
+
+Regression tests exercise first focus, keyboard opening, repeated taps, filled-input double taps and keyboard dismissal for both login fields. All 50 affected login, biometric, keyboard, validation, appearance, MFA and registration tests pass; Flutter analysis reports no issues. No live authentication requests were made by these tests.
+
+KanbanFlow M28 update pending: record the reproduced oversized-wrapper scroll cause, removed duplicate login handler and 50-test/analysis verification. Keep In Progress and preserve remaining work, labels and estimates. Normal browser access failed because the admin-enforced policy could not be verified; no workaround was used.
+
+Device verification: signed main Runner Profile build with production API configuration passed codesign verification, installed and launched on Zero32 (00008120-001A3D101E68C01E). Physical repeated-tap keyboard interaction remains for customer acceptance; install/launch does not establish interactive device QA.

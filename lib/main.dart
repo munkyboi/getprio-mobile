@@ -548,7 +548,6 @@ class _LabeledTextField extends StatefulWidget {
     this.focusNode,
     this.keyboardType,
     this.obscureText = false,
-    this.onTap,
     this.onChanged,
     this.supportingText,
     this.supportingTextColor,
@@ -561,7 +560,6 @@ class _LabeledTextField extends StatefulWidget {
   final FocusNode? focusNode;
   final TextInputType? keyboardType;
   final bool obscureText;
-  final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
   final String? supportingText;
   final Color? supportingTextColor;
@@ -607,7 +605,6 @@ class _LabeledTextFieldState extends State<_LabeledTextField> {
             ? const [InputFeature.passwordToggle()]
             : const [focusedClearInputFeature],
         scrollPadding: inputScrollPadding,
-        onTap: widget.onTap,
         onChanged: widget.onChanged,
         onEditingComplete: _dismissKeyboard,
       ),
@@ -653,13 +650,11 @@ class _LabeledOtpField extends StatelessWidget {
     required this.controller,
     required this.label,
     this.inputKey,
-    this.onTap,
     this.onChanged,
   });
   final TextEditingController controller;
   final String label;
   final Key? inputKey;
-  final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
   @override
   Widget build(BuildContext context) {
@@ -680,7 +675,6 @@ class _LabeledOtpField extends StatelessWidget {
       inputKey: inputKey,
       enabled: enabled,
       validation: validation,
-      onTap: onTap,
       onChanged: onChanged,
     );
   }
@@ -825,7 +819,6 @@ class _SignInPageState extends State<SignInPage>
   String? _error;
   bool _isBusy = false;
   bool _useRecoveryCode = false;
-  Timer? _keepFieldVisibleTimer;
   @override
   void initState() {
     super.initState();
@@ -861,7 +854,6 @@ class _SignInPageState extends State<SignInPage>
 
   @override
   void dispose() {
-    _keepFieldVisibleTimer?.cancel();
     _identifierController.dispose();
     _passwordController.dispose();
     _mfaController.dispose();
@@ -949,7 +941,6 @@ class _SignInPageState extends State<SignInPage>
                         label: 'Email or username',
                         placeholder: 'you@example.com or username',
                         keyboardType: TextInputType.emailAddress,
-                        onTap: () => _keepFieldVisible(_identifierController),
                       ),
                     const SizedBox(height: 12),
                     _LabeledTextField(
@@ -958,7 +949,6 @@ class _SignInPageState extends State<SignInPage>
                       label: 'Password',
                       placeholder: 'Enter your password',
                       obscureText: true,
-                      onTap: () => _keepFieldVisible(_passwordController),
                     ),
                     const SizedBox(height: 20),
                     GetPrioActionButton.primary(
@@ -1065,14 +1055,12 @@ class _SignInPageState extends State<SignInPage>
                         controller: _recoveryController,
                         label: 'Recovery code',
                         placeholder: 'Enter a recovery code',
-                        onTap: () => _keepFieldVisible(_recoveryController),
                       )
                     else
                       _LabeledOtpField(
                         inputKey: const Key('mfa-code'),
                         controller: _mfaController,
                         label: 'Authenticator code',
-                        onTap: () => _keepFieldVisible(_mfaController),
                       ),
                     const SizedBox(height: 12),
                     GetPrioActionButton.primary(
@@ -1114,51 +1102,6 @@ class _SignInPageState extends State<SignInPage>
         ),
       ),
     );
-  }
-
-  void _keepFieldVisible(TextEditingController controller) {
-    void ensureVisible() {
-      final fieldContext = formValidation.keyFor(controller).currentContext;
-      if (!mounted || fieldContext == null || !fieldContext.mounted) return;
-      final fieldRenderObject = fieldContext.findRenderObject();
-      final scrollable = Scrollable.maybeOf(fieldContext);
-      if (fieldRenderObject is! RenderBox ||
-          !fieldRenderObject.hasSize ||
-          scrollable == null) {
-        return;
-      }
-
-      final fieldTop = fieldRenderObject.localToGlobal(Offset.zero).dy;
-      final fieldBottom = fieldTop + fieldRenderObject.size.height;
-      final viewInsets = MediaQuery.viewInsetsOf(context);
-      final keyboardTop = MediaQuery.sizeOf(context).height - viewInsets.bottom;
-      const safeGap = 24.0;
-      final scrollDelta = fieldBottom > keyboardTop - safeGap
-          ? fieldBottom - (keyboardTop - safeGap)
-          : fieldTop < safeGap
-          ? fieldTop - safeGap
-          : 0.0;
-      if (scrollDelta == 0) return;
-
-      final position = scrollable.position;
-      final target = (position.pixels + scrollDelta).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      position.animateTo(
-        target,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ensureVisible();
-      _keepFieldVisibleTimer?.cancel();
-      _keepFieldVisibleTimer = Timer(const Duration(milliseconds: 250), () {
-        if (mounted) ensureVisible();
-      });
-    });
   }
 
   Future<void> _signIn() async {
