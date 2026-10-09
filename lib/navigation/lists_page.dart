@@ -18,29 +18,31 @@ class ListsPage extends StatelessWidget {
       const SizedBox(height: 8),
       const Text('Your tickets and scheduled visits, all in one place.'),
       const SizedBox(height: 24),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _ListCard(
-              label: 'Tickets',
-              subtitle: 'Queue tickets',
-              icon: LucideIcons.ticket,
-              color: GetPrioTheme.primary,
-              onPressed: onTickets,
+      IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _ListCard(
+                label: 'Tickets',
+                subtitle: 'Queue tickets',
+                icon: LucideIcons.ticket,
+                color: GetPrioTheme.primary,
+                onPressed: onTickets,
+              ),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: _ListCard(
-              label: 'Bookings',
-              subtitle: 'Scheduled visits',
-              icon: LucideIcons.calendarDays,
-              color: GetPrioTheme.teal,
-              onPressed: onBookings,
+            const SizedBox(width: 14),
+            Expanded(
+              child: _ListCard(
+                label: 'Bookings',
+                subtitle: 'Scheduled visits',
+                icon: LucideIcons.calendarDays,
+                color: GetPrioTheme.teal,
+                onPressed: onBookings,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ],
   );
@@ -61,7 +63,7 @@ class _ListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Button(
     key: ValueKey('lists-${label.toLowerCase()}'),
-    style: const ButtonStyle.ghost(),
+    style: const ButtonStyle.ghost(density: ButtonDensity.compact),
     onPressed: onPressed,
     child: Container(
       width: double.infinity,
@@ -90,6 +92,7 @@ class _ListCard extends StatelessWidget {
             style: Theme.of(context).typography.small
                 .copyWith(color: GetPrioTheme.mutedInk),
           ),
+          const Spacer(),
           const SizedBox(height: 26),
           Align(
             alignment: Alignment.centerRight,

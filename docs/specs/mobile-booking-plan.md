@@ -103,3 +103,7 @@ Queue ticket and booking details now share the Vendor Details artwork, centered 
 Service thumbnail buttons now use zero padding so images fill the full 56 × 56 square instead of being squeezed horizontally. The fallback keeps the same square dimensions; tapping still opens the shared image viewer. Flutter analysis and all seven mobile booking UI tests passed. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain.
 
 KanbanFlow update remains pending: the browser could not verify the admin-enforced access policy. Add this correction and its verification to M28 alongside the pending unified-details/live-refresh update; preserve the card's In Progress status and other fields.
+
+## Lists grid sizing correction
+
+Removed default button padding around the two Lists cards so each surface fills its grid column, leaving a single 14-pixel gutter. The row stretches both cards to the taller content height, and their icons stay aligned at the bottom even when subtitles wrap. Analysis and all seven mobile booking UI tests passed, including Tickets/Bookings navigation. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Batch this small layout correction into the pending M28 update; board access remains blocked by browser admin-policy verification.
