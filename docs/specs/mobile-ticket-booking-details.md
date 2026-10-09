@@ -42,3 +42,7 @@ The further mobile refinement uses the supplied confirmed and canceled web booki
 Analysis and all 304 tests passed, including phone layout, bundled pricing, fallback quantity pricing, private proof retry/viewer navigation and the existing refresh/payment draft tests. The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. No live proof or vendor decision was submitted. Physical visual and end-to-end acceptance remain pending; cancellation and linked ticket navigation remain separate lifecycle work.
 
 KanbanFlow access remains blocked by admin-policy verification. Pending M28 update: add this refinement and private proof viewing, remove private proof viewing from remaining implementation work, record the 304-test verification, and retain In Progress with outstanding lifecycle/device acceptance work.
+
+### Booking heading spacing
+
+Removed the heading modifier's automatic 40-pixel top margin between the vendor hero and booking reference. The reference uses the same heading typography directly, retaining the card's normal 20-pixel content padding. Analysis and all six booking presentation/live-refresh tests passed. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Include this small spacing correction in the pending M28 refinement update.

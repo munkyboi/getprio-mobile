@@ -410,7 +410,8 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                       item.reference.isEmpty
                           ? 'Booking request'
                           : item.reference,
-                    ).h2(),
+                      style: Theme.of(context).typography.h2,
+                    ),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
