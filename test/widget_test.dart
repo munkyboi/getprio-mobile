@@ -570,7 +570,9 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+      ShadcnApp(
+        home: const CustomerShell(user: AuthUserForTest.user, sandbox: true),
+      ),
     );
 
     final explore = tester.widget<NavigationItem>(
@@ -583,6 +585,23 @@ void main() {
 
     expect(find.byKey(const Key('home-page')), findsOneWidget);
     expect(find.byKey(const Key('explore-page')), findsNothing);
+  });
+
+  testWidgets('opens Explore in the production app', (tester) async {
+    await tester.pumpWidget(
+      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+    );
+
+    final explore = tester.widget<NavigationItem>(
+      find.byKey(const ValueKey(CustomerDestination.explore)),
+    );
+    expect(explore.enabled, isTrue);
+
+    await tester.tap(find.text('Explore'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('explore-page')), findsOneWidget);
+    expect(find.byKey(const Key('home-page')), findsNothing);
   });
 
   testWidgets('centers phone action button content', (tester) async {

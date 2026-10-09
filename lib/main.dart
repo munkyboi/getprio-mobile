@@ -2244,6 +2244,7 @@ class _CustomerShellState extends State<CustomerShell>
             selectedDestination: _selectedDestination,
             onDestinationSelected: _selectDestination,
             onJoinQueue: _openJoin,
+            exploreEnabled: !widget.sandbox,
           ),
         ],
         child: SafeArea(
@@ -2487,7 +2488,7 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   void _selectDestination(CustomerDestination destination) {
-    if (destination == CustomerDestination.explore) return;
+    if (widget.sandbox && destination == CustomerDestination.explore) return;
     setState(() => _selectedDestination = destination);
     if (destination == CustomerDestination.tickets) {
       widget.ticketRepository?.requestRefresh();
