@@ -228,3 +228,11 @@ Bookings now matches the Tickets list's empty-state card: a 40-pixel calendar ic
 Verification: all seven existing mobile booking UI tests pass and Flutter analysis reports no issues. KanbanFlow M28 update pending: record the matching booking empty-state cards and this verification while retaining In Progress and remaining work. Browser access remains blocked because the admin-enforced policy could not be verified; no workaround was used.
 
 Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched on Zero32. Physical visual acceptance remains pending.
+
+## List tab spacing and textarea dismissal — 9 October 2026
+
+Tickets and Bookings share listPagePadding (20 left/right/bottom, 10 top), aligning the AppBar-to-tabs gap and preventing drift. Audited every editable multiline field: vendor reviews already explicitly unfocus on outside taps; vendor contact messages now do the same. Both retain their entered text and multiline editing. Contact-message regression coverage reproduced retained focus/visible keyboard before the fix and now verifies outside-tap blur, hidden keyboard, preserved message and successful submission. Existing rating coverage verifies the same dismissal behavior and submission.
+
+Verification: all 54 affected navigation, booking, social/rating and Lists tests pass; Flutter analysis reports no issues. KanbanFlow M28 update pending: record shared list spacing and complete multiline outside-tap dismissal with regression evidence. Preserve In Progress, remaining work, labels and estimates. Browser access remains blocked by the unavailable admin-enforced policy check; no workaround was used.
+
+Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched on Zero32. Physical spacing and keyboard interaction acceptance remain pending.

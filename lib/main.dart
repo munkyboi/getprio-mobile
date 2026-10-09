@@ -4448,6 +4448,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
                     enabled: !_busy,
                     controller: _message,
                     focusNode: _messageFocusNode,
+                    onTapOutside: (_) => _messageFocusNode.unfocus(),
                     placeholder: const Text('Write your message'),
                     features: const [focusedClearInputFeature],
                     scrollPadding: inputScrollPadding,
@@ -5030,7 +5031,7 @@ class _TicketsPageState extends State<TicketsPage> {
           child: ListView(
             key: const Key('tickets-page'),
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+            padding: listPagePadding,
             children: [
               ListFilterTabs(
                 key: const Key('ticket-tabs'),

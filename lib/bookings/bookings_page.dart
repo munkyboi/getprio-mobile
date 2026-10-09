@@ -116,7 +116,7 @@ class _BookingsPageState extends State<BookingsPage>
           onRefresh: _load,
           child: ListView(
             key: const Key('bookings-page'),
-            padding: const EdgeInsets.all(20),
+            padding: listPagePadding,
             children: [
               ListFilterTabs(
                 key: const Key('booking-tabs'),

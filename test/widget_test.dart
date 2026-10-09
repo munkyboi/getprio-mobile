@@ -850,6 +850,21 @@ void main() {
       find.byKey(const Key('vendor-contact-message')),
       'Are you open this afternoon?',
     );
+    await tester.pumpAndSettle();
+    final messageField = tester.widget<TextArea>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextArea &&
+            widget.key == const Key('vendor-contact-message'),
+      ),
+    );
+    expect(messageField.focusNode!.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.tap(find.text('Message'));
+    await tester.pumpAndSettle();
+    expect(messageField.focusNode!.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(messageField.controller!.text, 'Are you open this afternoon?');
     await tester.tap(find.byKey(const Key('vendor-contact-continue')));
     await tester.pumpAndSettle();
 

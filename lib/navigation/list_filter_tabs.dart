@@ -1,5 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+const listPagePadding = EdgeInsets.fromLTRB(20, 10, 20, 20);
+
 /// Shared two-column tab styling for customer ticket and booking lists.
 class ListFilterTabs extends StatelessWidget {
   const ListFilterTabs({
