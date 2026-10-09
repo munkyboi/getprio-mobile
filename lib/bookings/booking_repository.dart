@@ -52,13 +52,33 @@ class CustomerBooking {
       data['linkedTicket'] == null &&
       data['queueTicketId'] == null &&
       !hasPaymentProof;
-  String get nextStep => canSubmitProof
-      ? 'Payment proof required. This request is awaiting vendor confirmation.'
-      : hasPaymentProof && paymentStatus == 'pending'
-      ? 'Payment proof submitted. Awaiting vendor review; payment is not yet verified.'
-      : status == 'pending'
-      ? 'Request submitted. Awaiting vendor confirmation.'
-      : 'Booking: $status · Payment: $paymentStatus';
+  String get nextStep {
+    if (status == 'expired') return 'This booking request expired.';
+    if (status == 'canceled') return 'This booking was canceled.';
+    if (status == 'completed') return 'This booking has been completed.';
+    if (paymentStatus == 'rejected') {
+      return 'Payment proof was rejected. Review the vendor’s reason below.';
+    }
+    if (canSubmitProof) {
+      return status == 'pending'
+          ? 'Payment proof required. This request is awaiting vendor confirmation.'
+          : 'Payment proof required. Payment is not yet verified.';
+    }
+    if (hasPaymentProof && paymentStatus == 'pending') {
+      return 'Payment proof submitted. Awaiting vendor review; payment is not yet verified.';
+    }
+    if (status == 'pending') {
+      return 'Request submitted. Awaiting vendor confirmation.';
+    }
+    if (data['checkedInAt'] != null || data['linkedTicket'] != null) {
+      return 'The vendor has checked you in. Follow your queue ticket for service updates.';
+    }
+    if (status == 'confirmed' || status == 'rescheduled') {
+      return 'Your booking is confirmed. Keep this booking ready for vendor check-in.';
+    }
+    return 'Booking: $status · Payment: $paymentStatus';
+  }
+
   bool get isUpcoming =>
       ['pending', 'confirmed', 'rescheduled'].contains(status);
 }

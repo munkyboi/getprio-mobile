@@ -1,3 +1,9 @@
+import 'dart:async';
+
+import '../details/detail_pass.dart';
+import '../directory/directory_repository.dart';
+import '../queue/queue_models.dart';
+
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
@@ -215,130 +221,249 @@ class BookingDetailPage extends StatefulWidget {
     super.key,
     required this.repository,
     required this.booking,
+    this.directoryRepository,
+    this.pollInterval = const Duration(seconds: 15),
   });
   final BookingRepository repository;
   final CustomerBooking booking;
+  final DirectoryRepository? directoryRepository;
+  final Duration pollInterval;
   @override
   State<BookingDetailPage> createState() => _BookingDetailPageState();
 }
 
-class _BookingDetailPageState extends State<BookingDetailPage> {
-  late Future<CustomerBooking> _detail;
+class _BookingDetailPageState extends State<BookingDetailPage>
+    with WidgetsBindingObserver {
+  late CustomerBooking _item;
+  VendorSummary? _vendor;
+  Timer? _poll;
+  bool _fetching = false, _foreground = true, _vendorRequested = false;
+  String? _syncError;
+  int _request = 0;
   @override
   void initState() {
     super.initState();
-    _detail = widget.repository.detail(widget.booking.id);
+    _item = widget.booking;
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+    _poll = Timer.periodic(widget.pollInterval, (_) {
+      if (_foreground && (ModalRoute.of(context)?.isCurrent ?? true)) {
+        _refresh();
+      }
+    });
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    headers: [
-      AppBar(
-        title: const Text('Booking details'),
-        leading: [
-          IconButton.ghost(
-            icon: const Icon(LucideIcons.arrowLeft),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    ],
-    child: SafeArea(
-      top: false,
-      child: FutureBuilder<CustomerBooking>(
-        future: _detail,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: GetPrioActionButton.outline(
-                onPressed: () => setState(
-                  () => _detail = widget.repository.detail(widget.booking.id),
-                ),
-                child: const Text('Try again'),
-              ),
-            );
-          }
-          final item = snapshot.data!;
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Text(item.reference).h2(),
-              const SizedBox(height: 12),
-              Text(item.vendorName).bold(),
-              Text(item.locationName),
-              const SizedBox(height: 20),
-              Text(bookingDateLabel(item.startAt)),
-              const SizedBox(height: 12),
-              Text('Booking: ${bookingStatusLabel(item.status)}'),
-              Text('Payment: ${bookingStatusLabel(item.paymentStatus)}'),
-              const SizedBox(height: 12),
-              Text(item.nextStep).bold(),
-              if (item.canSubmitProof) ...[
-                const SizedBox(height: 20),
-                BookingPayment(
-                  key: ValueKey(item.id),
-                  repository: widget.repository,
-                  booking: item,
-                  onSubmitted: (updated) => setState(() {
-                    _detail = Future.value(updated);
-                  }),
-                ),
-              ],
-              if (item.hasPaymentProof) ...[
+  void dispose() {
+    _poll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground && (ModalRoute.of(context)?.isCurrent ?? true)) _refresh();
+  }
+
+  Future<void> _loadVendor(CustomerBooking item) async {
+    if (_vendorRequested) return;
+    final slug = '${item.data['tenantSlug'] ?? ''}';
+    if (slug.isEmpty) return;
+    final api = widget.repository.api;
+    final repository =
+        widget.directoryRepository ??
+        (api is RestBookingApi
+            ? DirectoryRepository(RestDirectoryApi(api.client))
+            : null);
+    if (repository == null) return;
+    _vendorRequested = true;
+    try {
+      final vendor = await repository.loadVendor(slug);
+      if (mounted) setState(() => _vendor = vendor);
+    } catch (_) {
+      _vendorRequested = false;
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_fetching || !mounted) return;
+    final request = ++_request;
+    setState(() => _fetching = true);
+    try {
+      final item = await widget.repository.detail(widget.booking.id);
+      if (!mounted || request != _request) return;
+      setState(() {
+        _item = item;
+        _syncError = null;
+      });
+      unawaited(_loadVendor(item));
+    } catch (_) {
+      if (mounted && request == _request) {
+        setState(
+          () => _syncError = 'Could not update booking status. Showing the last available details.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _fetching = false);
+    }
+  }
+
+  void _proofSubmitted(CustomerBooking updated) {
+    // Discard any fetch started before proof submission so it cannot restore the unpaid form.
+    _request++;
+    setState(() {
+      _item = updated;
+      _syncError = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = _item;
+    final vendor =
+        _vendor ??
+        VendorSummary(
+          slug: '${item.data['tenantSlug'] ?? 'booking'}',
+          name: item.vendorName,
+          queueAvailable: false,
+        );
+    final services = (item.data['bundleItems'] as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    return Scaffold(
+      headers: const [DetailPassAppBar(title: 'Booking details')],
+      child: SafeArea(
+        top: false,
+        child: ListView(
+          key: const Key('booking-details-page'),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 36),
+          children: [
+            DetailPassCard(
+              key: const Key('booking-details-card'),
+              vendor: vendor,
+              children: [
+                const Text('Your booking').h3(),
                 const SizedBox(height: 12),
                 Text(
-                  'Payment reference: ${item.data['paymentReference'] ?? ''}',
+                  item.reference.isEmpty ? 'Booking request' : item.reference,
+                ).h2(),
+                const SizedBox(height: 12),
+                Text(item.vendorName).bold(),
+                Text(item.locationName),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    SecondaryBadge(
+                      child: Text(
+                        'Booking: ${bookingStatusLabel(item.status)}',
+                      ),
+                    ),
+                    OutlineBadge(
+                      child: Text(
+                        'Payment: ${bookingStatusLabel(item.paymentStatus)}',
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  'Receipt: ${(item.data['paymentProof'] as Map)['fileName'] ?? 'Submitted'}',
-                ),
-              ],
-              const SizedBox(height: 12),
-              OutlineButton(
-                onPressed: () => setState(() {
-                  _detail = widget.repository.detail(widget.booking.id);
-                }),
-                child: const Text('Refresh status'),
-              ),
-              const SizedBox(height: 20),
-              const Text('Services').h3(),
-              for (final service
-                  in (item.data['bundleItems'] as List? ?? [])
-                      .whereType<Map<String, dynamic>>())
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    '${service['serviceName']} × ${service['bookingQuantity'] ?? 1}',
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: GetPrioTheme.paperAccent,
+                    borderRadius: BorderRadius.circular(14),
                   ),
+                  child: Text(item.nextStep),
                 ),
-              if ((item.data['bundleItems'] as List? ?? []).isEmpty)
-                Text(item.serviceName),
-              if (item.data['pendingExpiresAt'] != null) ...[
-                const SizedBox(height: 20),
-                Text(
-                  'Pending deadline: ${bookingDateLabel(DateTime.tryParse('${item.data['pendingExpiresAt']}')?.toLocal())}',
+                const DetailPassDivider(),
+                DetailPassField(
+                  label: 'Scheduled visit',
+                  value: bookingDateLabel(item.startAt),
+                ),
+                if ('${item.data['customerName'] ?? ''}'.isNotEmpty)
+                  DetailPassField(
+                    label: 'Customer',
+                    value: '${item.data['customerName']}',
+                  ),
+                const SizedBox(height: 12),
+                const Text('Services').h3(),
+                if (services.isEmpty)
+                  DetailPassField(label: 'Service', value: item.serviceName)
+                else
+                  for (final service in services)
+                    DetailPassField(
+                      label: '${service['serviceName'] ?? 'Service'}',
+                      value: 'Quantity: ${service['bookingQuantity'] ?? 1}',
+                    ),
+                if ('${item.data['notes'] ?? ''}'.isNotEmpty)
+                  DetailPassField(
+                    label: 'Notes',
+                    value: '${item.data['notes']}',
+                  ),
+                if (item.status == 'pending' &&
+                    item.data['pendingExpiresAt'] != null)
+                  DetailPassField(
+                    label: 'Pending deadline',
+                    value: bookingDateLabel(
+                      DateTime.tryParse('${item.data['pendingExpiresAt']}')
+                          ?.toLocal(),
+                    ),
+                  ),
+                if ('${item.data['paymentRejectionReason'] ?? ''}'.isNotEmpty)
+                  DetailPassField(
+                    label: 'Payment review',
+                    value: '${item.data['paymentRejectionReason']}',
+                  ),
+                if ('${item.data['expirationReason'] ?? ''}'.isNotEmpty)
+                  DetailPassField(
+                    label: 'Expiration reason',
+                    value: '${item.data['expirationReason']}',
+                  ),
+                if (item.canSubmitProof) ...[
+                  const DetailPassDivider(),
+                  BookingPayment(
+                    key: ValueKey(item.id),
+                    repository: widget.repository,
+                    booking: item,
+                    onSubmitted: _proofSubmitted,
+                  ),
+                ],
+                if (item.hasPaymentProof) ...[
+                  const DetailPassDivider(),
+                  DetailPassField(
+                    label: 'Payment reference',
+                    value: '${item.data['paymentReference'] ?? ''}',
+                  ),
+                  DetailPassField(
+                    label: 'Receipt',
+                    value:
+                        '${(item.data['paymentProof'] as Map)['fileName'] ?? 'Submitted'}',
+                  ),
+                ],
+                const DetailPassDivider(),
+                const Text(
+                  'A queue ticket is created after the vendor checks you in.',
+                ),
+                const SizedBox(height: 16),
+                if (_syncError != null) ...[
+                  Text(_syncError!),
+                  const SizedBox(height: 8),
+                  OutlineButton(
+                    onPressed: _fetching ? null : _refresh,
+                    child: const Text('Try again'),
+                  ),
+                ],
+                OutlineButton(
+                  onPressed: _fetching ? null : _refresh,
+                  child: Text(_fetching ? 'Updating...' : 'Refresh status'),
                 ),
               ],
-              if ('${item.data['paymentRejectionReason'] ?? ''}'
-                  .isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text('${item.data['paymentRejectionReason']}'),
-              ],
-              if ('${item.data['expirationReason'] ?? ''}'.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text('${item.data['expirationReason']}'),
-              ],
-              const SizedBox(height: 20),
-              const Text(
-                'A queue ticket is created after the vendor checks you in.',
-              ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

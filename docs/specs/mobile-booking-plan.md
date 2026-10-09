@@ -93,3 +93,7 @@ Verification: all 13 affected booking/location/parallax tests passed, including 
 ## Payment QR enlargement
 
 The manual-payment QR in eligible unpaid booking details is clickable and opens a larger pinch-to-zoom view. Service images and payment QR images share the same viewer. Closing returns to the payment form with its entered reference intact. Bank-only destinations have no QR action. All 12 affected payment/booking UI tests passed; Flutter analysis passed.
+
+## Unified details and live booking refresh
+
+Queue ticket and booking details now share the Vendor Details artwork, centered app bar and single pass-card design. The called-ticket alert is a single sentence above the card, with other details inside. Booking details poll every 15 seconds while visible/foregrounded and refresh on app resume; failed refreshes retain the last data and payment draft, and stale fetches cannot overwrite submitted proof. Full behavior and verification are in `mobile-ticket-booking-details.md`. Flutter analysis passed; all 301 tests passed.

@@ -152,6 +152,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('ticket-details-cancel'))),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('ticket-details-cancel')));
     await tester.pump();
     expect(cancelCalls, 1);
@@ -250,6 +254,42 @@ void main() {
     expect(find.text('Currently serving AH004'), findsOneWidget);
   });
 
+  testWidgets(
+    'called alert is above the single ticket card and contains no queue metrics',
+    (tester) async {
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson({
+              'id': 'called',
+              'lookupCode': 'CALLED',
+              'ticketNumber': 'A01',
+              'tenantName': 'Clinic',
+              'status': 'called',
+            }),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final alert = find.byKey(const Key('ticket-called-alert'));
+      expect(
+        find.descendant(of: alert, matching: find.byType(Text)),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Your ticket was called. Proceed to the vendor.'),
+        findsOneWidget,
+      );
+      expect(
+        tester.getBottomLeft(alert).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('ticket-details-card'))).dy,
+        ),
+      );
+      expect(find.byKey(const Key('ticket-details-card')), findsOneWidget);
+      expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
+    },
+  );
   testWidgets('shows vendor confirmation when a ticket has been called', (
     tester,
   ) async {
@@ -411,37 +451,41 @@ void main() {
     );
   });
 
-  testWidgets('restores the ticket details surface without a vendor hero', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ShadcnApp(
-        home: TicketDetailsPage(
-          ticket: QueueTicket.fromJson({
-            'id': 'active-1',
-            'lookupCode': 'A0C18AF',
-            'ticketNumber': 'AH002',
-            'tenantName': 'City Clinic',
-            'tenantSlug': 'city-clinic',
-            'locationName': 'Main location',
-            'locationSlug': 'main',
-            'status': 'waiting',
-          }),
-          directoryRepository: DirectoryRepository(_TicketCoverDirectoryApi()),
+  testWidgets(
+    'shows a single selected ticket with the vendor cover and centered logo',
+    (tester) async {
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson({
+              'id': 'active-1',
+              'lookupCode': 'A0C18AF',
+              'ticketNumber': 'AH002',
+              'tenantName': 'City Clinic',
+              'tenantSlug': 'city-clinic',
+              'locationName': 'Main location',
+              'locationSlug': 'main',
+              'status': 'waiting',
+            }),
+            directoryRepository: DirectoryRepository(
+              _TicketCoverDirectoryApi(),
+            ),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('ticket-details-page')), findsOneWidget);
-    expect(find.byKey(const Key('ticket-details-surface')), findsOneWidget);
-    final surface = tester.widget<Container>(
-      find.byKey(const Key('ticket-details-surface')),
-    );
-    expect((surface.decoration! as BoxDecoration).borderRadius, isNull);
-    expect(find.byKey(const Key('ticket-details-profile-cover')), findsNothing);
-    expect(find.byKey(const Key('profile-cover-surface-fade')), findsNothing);
-  });
+      expect(find.byKey(const Key('ticket-details-page')), findsOneWidget);
+      expect(find.byKey(const Key('ticket-details-card')), findsOneWidget);
+      expect(find.byKey(const Key('detail-pass-hero')), findsOneWidget);
+      expect(find.byKey(const Key('vendor-profile-cover')), findsOneWidget);
+      expect(find.byKey(const Key('vendor-logo')), findsOneWidget);
+      expect(
+        find.byKey(const Key('profile-cover-surface-fade')),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 class FakeDirectoryRepository extends DirectoryRepository {

@@ -34,7 +34,7 @@ Product decisions and implementation contracts are kept in [`CONTEXT.md`](CONTEX
 
 ## Customer booking work
 
-The approved flow, implementation boundary, and remaining release work are in [the mobile booking plan](docs/specs/mobile-booking-plan.md). This work targets the main GetPrio app, using the iOS `Runner` scheme and production API configuration on Zero32 Domain. The native booking flow is under development; manual payment instructions and receipt submission are available; private proof preview and complete lifecycle actions remain pending.
+The approved flow, implementation boundary, and remaining release work are in [the mobile booking plan](docs/specs/mobile-booking-plan.md). This work targets the main GetPrio app, using the iOS `Runner` scheme and production API configuration on Zero32 Domain. The native booking flow is under development; manual payment instructions and receipt submission are available; booking details refresh automatically while visible and share the queue ticket pass design; private proof preview and complete lifecycle actions remain pending.
 
 ## Upcoming API integration work
 
