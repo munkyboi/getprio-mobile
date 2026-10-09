@@ -40,6 +40,9 @@ class GetPrioTypography {
 
 /// GetPrio's shared customer-facing visual language, based on the web app.
 class GetPrioTheme {
+  // Extra breathing room below system insets on the main tab screens.
+  static const safeAreaTopSpacing = 10.0;
+
   // The drawer already reserves vertical space for its drag indicator.
   static const bottomSheetTopPadding = 0.0;
 

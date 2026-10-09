@@ -107,3 +107,7 @@ KanbanFlow update remains pending: the browser could not verify the admin-enforc
 ## Lists grid sizing correction
 
 Removed default button padding around the two Lists cards so each surface fills its grid column, leaving a single 14-pixel gutter. The row stretches both cards to the taller content height, and their icons stay aligned at the bottom even when subtitles wrap. Analysis and all seven mobile booking UI tests passed, including Tickets/Bookings navigation. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Batch this small layout correction into the pending M28 update; board access remains blocked by browser admin-policy verification.
+
+## Shared safe-area top spacing
+
+The shared `GetPrioTheme.safeAreaTopSpacing` token is 10 logical pixels. CustomerShell applies it once inside its system SafeArea, across Home, Explore, Lists and Profile. Page list padding remains shared and unchanged; routed app-bar screens retain their existing header layout. Analysis and all nine navigation/mobile-booking UI tests passed. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Include this styling adjustment in the pending M28 update; the browser admin-policy verification blocker remains unresolved.

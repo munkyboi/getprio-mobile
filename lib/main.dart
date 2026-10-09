@@ -2287,37 +2287,42 @@ class _CustomerShellState extends State<CustomerShell>
         child: SafeArea(
           top: true,
           bottom: false,
-          child: IndexedStack(
-            index: _selectedDestination.index,
-            children: [
-              HomePage(
-                directoryRepository: widget.directoryRepository,
-                onOpenVendor: _openFavoriteVendor,
-                user: widget.user,
-                ticketRepository: widget.ticketRepository,
-                onOpenJoin: _openJoin,
-                onOpenTicketDetails: _openTicketDetails,
-              ),
-              ExplorePage(
-                repository: widget.directoryRepository,
-                queueRepository: widget.queueRepository,
-                onOpenJoin: (vendor, locationSlug) =>
-                    unawaited(_openVendorJoin(vendor, locationSlug)),
-              ),
-              ListsPage(onTickets: _openTickets, onBookings: _openBookings),
-              AccountPage(
-                socialRepository: widget.directoryRepository?.social,
-                onOpenVendor: _openFavoriteVendor,
-                user: widget.user,
-                onSignOut: widget.onSignOut,
-                settingsRepository: widget.settingsRepository,
-                securityRepository: widget.securityRepository,
-                profileRepository: widget.profileRepository,
-                onUserUpdated: widget.onUserUpdated,
-                approvedVendorStore: widget.approvedVendorStore,
-                sandbox: widget.sandbox,
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.only(
+              top: GetPrioTheme.safeAreaTopSpacing,
+            ),
+            child: IndexedStack(
+              index: _selectedDestination.index,
+              children: [
+                HomePage(
+                  directoryRepository: widget.directoryRepository,
+                  onOpenVendor: _openFavoriteVendor,
+                  user: widget.user,
+                  ticketRepository: widget.ticketRepository,
+                  onOpenJoin: _openJoin,
+                  onOpenTicketDetails: _openTicketDetails,
+                ),
+                ExplorePage(
+                  repository: widget.directoryRepository,
+                  queueRepository: widget.queueRepository,
+                  onOpenJoin: (vendor, locationSlug) =>
+                      unawaited(_openVendorJoin(vendor, locationSlug)),
+                ),
+                ListsPage(onTickets: _openTickets, onBookings: _openBookings),
+                AccountPage(
+                  socialRepository: widget.directoryRepository?.social,
+                  onOpenVendor: _openFavoriteVendor,
+                  user: widget.user,
+                  onSignOut: widget.onSignOut,
+                  settingsRepository: widget.settingsRepository,
+                  securityRepository: widget.securityRepository,
+                  profileRepository: widget.profileRepository,
+                  onUserUpdated: widget.onUserUpdated,
+                  approvedVendorStore: widget.approvedVendorStore,
+                  sandbox: widget.sandbox,
+                ),
+              ],
+            ),
           ),
         ),
       ),
