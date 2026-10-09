@@ -138,6 +138,19 @@ class BookingRepository {
     '/api/account/bookings',
     query: {'page': '$page', 'pageSize': '20'},
   );
+  Future<String> paymentProofUrl(String id) async {
+    final response = await api.get(
+      '/api/account/bookings/${Uri.encodeComponent(id)}/payment-proof',
+    );
+    final access = response['access'];
+    final url = access is Map ? access['url'] : null;
+    final uri = url is String ? Uri.tryParse(url) : null;
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+      throw StateError('Payment proof is unavailable.');
+    }
+    return url as String;
+  }
+
   Future<CustomerBooking> submitPaymentProof(
     CustomerBooking booking, {
     required String reference,

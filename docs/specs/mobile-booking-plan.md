@@ -35,7 +35,7 @@ Branch: `codex/mobile-booking-lists-ui`, based on mobile `origin/main` at `0b9fd
 
 ## Remaining before booking release
 
-- Private proof viewing, richer review/expiry outcomes, and physical end-to-end vendor payment acceptance. Native payment instructions, reference and proof upload are now implemented.
+- Richer review/expiry outcomes and physical end-to-end vendor payment acceptance. Native payment instructions, reference, proof upload and private proof viewing are implemented.
 - Eligible cancellation, linked queue-ticket navigation and complete lifecycle/refund messaging.
 - Booking push delivery/deep links and durable session/interrupted-flow recovery.
 - Physical verification of email OTP autofill, photo upload, keyboard/safe areas, application switching and vendor approval/check-in.

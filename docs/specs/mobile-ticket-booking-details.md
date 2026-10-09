@@ -27,3 +27,18 @@ Flutter analysis passed. All 301 tests passed, including called-alert placement/
 The signed main Runner Profile build succeeded, passed signature verification, and was installed and launched on Zero32 Domain. Physical visual/live vendor acceptance remains pending. Tests use fake booking APIs and do not submit live bookings or payment evidence.
 
 KanbanFlow synchronization is pending: browser access to kanbanflow.com was denied because its admin-enforced policy could not be verified. Pending update: add these UI/polling changes and verification evidence to M28, preserve its In Progress status and existing labels/estimates, and keep remaining payment/lifecycle acceptance open.
+
+## Web-reference refinement
+
+The further mobile refinement uses the supplied confirmed and canceled web booking screenshots as visual references:
+
+- Color-coded booking and payment badges remain separate, above vendor/location information.
+- A schedule panel shows the complete date/time range, elapsed duration, service count and total fee. Parallel services use the earliest start/latest end; bundled snapshot prices are summed without multiplying quantities again. A single-service fallback multiplies its unit price once. Group-funded totals use the campaign target plus adjustment.
+- Booked service cards show compact square, tappable thumbnails, individual time ranges, recorded fees and quantity badges. Missing images omit the thumbnail; current location catalogue images supplement booked snapshots without replacing recorded prices or times.
+- Customer name/phone, notes and pending/expiry information stay in the booking card. Payment has its own card for upload, vendor review, verified/rejected proof, receipt reference/name and review reason.
+- View payment proof obtains a fresh HTTPS signed URL through the existing authenticated customer endpoint on each tap. Loading prevents duplicate requests; failures offer retry. No public storage URL is constructed and authentication headers are not sent to the image host.
+- Both cards remain mounted while scrolling so payment drafts survive scrolling back to the hero. Existing foreground polling, refresh error retention and stale-request protection remain intact.
+
+Analysis and all 304 tests passed, including phone layout, bundled pricing, fallback quantity pricing, private proof retry/viewer navigation and the existing refresh/payment draft tests. The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. No live proof or vendor decision was submitted. Physical visual and end-to-end acceptance remain pending; cancellation and linked ticket navigation remain separate lifecycle work.
+
+KanbanFlow access remains blocked by admin-policy verification. Pending M28 update: add this refinement and private proof viewing, remove private proof viewing from remaining implementation work, record the 304-test verification, and retain In Progress with outstanding lifecycle/device acceptance work.

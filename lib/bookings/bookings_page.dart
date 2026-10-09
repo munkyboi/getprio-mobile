@@ -11,6 +11,7 @@ import '../navigation/scroll_aware_app_bar.dart';
 import '../navigation/swipe_back_page_route.dart';
 import 'booking_repository.dart';
 import 'booking_payment.dart';
+import 'booking_presentation.dart';
 
 String bookingDateLabel(DateTime? date) => date == null
     ? 'Schedule unavailable'
@@ -237,6 +238,8 @@ class _BookingDetailPageState extends State<BookingDetailPage>
   late CustomerBooking _item;
   VendorSummary? _vendor;
   Timer? _poll;
+  final Map<String, String> _serviceImages = {};
+  bool _imagesRequested = false;
   bool _fetching = false, _foreground = true, _vendorRequested = false;
   String? _syncError;
   int _request = 0;
@@ -286,6 +289,26 @@ class _BookingDetailPageState extends State<BookingDetailPage>
     }
   }
 
+  Future<void> _loadServiceImages(CustomerBooking item) async {
+    if (_imagesRequested) return;
+    final vendor = '${item.data['tenantSlug'] ?? ''}';
+    final location = '${item.data['locationSlug'] ?? ''}';
+    if (vendor.isEmpty || location.isEmpty) return;
+    _imagesRequested = true;
+    try {
+      final services = await widget.repository.services(vendor, location);
+      if (mounted) {
+        setState(() {
+          for (final service in services) {
+            _serviceImages[service.slug] = service.imageUrl;
+          }
+        });
+      }
+    } catch (_) {
+      _imagesRequested = false;
+    }
+  }
+
   Future<void> _refresh() async {
     if (_fetching || !mounted) return;
     final request = ++_request;
@@ -298,6 +321,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
         _syncError = null;
       });
       unawaited(_loadVendor(item));
+      unawaited(_loadServiceImages(item));
     } catch (_) {
       if (mounted && request == _request) {
         setState(
@@ -328,9 +352,45 @@ class _BookingDetailPageState extends State<BookingDetailPage>
           name: item.vendorName,
           queueAvailable: false,
         );
-    final services = (item.data['bundleItems'] as List? ?? [])
-        .whereType<Map<String, dynamic>>()
+    final services = bookingServiceItems(item);
+    final starts =
+        services
+            .map((s) => bookingTime(s['scheduledStartAt']))
+            .whereType<DateTime>()
+            .toList()
+          ..sort();
+    final ends =
+        services
+            .map((s) => bookingTime(s['scheduledEndAt']))
+            .whereType<DateTime>()
+            .toList()
+          ..sort();
+    final start = starts.isEmpty ? item.startAt : starts.first;
+    final end = ends.isEmpty
+        ? bookingTime(item.data['scheduledEndAt'])
+        : ends.last;
+    final minutes = start != null && end != null
+        ? end.difference(start).inMinutes
+        : 0;
+    final duration = minutes <= 0
+        ? 'Schedule set'
+        : minutes < 60
+        ? '$minutes min'
+        : '${(minutes / 60).toStringAsFixed(minutes % 60 == 0 ? 0 : 1)} hrs';
+    final group = item.data['groupFundedCampaign'];
+    final amounts = services
+        .map((s) => s['priceAmountCents'])
+        .whereType<num>()
         .toList();
+    final total = group is Map && group['targetAmountCents'] is num
+        ? (group['targetAmountCents'] as num) +
+              ((group['roundingAdjustmentCents'] as num?) ?? 0)
+        : amounts.length == services.length
+        ? amounts.fold<num>(0, (a, b) => a + b)
+        : null;
+    final currency = group is Map
+        ? group['currency']
+        : item.data['serviceCurrency'] ?? services.first['currency'];
     return Scaffold(
       headers: const [DetailPassAppBar(title: 'Booking details')],
       child: SafeArea(
@@ -339,114 +399,199 @@ class _BookingDetailPageState extends State<BookingDetailPage>
           key: const Key('booking-details-page'),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 36),
           children: [
-            DetailPassCard(
-              key: const Key('booking-details-card'),
-              vendor: vendor,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Your booking').h3(),
-                const SizedBox(height: 12),
-                Text(
-                  item.reference.isEmpty ? 'Booking request' : item.reference,
-                ).h2(),
-                const SizedBox(height: 12),
-                Text(item.vendorName).bold(),
-                Text(item.locationName),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                DetailPassCard(
+                  key: const Key('booking-details-card'),
+                  vendor: vendor,
                   children: [
-                    SecondaryBadge(
-                      child: Text(
-                        'Booking: ${bookingStatusLabel(item.status)}',
+                    Text(
+                      item.reference.isEmpty
+                          ? 'Booking request'
+                          : item.reference,
+                    ).h2(),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        BookingStatusBadge(
+                          status: item.status,
+                          label: 'Booking: ${bookingStatusLabel(item.status)}',
+                        ),
+                        BookingStatusBadge(
+                          status: item.paymentStatus,
+                          label:
+                              'Payment: ${bookingStatusLabel(item.paymentStatus)}',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          LucideIcons.mapPin,
+                          size: 20,
+                          color: GetPrioTheme.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(item.vendorName).bold(),
+                              if (item.locationName.isNotEmpty)
+                                Text(item.locationName),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: GetPrioTheme.paperAccent,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(LucideIcons.calendarDays, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  start == null
+                                      ? 'Schedule unavailable'
+                                      : bookingDay(start),
+                                ).bold(),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            bookingRange(
+                              start?.toIso8601String(),
+                              end?.toIso8601String(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 20,
+                            runSpacing: 8,
+                            children: [
+                              Text(
+                                '$duration · ${services.length} ${services.length == 1 ? 'service' : 'services'}',
+                              ),
+                              if (total != null)
+                                Text(
+                                  'Total fee ${bookingMoney(total, currency)}',
+                                ).bold(),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    OutlineBadge(
-                      child: Text(
-                        'Payment: ${bookingStatusLabel(item.paymentStatus)}',
-                      ),
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          LucideIcons.info,
+                          size: 18,
+                          color: GetPrioTheme.info,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(item.nextStep)),
+                      ],
                     ),
+                    const DetailPassDivider(),
+                    const Text('Booked services').h3(),
+                    for (final service in services)
+                      BookingServiceCard(
+                        item: service,
+                        imageUrl:
+                            '${service['imageUrl'] ?? _serviceImages[service['serviceSlug']] ?? ''}',
+                      ),
+                    if ('${item.data['customerName'] ?? ''}'.isNotEmpty ||
+                        '${item.data['customerPhone'] ?? ''}'.isNotEmpty) ...[
+                      const DetailPassDivider(),
+                      const Text('Your visit').h3(),
+                      if ('${item.data['customerName'] ?? ''}'.isNotEmpty)
+                        DetailPassField(
+                          label: 'Customer',
+                          value: '${item.data['customerName']}',
+                        ),
+                      if ('${item.data['customerPhone'] ?? ''}'.isNotEmpty)
+                        DetailPassField(
+                          label: 'Mobile number',
+                          value: '${item.data['customerPhone']}',
+                        ),
+                    ],
+                    if ('${item.data['notes'] ?? ''}'.isNotEmpty)
+                      DetailPassField(
+                        label: 'Notes',
+                        value: '${item.data['notes']}',
+                      ),
+                    if (item.status == 'pending' &&
+                        item.data['pendingExpiresAt'] != null)
+                      DetailPassField(
+                        label: 'Pending deadline',
+                        value: bookingDateLabel(
+                          bookingTime(item.data['pendingExpiresAt']),
+                        ),
+                      ),
+                    if ('${item.data['expirationReason'] ?? ''}'.isNotEmpty)
+                      DetailPassField(
+                        label: 'Expiration reason',
+                        value: '${item.data['expirationReason']}',
+                      ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: GetPrioTheme.paperAccent,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Text(item.nextStep),
+                BookingSection(
+                  key: const Key('booking-payment-section'),
+                  children: [
+                    const Text('Your payment').h3(),
+                    const SizedBox(height: 14),
+                    if (item.canSubmitProof)
+                      BookingPayment(
+                        key: ValueKey(item.id),
+                        repository: widget.repository,
+                        booking: item,
+                        onSubmitted: _proofSubmitted,
+                      )
+                    else if (item.hasPaymentProof)
+                      BookingProofSummary(
+                        key: ValueKey(item.id),
+                        booking: item,
+                        repository: widget.repository,
+                      )
+                    else ...[
+                      Text('Payment: ${bookingStatusLabel(item.paymentStatus)}')
+                          .bold(),
+                      const SizedBox(height: 8),
+                      Text(
+                        item.data['bookingPaymentSource'] == 'group_funded'
+                            ? 'Payment is managed through your group-funded campaign.'
+                            : item.requiresManualPayment
+                            ? 'No payment receipt was submitted for this booking.'
+                            : 'No manual payment proof is required for this booking.',
+                      ),
+                      if ('${item.data['paymentRejectionReason'] ?? ''}'
+                          .isNotEmpty)
+                        DetailPassField(
+                          label: 'Vendor review',
+                          value: '${item.data['paymentRejectionReason']}',
+                        ),
+                    ],
+                  ],
                 ),
-                const DetailPassDivider(),
-                DetailPassField(
-                  label: 'Scheduled visit',
-                  value: bookingDateLabel(item.startAt),
-                ),
-                if ('${item.data['customerName'] ?? ''}'.isNotEmpty)
-                  DetailPassField(
-                    label: 'Customer',
-                    value: '${item.data['customerName']}',
-                  ),
-                const SizedBox(height: 12),
-                const Text('Services').h3(),
-                if (services.isEmpty)
-                  DetailPassField(label: 'Service', value: item.serviceName)
-                else
-                  for (final service in services)
-                    DetailPassField(
-                      label: '${service['serviceName'] ?? 'Service'}',
-                      value: 'Quantity: ${service['bookingQuantity'] ?? 1}',
-                    ),
-                if ('${item.data['notes'] ?? ''}'.isNotEmpty)
-                  DetailPassField(
-                    label: 'Notes',
-                    value: '${item.data['notes']}',
-                  ),
-                if (item.status == 'pending' &&
-                    item.data['pendingExpiresAt'] != null)
-                  DetailPassField(
-                    label: 'Pending deadline',
-                    value: bookingDateLabel(
-                      DateTime.tryParse('${item.data['pendingExpiresAt']}')
-                          ?.toLocal(),
-                    ),
-                  ),
-                if ('${item.data['paymentRejectionReason'] ?? ''}'.isNotEmpty)
-                  DetailPassField(
-                    label: 'Payment review',
-                    value: '${item.data['paymentRejectionReason']}',
-                  ),
-                if ('${item.data['expirationReason'] ?? ''}'.isNotEmpty)
-                  DetailPassField(
-                    label: 'Expiration reason',
-                    value: '${item.data['expirationReason']}',
-                  ),
-                if (item.canSubmitProof) ...[
-                  const DetailPassDivider(),
-                  BookingPayment(
-                    key: ValueKey(item.id),
-                    repository: widget.repository,
-                    booking: item,
-                    onSubmitted: _proofSubmitted,
-                  ),
-                ],
-                if (item.hasPaymentProof) ...[
-                  const DetailPassDivider(),
-                  DetailPassField(
-                    label: 'Payment reference',
-                    value: '${item.data['paymentReference'] ?? ''}',
-                  ),
-                  DetailPassField(
-                    label: 'Receipt',
-                    value:
-                        '${(item.data['paymentProof'] as Map)['fileName'] ?? 'Submitted'}',
-                  ),
-                ],
-                const DetailPassDivider(),
-                const Text(
-                  'A queue ticket is created after the vendor checks you in.',
-                ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 if (_syncError != null) ...[
                   Text(_syncError!),
                   const SizedBox(height: 8),
@@ -454,10 +599,18 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                     onPressed: _fetching ? null : _refresh,
                     child: const Text('Try again'),
                   ),
+                  const SizedBox(height: 8),
                 ],
                 OutlineButton(
                   onPressed: _fetching ? null : _refresh,
                   child: Text(_fetching ? 'Updating...' : 'Refresh status'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Status updates automatically while this screen is open.',
+                  style: Theme.of(context).typography.small
+                      .copyWith(color: GetPrioTheme.mutedInk),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
