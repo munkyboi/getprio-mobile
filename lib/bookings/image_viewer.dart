@@ -1,5 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../navigation/scroll_aware_app_bar.dart';
+
 class BookingImageViewer extends StatelessWidget {
   const BookingImageViewer({
     super.key,
@@ -10,7 +12,7 @@ class BookingImageViewer extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     headers: [
-      AppBar(
+      ScrollAwareAppBar(
         title: Text(title),
         leading: [
           IconButton.ghost(

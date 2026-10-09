@@ -2309,7 +2309,15 @@ class _CustomerShellState extends State<CustomerShell>
                   onOpenJoin: (vendor, locationSlug) =>
                       unawaited(_openVendorJoin(vendor, locationSlug)),
                 ),
-                ListsPage(onTickets: _openTickets, onBookings: _openBookings),
+                ListsPage(
+                  onTickets: _openTickets,
+                  onBookings: _openBookings,
+                  active: _selectedDestination == CustomerDestination.lists,
+                  ticketRepository: widget.ticketRepository,
+                  bookingRepository: _bookingRepository,
+                  onOpenTicket: _openTicketDetails,
+                  onOpenBooking: _openBookingDetails,
+                ),
                 AccountPage(
                   socialRepository: widget.directoryRepository?.social,
                   onOpenVendor: _openFavoriteVendor,
@@ -2373,8 +2381,30 @@ class _CustomerShellState extends State<CustomerShell>
     _ticketsOpen = false;
   }
 
-  void _openBookings() {
-    Navigator.of(context).push(
+  Future<void> _openBookingDetails(CustomerBooking booking) async {
+    final repository = _bookingRepository;
+    if (repository == null) return;
+    await Navigator.of(context).push<void>(
+      SwipeBackPageRoute<void>(
+        builder: (_) => BookingDetailPage(
+          repository: repository,
+          booking: booking,
+          onCheckedIn: widget.ticketRepository?.requestRefresh,
+          onOpenTicket: (item) => _openBookingQueueTicket(
+            context,
+            item,
+            bookingRepository: repository,
+            ticketRepository: widget.ticketRepository,
+            queueRepository: widget.queueRepository,
+            directoryRepository: widget.directoryRepository,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openBookings() async {
+    await Navigator.of(context).push(
       SwipeBackPageRoute<void>(
         builder: (_) => BookingsPage(
           repository: _bookingRepository,
@@ -2390,6 +2420,7 @@ class _CustomerShellState extends State<CustomerShell>
         ),
       ),
     );
+    if (mounted) widget.ticketRepository?.requestRefresh();
   }
 
   void _openFavoriteVendor(VendorSummary vendor) {
@@ -2509,8 +2540,8 @@ class _CustomerShellState extends State<CustomerShell>
     });
   }
 
-  void _openTicketDetails(QueueTicket ticket) {
-    Navigator.of(context).push(
+  Future<void> _openTicketDetails(QueueTicket ticket) async {
+    await Navigator.of(context).push(
       SwipeBackPageRoute<void>(
         builder: (context) => TicketDetailsPage(
           ticket: ticket,
@@ -5034,12 +5065,8 @@ class _TicketsPageState extends State<TicketsPage> {
           child: ListView(
             key: const Key('tickets-page'),
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
             children: [
-              const Text('My tickets').h2(),
-              const SizedBox(height: 4),
-              const Text('Active and historical queue tickets.'),
-              const SizedBox(height: 20),
               if (_visibleInvitations?.isNotEmpty == true) ...[
                 _ticketInvitationCard(_visibleInvitations!),
                 const SizedBox(height: 24),

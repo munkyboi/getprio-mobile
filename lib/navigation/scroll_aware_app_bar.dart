@@ -1,8 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 
-/// The shared app bar with a stable paper surface background.
+/// Shared screen header: title stays centered regardless of back/actions.
 class ScrollAwareAppBar extends StatelessWidget {
   const ScrollAwareAppBar({
     super.key,
@@ -10,20 +12,43 @@ class ScrollAwareAppBar extends StatelessWidget {
     this.leading = const [],
     this.trailing = const [],
   });
-
   final Widget? title;
-  final List<Widget> leading;
-  final List<Widget> trailing;
-
+  final List<Widget> leading, trailing;
   @override
-  Widget build(BuildContext context) {
-    return AppBar(
-      title: title,
-      leading: leading,
-      trailing: trailing,
-      backgroundColor: GetPrioTheme.paper,
-      surfaceBlur: 0,
-      surfaceOpacity: 0,
-    );
-  }
+  Widget build(BuildContext context) => AppBar(
+    backgroundColor: GetPrioTheme.paper,
+    surfaceBlur: 0,
+    surfaceOpacity: 0,
+    child: SizedBox(
+      height: 48,
+      width: double.infinity,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (title != null)
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal:
+                    math.max(leading.length, trailing.length) * 48.0 + 8,
+              ),
+              child: DefaultTextStyle.merge(
+                style: const TextStyle(fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center,
+                child: title!,
+              ),
+            ),
+          if (leading.isNotEmpty)
+            Positioned(
+              left: 0,
+              child: Row(mainAxisSize: MainAxisSize.min, children: leading),
+            ),
+          if (trailing.isNotEmpty)
+            Positioned(
+              right: 0,
+              child: Row(mainAxisSize: MainAxisSize.min, children: trailing),
+            ),
+        ],
+      ),
+    ),
+  );
 }

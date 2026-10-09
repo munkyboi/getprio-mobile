@@ -179,10 +179,44 @@ class BookingRepository {
         .toList();
   }
 
-  Future<Map<String, dynamic>> list({int page = 1}) => api.get(
+  Future<Map<String, dynamic>> list({int page = 1, String? status}) => api.get(
     '/api/account/bookings',
-    query: {'page': '$page', 'pageSize': '20'},
+    query: {'page': '$page', 'pageSize': '20', 'status': ?status},
   );
+  Future<List<CustomerBooking>> upcoming() async {
+    Future<List<CustomerBooking>> forStatus(String status) async {
+      final items = <CustomerBooking>[];
+      var page = 1;
+      while (true) {
+        final response = await list(page: page, status: status);
+        final next = (response['bookings'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(CustomerBooking.new)
+            .where((item) => item.isUpcoming)
+            .toList();
+        items.addAll(next);
+        final pagination = response['pagination'];
+        if (pagination is! Map ||
+            page >= ((pagination['totalPages'] as num?)?.toInt() ?? page)) {
+          break;
+        }
+        page++;
+      }
+      return items;
+    }
+
+    final pages = await Future.wait(
+      ['pending', 'confirmed', 'rescheduled'].map(forStatus),
+    );
+    final byId = <String, CustomerBooking>{
+      for (final item in pages.expand((p) => p)) item.id: item,
+    };
+    return byId.values.toList()..sort(
+      (a, b) =>
+          (a.startAt ?? DateTime(9999)).compareTo(b.startAt ?? DateTime(9999)),
+    );
+  }
+
   Future<String> paymentProofUrl(String id) async {
     final response = await api.get(
       '/api/account/bookings/${Uri.encodeComponent(id)}/payment-proof',

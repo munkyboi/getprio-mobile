@@ -295,15 +295,19 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 12, 12),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('BOOKING'),
-                            Text('Plan your visit').h2(),
+                            Text(
+                              'Plan your visit',
+                              style: Theme.of(context).typography.h2,
+                            ),
+                            const SizedBox(height: 4),
                             Text(
                               '${widget.vendor.name} · ${widget.location.name}',
                             ),

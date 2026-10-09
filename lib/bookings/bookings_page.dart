@@ -1,3 +1,7 @@
+import 'package:cupertino_tabbar/cupertino_tabbar.dart' as cupertino_tabs;
+
+import 'booking_list_row.dart';
+
 import 'dart:async';
 
 import '../auth/auth_repository.dart';
@@ -115,28 +119,31 @@ class _BookingsPageState extends State<BookingsPage>
             key: const Key('bookings-page'),
             padding: const EdgeInsets.all(20),
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Button(
-                      style: _history
-                          ? const ButtonStyle.outline()
-                          : const ButtonStyle.primary(),
-                      onPressed: () => setState(() => _history = false),
-                      child: const Text('Upcoming'),
+              cupertino_tabs.CupertinoTabBar(
+                GetPrioTheme.ink,
+                GetPrioTheme.teal,
+                [
+                  for (final label in ['Upcoming', 'History'])
+                    Semantics(
+                      selected: _history == (label == 'History'),
+                      button: true,
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          color: Color(0xFFFFFFFF),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Button(
-                      style: _history
-                          ? const ButtonStyle.primary()
-                          : const ButtonStyle.outline(),
-                      onPressed: () => setState(() => _history = true),
-                      child: const Text('History'),
-                    ),
-                  ),
                 ],
+                () => _history ? 1 : 0,
+                (int index) => setState(() => _history = index == 1),
+                key: const Key('booking-tabs'),
+                allowExpand: true,
+                useSeparators: true,
+                innerVerticalPadding: 12,
+                outerHorizontalPadding: 0,
+                duration: const Duration(milliseconds: 250),
               ),
               const SizedBox(height: 20),
               if (widget.repository == null)
@@ -155,7 +162,8 @@ class _BookingsPageState extends State<BookingsPage>
                 if (!_loading &&
                     _error == null &&
                     _items.where((item) => item.isUpcoming != _history).isEmpty)
-                  Card(
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
                     child: Text(
                       _history ? 'No past bookings yet.' : 'No upcoming bookings. Choose a vendor to plan a visit.',
                     ),
@@ -163,56 +171,21 @@ class _BookingsPageState extends State<BookingsPage>
                 for (final item in _items.where(
                   (item) => item.isUpcoming != _history,
                 ))
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Button(
-                      style: const ButtonStyle.ghost(),
-                      onPressed: () async {
-                        await Navigator.of(context).push(
-                          SwipeBackPageRoute<void>(
-                            builder: (_) => BookingDetailPage(
-                              repository: widget.repository!,
-                              booking: item,
-                              onOpenTicket: widget.onOpenTicket,
-                              onCheckedIn: widget.onCheckedIn,
-                            ),
-                          ),
-                        );
-                        if (mounted) await _load();
-                      },
-                      child: Card(
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(child: Text(item.vendorName).bold()),
-                                  const Icon(
-                                    LucideIcons.chevronRight,
-                                    size: 18,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '${item.locationName} · ${item.serviceName}',
-                              ),
-                              const SizedBox(height: 8),
-                              Text(bookingDateLabel(item.startAt)),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Booking: ${bookingStatusLabel(item.status)}',
-                              ),
-                              Text(
-                                'Payment: ${bookingStatusLabel(item.paymentStatus)}',
-                              ),
-                            ],
+                  BookingListRow(
+                    booking: item,
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        SwipeBackPageRoute<void>(
+                          builder: (_) => BookingDetailPage(
+                            repository: widget.repository!,
+                            booking: item,
+                            onOpenTicket: widget.onOpenTicket,
+                            onCheckedIn: widget.onCheckedIn,
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                      if (mounted) await _load();
+                    },
                   ),
                 if (_hasMore)
                   GetPrioActionButton.outline(

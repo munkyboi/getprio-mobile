@@ -2,14 +2,28 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 import 'tab_page_header.dart';
+import 'lists_overview.dart';
+import '../account/ticket_repository.dart';
+import '../bookings/booking_repository.dart';
+import '../queue/queue_models.dart';
 
 class ListsPage extends StatelessWidget {
   const ListsPage({
     super.key,
     required this.onTickets,
     required this.onBookings,
+    this.active = true,
+    this.ticketRepository,
+    this.bookingRepository,
+    this.onOpenTicket,
+    this.onOpenBooking,
   });
   final VoidCallback onTickets, onBookings;
+  final bool active;
+  final QueueTicketRepository? ticketRepository;
+  final BookingRepository? bookingRepository;
+  final Future<void> Function(QueueTicket)? onOpenTicket;
+  final Future<void> Function(CustomerBooking)? onOpenBooking;
   @override
   Widget build(BuildContext context) => ListView(
     key: const Key('lists-page'),
@@ -44,6 +58,13 @@ class ListsPage extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      ListsOverview(
+        active: active,
+        ticketRepository: ticketRepository,
+        bookingRepository: bookingRepository,
+        onOpenTicket: onOpenTicket,
+        onOpenBooking: onOpenBooking,
       ),
     ],
   );

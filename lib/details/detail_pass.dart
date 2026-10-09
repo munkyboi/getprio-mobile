@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
+import '../navigation/scroll_aware_app_bar.dart';
 import '../directory/vendor_profile_hero.dart';
 import '../queue/queue_models.dart';
 
@@ -9,31 +10,15 @@ class DetailPassAppBar extends StatelessWidget {
   final String title;
   final Key? backKey;
   @override
-  Widget build(BuildContext context) => AppBar(
-    backgroundColor: GetPrioTheme.paper,
-    surfaceBlur: 0,
-    surfaceOpacity: 0,
-    child: SizedBox(
-      height: 48,
-      width: double.infinity,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 56),
-            child: Text(title).bold(),
-          ),
-          Positioned(
-            left: 0,
-            child: IconButton.ghost(
-              key: backKey,
-              icon: const Icon(LucideIcons.arrowLeft),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) => ScrollAwareAppBar(
+    title: Text(title),
+    leading: [
+      IconButton.ghost(
+        key: backKey,
+        icon: const Icon(LucideIcons.arrowLeft),
+        onPressed: () => Navigator.of(context).pop(),
       ),
-    ),
+    ],
   );
 }
 

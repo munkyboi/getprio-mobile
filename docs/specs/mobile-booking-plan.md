@@ -115,3 +115,16 @@ The shared `GetPrioTheme.safeAreaTopSpacing` token is 10 logical pixels. Custome
 ## Consistent tab headers
 
 Home, Explore, Lists and Profile now use `TabPageHeader` with the same heading typography, bottom separator, eight-pixel title bottom padding, four-pixel description gap and twenty-pixel content gap. It applies no top margin, so the shell's ten-pixel safe-area spacing is the only extra top offset. This removes the prior heading modifier's hidden forty-pixel margin on Home/Explore/Profile and adds the missing separator to Lists. Analysis and all 33 affected navigation, booking UI, Home and Profile tests passed. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Batch this correction into the pending M28 update while the board access-policy blocker persists.
+
+## Lists, list rows and screen header refinements
+
+- Bookings uses `cupertino_tabbar` 2.0.0 for the requested animated, segmented Upcoming/History control, with separators and selected semantics. The dependency is pure Dart. Booking rows and empty states use plain list styling; rows have dividers, chevrons, schedule and separate booking/payment badges.
+- Lists retains its two navigation tiles and adds Active queue tickets and Upcoming bookings sections using plain divided rows. Ticket overview filters active statuses; upcoming requests cover pending, confirmed and rescheduled, follow each status's pagination, deduplicate and sort by scheduled start. Each row opens its native detail screen.
+- Lists sections load when selected, refresh from ticket signals/app resume and after returning from details or the full Bookings list. Independent loading/error/retry states retain the last successful rows. Hidden tabs do not start signal-driven requests.
+- Shared screen app bars now keep titles bold and centered relative to the whole bar, with back/actions preserved and symmetric title clearance. Detail pass and image viewer headers use this same component.
+- Tickets removes the redundant My tickets heading, separator and subtitle; content starts ten pixels below the app bar.
+- The booking sheet removes BOOKING, uses heading typography without its automatic forty-pixel top margin, adds eight-pixel header top padding and aligns the close action with the heading area. Draft confirmation and payment/OTP behavior are preserved.
+
+Verification: analysis passed; all 311 tests passed, including tab switching, status pagination/sorting, active-ticket filtering, row navigation and last-data retention after refresh errors. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. No production booking, OTP, payment proof or arrival was submitted during verification; physical visual/end-to-end acceptance remains pending.
+
+KanbanFlow synchronization remains blocked because the browser could not verify its admin-enforced access policy. Pending M28 update: add this UI refinement, new Lists data sections and dependency, record verification, and retain In Progress with remaining cancellation and physical end-to-end acceptance work.
