@@ -63,3 +63,5 @@ A scheduled service request at one vendor location. Booking status and payment s
 A payment reference and private receipt supplied by the customer for vendor review. Receipt submission is not payment verification or booking confirmation.
 
 The approved mobile booking scope and delivery stages are in `docs/specs/mobile-booking-plan.md`.
+
+Booking development targets the main GetPrio customer app, not the separate Sandbox app. Zero32 Domain is the primary development device.

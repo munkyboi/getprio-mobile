@@ -2,6 +2,8 @@
 
 Approved in chat on 9 October 2026. Primary development device: Zero32 Domain.
 
+Target: the main GetPrio customer mobile app (`mobile-app` repository, iOS `Runner` scheme). The user clarified that this feature is not being built for the separate Sandbox mobile app. Use the main app identity and production API configuration for subsequent device builds.
+
 ## User decisions
 
 - Rename the Tickets bottom destination to Lists, with a grid icon.
@@ -48,8 +50,20 @@ Verification on 9 October 2026:
 - `flutter analyze`: passed, no issues.
 - Full Flutter suite: 290 tests passed.
 - After the final closed-queue display adjustment: all 11 affected tests passed.
-- Signed iOS `Profile-Sandbox` build: succeeded; signature verification passed.
-- Installed and launched `com.getprio.getprioMobile.ios.sandbox` on Zero32 Domain.
+- Initial device preview only: signed iOS `Profile-Sandbox` build: succeeded; signature verification passed.
+- Initial preview installed and launched `com.getprio.getprioMobile.ios.sandbox` on Zero32 Domain.
 - Physical UI/autofill and live booking/payment/vendor acceptance still require review. Installation/launch does not constitute those checks.
 
+That initial Sandbox preview preceded the main-app target clarification and is not main-app acceptance evidence.
+
 The first Flutter device build timed out during Xcode build-settings lookup. The successful profile build used Xcode with explicit Sandbox Dart defines. Ignored CocoaPods build files were restored from the release checkout with the same lockfile, and cached plugin source references were relocated using structured Swift property-list editing. No tracked iOS project files were changed.
+
+## Main app target verification after clarification
+
+On 9 October 2026, built the main iOS `Runner` scheme with `Profile`, `GETPRIO_ENVIRONMENT=production`, `GETPRIO_API_BASE_URL=https://api.getprio.online`, and approved hosts `api.getprio.online,getprio.online`. No Sandbox flavor was supplied.
+
+- Signed main build succeeded; `codesign --verify --deep --strict` passed.
+- Artifact identity: `com.getprio.getprioMobile`, display name `GetPrio Mobile`; Firebase bundle identity matched.
+- Installed and launched the main app successfully on Zero32 Domain.
+- All nine environment configuration tests passed.
+- This is a local development build, not an App Store/TestFlight release. Physical interaction, live OTP/booking, payment and vendor acceptance remain pending.
