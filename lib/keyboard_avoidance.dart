@@ -19,6 +19,7 @@ class KeyboardAwareScrollView extends StatefulWidget {
     super.key,
     required this.child,
     this.padding,
+    this.reserveKeyboardSpace = true,
     this.controller,
     this.physics,
     this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.onDrag,
@@ -30,6 +31,10 @@ class KeyboardAwareScrollView extends StatefulWidget {
 
   final Widget child;
   final EdgeInsets? padding;
+
+  /// Disable inside a Scaffold body that already resizes for the keyboard.
+  /// Overlays that do not resize still need the default keyboard padding.
+  final bool reserveKeyboardSpace;
   final ScrollController? controller;
   final ScrollPhysics? physics;
   final ScrollViewKeyboardDismissBehavior keyboardDismissBehavior;
@@ -65,7 +70,9 @@ class _KeyboardAwareScrollViewState extends State<KeyboardAwareScrollView>
   @override
   Widget build(BuildContext context) {
     final basePadding = widget.padding ?? EdgeInsets.zero;
-    final keyboardInset = keyboardInsetOf(context);
+    final keyboardInset = widget.reserveKeyboardSpace
+        ? keyboardInsetOf(context)
+        : 0.0;
     final effectivePadding = widget.scrollDirection == Axis.vertical
         ? basePadding.copyWith(bottom: basePadding.bottom + keyboardInset)
         : basePadding;

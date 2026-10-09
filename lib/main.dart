@@ -887,12 +887,7 @@ class _SignInPageState extends State<SignInPage>
         child: Center(
           child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(
-              24,
-              24,
-              24,
-              24 + MediaQuery.viewInsetsOf(context).bottom,
-            ),
+            padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
@@ -1427,6 +1422,7 @@ class _RegisterPageState extends State<RegisterPage>
     final challenge = _registrationChallenge;
     return ScrollNotificationObserver(
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(
             title: Text(challenge == null ? 'Create account' : 'Verify email'),
@@ -1439,11 +1435,15 @@ class _RegisterPageState extends State<RegisterPage>
             ],
           ),
         ],
-        child: KeyboardAwareScrollView(
-          padding: const EdgeInsets.all(24),
-          child: challenge == null
-              ? _buildRegistrationForm(context)
-              : _buildOtpForm(context, challenge),
+        child: SafeArea(
+          top: false,
+          child: KeyboardAwareScrollView(
+            reserveKeyboardSpace: false,
+            padding: const EdgeInsets.all(24),
+            child: challenge == null
+                ? _buildRegistrationForm(context)
+                : _buildOtpForm(context, challenge),
+          ),
         ),
       ),
     );
@@ -1934,6 +1934,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage>
   Widget build(BuildContext context) {
     return ScrollNotificationObserver(
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(
             title: const Text('Password recovery'),
@@ -1946,33 +1947,37 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage>
             ],
           ),
         ],
-        child: KeyboardAwareScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Reset your password').h1(),
-              const SizedBox(height: 8),
-              Text(
-                _sent
-                    ? 'If an account exists for this email, recovery instructions are on the way.'
-                    : 'Enter your email and we will send recovery instructions.',
-              ),
-              const SizedBox(height: 20),
-              if (!_sent) ...[
-                _LabeledTextField(
-                  controller: _email,
-                  label: 'Email address',
-                  placeholder: 'you@example.com',
-                  keyboardType: TextInputType.emailAddress,
+        child: SafeArea(
+          top: false,
+          child: KeyboardAwareScrollView(
+            reserveKeyboardSpace: false,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Reset your password').h1(),
+                const SizedBox(height: 8),
+                Text(
+                  _sent
+                      ? 'If an account exists for this email, recovery instructions are on the way.'
+                      : 'Enter your email and we will send recovery instructions.',
                 ),
                 const SizedBox(height: 20),
-                GetPrioActionButton.primary(
-                  onPressed: _busy ? null : _request,
-                  child: Text(_busy ? 'Sending...' : 'Send instructions'),
-                ),
+                if (!_sent) ...[
+                  _LabeledTextField(
+                    controller: _email,
+                    label: 'Email address',
+                    placeholder: 'you@example.com',
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 20),
+                  GetPrioActionButton.primary(
+                    onPressed: _busy ? null : _request,
+                    child: Text(_busy ? 'Sending...' : 'Send instructions'),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -7786,6 +7791,7 @@ class _SecurityPageState extends State<SecurityPage>
       null => 'Privacy and security',
     };
     final content = KeyboardAwareScrollView(
+      reserveKeyboardSpace: widget.asSheet,
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -7985,6 +7991,7 @@ class _SecurityPageState extends State<SecurityPage>
     }
     return ScrollNotificationObserver(
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(
             title: const Text('Security and MFA'),
@@ -7997,7 +8004,7 @@ class _SecurityPageState extends State<SecurityPage>
             ],
           ),
         ],
-        child: content,
+        child: SafeArea(top: false, child: content),
       ),
     );
   }

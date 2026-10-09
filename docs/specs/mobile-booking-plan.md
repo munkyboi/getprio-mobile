@@ -200,3 +200,13 @@ Verification: flutter analyze reports no issues; all 55 affected tests pass, cov
 KanbanFlow update pending for M28: record dark illustrations, theme-aware fallback logos/ring, asset bundling and verification. Keep In Progress and preserve remaining lifecycle/API/release acceptance dependencies. Board access remains blocked because the admin-enforced browser policy could not be verified; no security workaround was used.
 
 Device verification: the signed main Runner Profile build with production API defines passed codesign verification, contains all three dark assets in its Flutter bundle, and installed/launched successfully as com.getprio.getprioMobile on Zero32 (00008120-001A3D101E68C01E). Physical visual acceptance remains with the customer.
+
+## Standard form keyboard resizing — 9 October 2026
+
+Aligned standard forms with the resizing Scaffold + SafeArea + scrollable content pattern. Login retains explicit resizeToAvoidBottomInset true and scrolling with drag-to-dismiss; its redundant inner keyboard inset padding is removed. Registration/email verification and password recovery explicitly enable Scaffold resizing, protect the body with SafeArea below the appbar, and use the shared scroll view without reserving the keyboard height again. Full-screen security/MFA follows the same rule. Security sheets keep the shared keyboard reservation because overlays do not reliably resize.
+
+KeyboardAwareScrollView now has reserveKeyboardSpace (default true for existing overlay consumers), with false reserved for screen bodies already resized by their Scaffold. KeyboardAwareField/Input continue to keep focused inputs within the actual scroll viewport and above the keyboard. Regression coverage checks both resized-screen focus visibility without duplicate padding and unresized-overlay keyboard reservation.
+
+Verification: flutter analyze reports no issues; all 75 affected keyboard, validation, registration, MFA, appearance, booking, social/review and navigation tests pass. KanbanFlow M28 update pending: record standard form resizing/safe-area consistency and duplicate-padding fix with this evidence, retaining In Progress and existing remaining work. Board access is blocked by the unavailable admin-enforced browser policy check; no workaround was used.
+
+Device verification: signed production-configured main Runner Profile build passed codesign verification, installed and launched on Zero32 (00008120-001A3D101E68C01E). Physical keyboard interaction acceptance remains pending customer testing.
