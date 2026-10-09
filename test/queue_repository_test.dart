@@ -79,6 +79,54 @@ void main() {
     expect(ticket.displayStatusLabel, 'Confirmed');
   });
 
+  test('service lifecycle preserves API queue status and timestamps', () {
+    final started = QueueTicket.fromJson({
+      'status': 'called',
+      'customerConfirmedAt': '2026-10-09T04:00:00Z',
+      'serviceStartedAt': '2026-10-09T04:01:00Z',
+    });
+    expect(started.status, TicketStatus.called);
+    expect(started.displayStatusLabel, 'In service');
+    expect(started.needsArrival, isFalse);
+    expect(started.isActive, isTrue);
+    expect(started.canBeCancelled, isFalse);
+    expect(
+      started.copyWith(vendorName: 'Clinic').serviceStartedAt,
+      started.serviceStartedAt,
+    );
+    for (final outcome in ['completed', 'interrupted']) {
+      final finished = QueueTicket.fromJson({
+        'status': outcome == 'completed' ? 'served' : 'unserved',
+        'serviceStartedAt': '2026-10-09T04:01:00Z',
+        'serviceEndedAt': '2026-10-09T04:10:00Z',
+        'serviceOutcome': outcome,
+      });
+      expect(finished.isActive, isFalse);
+      expect(finished.isInService, isFalse);
+      expect(
+        finished.displayStatusLabel,
+        outcome == 'completed' ? 'Completed' : 'Interrupted',
+      );
+      expect(finished.copyWith(vendorName: 'Clinic').serviceOutcome, outcome);
+    }
+    final closedDuringService = QueueTicket.fromJson({
+      'status': 'unserved',
+      'statusReason': 'queue_closed_while_called',
+      'serviceStartedAt': '2026-10-09T04:01:00Z',
+    });
+    expect(closedDuringService.isActive, isFalse);
+    expect(closedDuringService.displayStatusLabel, 'In service');
+    final legacyInterrupted = QueueTicket.fromJson({
+      'status': 'unserved',
+      'statusReason': 'service_interrupted',
+    });
+    expect(legacyInterrupted.displayStatusLabel, 'Interrupted');
+    expect(
+      QueueTicket.fromJson({'status': 'served'}).displayStatusLabel,
+      'Served',
+    );
+  });
+
   test('cancellation rejects a ticket that is no longer waiting', () async {
     final api = FakeQueueApi();
     final repository = QueueRepository(api);

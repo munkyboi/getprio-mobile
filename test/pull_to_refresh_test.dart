@@ -60,7 +60,7 @@ void main() {
 
     api.ticketStatus = 'called';
     api.customerConfirmed = true;
-    await tester.pump(const Duration(minutes: 4, seconds: 59));
+    await tester.pump(const Duration(seconds: 29));
     expect(api.overviewCalls, initialOverviewCalls);
 
     await tester.pump(const Duration(seconds: 1));
@@ -186,6 +186,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
     final page = find.byKey(const Key('tickets-page'));
     await tester.fling(page, const Offset(0, -700), 1000);
     await tester.pumpAndSettle();

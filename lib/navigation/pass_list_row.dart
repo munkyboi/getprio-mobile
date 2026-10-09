@@ -14,7 +14,7 @@ class PassListRow extends StatelessWidget {
   });
   final IconData icon;
   final List<Widget> children, statuses;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool divider;
   @override
   Widget build(BuildContext context) => Button(

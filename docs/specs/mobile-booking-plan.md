@@ -170,3 +170,19 @@ The signed main Runner Profile build passed signature verification and was insta
 ## Test device switch to Zero32
 
 On 9 October 2026, the user switched the main-app test target to Zero32 (`00008120-001A3D101E68C01E`). The current signed main Runner Profile build, including Active/History ticket tabs, was installed and launched successfully on Zero32. Subsequent device work should use this device; earlier Zero32 Domain verification records remain historical. Physical feature acceptance on Zero32 remains pending.
+
+## Shared Lists ticket rows and service lifecycle presentation — 9 October 2026
+
+Lists Active queue tickets now uses the same TicketListRow as Tickets History, including vendor, ticket number, location, joined date, uppercase status badge, icon and full-row navigation with a chevron. The previous duplicated overview markup is removed.
+
+Checked the API's current mainline service timing contract: Start service retains called and sets serviceStartedAt; Complete service records completed and changes called to served; Interrupt service records interrupted and changes called to unserved with service_interrupted. Queue closure can terminate the queue ticket without ending actual service. Mobile preserves the persisted queue status for grouping/permissions, and presents Confirmed, In service, Completed or Interrupted from timing/outcome fields. Older tickets retain their existing labels; interruption reasons remain readable when timing fields are absent.
+
+The model parses and preserves serviceStartedAt, serviceEndedAt and serviceOutcome through enrichment. Shared badges and Home/Tickets progress use these display states; details show service timestamps and guidance, and suppress the called/arrival alert once service starts. Detail polling runs every 15 seconds only while foreground and the current route, skips overlapping requests and preserves the last successful details on errors. Existing shell polling now runs every 30 seconds while active tickets exist; push and foreground refresh continue.
+
+API dependency: current account overview/history and queue focusTicket omit service progress. A separate additive backend fix is prepared in web-app/worktrees/mobile-ticket-service-fields, branch codex/mobile-ticket-service-fields, exposing nullable timing/outcome fields (snake_case for first-party mobile ticket resources). This fix has not been deployed. Until released, the mobile app can identify interrupted tickets from statusReason but cannot consistently distinguish Confirmed from In service.
+
+Verification: flutter analyze reports no issues; all 318 mobile tests pass, including visible detail polling from In service to Interrupted, lifecycle parsing/copying/legacy fallback, list navigation/filtering, and history scroll retention. All 24 affected API integration/snapshot tests pass and changed backend files pass syntax checks.
+
+KanbanFlow update pending: M28 remains In Progress. Record the shared Lists rows, service lifecycle presentation and refresh behavior, 318 mobile/24 API checks, and the separate API response deployment dependency. Board access is blocked because the admin-enforced browser policy could not be verified; do not bypass its security controls. Remaining lifecycle/release acceptance work stays open.
+
+Device verification: the signed main Runner Profile build with production API defines passed codesign verification, installed and launched as com.getprio.getprioMobile on Zero32 (00008120-001A3D101E68C01E). Live vendor-driven service acceptance remains pending API deployment; installation/launch is not that acceptance. Backend response fix commit: 9ecf6838 (local, not pushed/deployed).

@@ -180,6 +180,10 @@ Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
     'customerName': 'Sandbox test user',
     'status': ticket['status'],
     'statusReason': ticket['status_reason'],
+    'customerConfirmedAt': ticket['customer_confirmed_at'],
+    'serviceStartedAt': ticket['service_started_at'],
+    'serviceEndedAt': ticket['service_ended_at'],
+    'serviceOutcome': ticket['service_outcome'],
     'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
     'tenantSlug':
         ticket['tenant_slug'] ??
@@ -267,6 +271,7 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
       queryParameters: {'page': '$page', 'limit': '$limit'},
     );
   }
+
   @override
   Future<Map<String, dynamic>> loadInvitations() async {
     if (!sandbox) return const {'invitations': <dynamic>[]};
@@ -282,6 +287,7 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
     }
     return client.post('/api/mobile/ticket-invitations/$ticketId/accept', {});
   }
+
   Future<Map<String, dynamic>> _loadSandboxTickets({
     required String view,
     int limit = 20,

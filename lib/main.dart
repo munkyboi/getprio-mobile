@@ -1,5 +1,5 @@
 import 'navigation/list_filter_tabs.dart';
-import 'navigation/pass_list_row.dart';
+import 'queue/ticket_list_row.dart';
 import 'appearance.dart';
 import 'navigation/tab_page_header.dart';
 import 'directory/vendor_profile_hero.dart';
@@ -2274,7 +2274,7 @@ class _CustomerShellState extends State<CustomerShell>
     _ticketRefreshTimer?.cancel();
     final repository = widget.ticketRepository;
     if (repository == null) return;
-    _ticketRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _ticketRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       if (repository.hasActiveTickets) repository.requestRefresh();
     });
@@ -2904,7 +2904,7 @@ class _ActiveTicketCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Active ticket').h3(),
-                  _TicketStatusBadge(ticket: ticket),
+                  TicketStatusBadge(ticket: ticket),
                 ],
               ),
               const SizedBox(height: 12),
@@ -2976,29 +2976,6 @@ class _StatMetric extends StatelessWidget {
         Text(label),
       ],
     );
-  }
-}
-
-class _TicketStatusBadge extends StatelessWidget {
-  const _TicketStatusBadge({required this.ticket});
-
-  final QueueTicket ticket;
-
-  @override
-  Widget build(BuildContext context) {
-    final status = ticket.status;
-    final label = ticket.displayStatusLabel.toUpperCase();
-    return switch (status) {
-      TicketStatus.waiting => SecondaryBadge(child: Text(label)),
-      TicketStatus.pendingCarryOver => SecondaryBadge(child: Text(label)),
-      TicketStatus.called => PrimaryBadge(child: Text(label)),
-      TicketStatus.served => SecondaryBadge(child: Text(label)),
-      TicketStatus.skipped => DestructiveBadge(child: Text(label)),
-      TicketStatus.cancelled => DestructiveBadge(child: Text(label)),
-      TicketStatus.unserved => DestructiveBadge(child: Text(label)),
-      TicketStatus.expired => DestructiveBadge(child: Text(label)),
-      TicketStatus.unknown => OutlineBadge(child: Text(label)),
-    };
   }
 }
 
@@ -5268,7 +5245,7 @@ class _TicketsPageState extends State<TicketsPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(ticket.vendorName ?? 'Queue ticket').h3(),
-                    _TicketStatusBadge(ticket: ticket),
+                    TicketStatusBadge(ticket: ticket),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -5325,21 +5302,10 @@ class _TicketsPageState extends State<TicketsPage> {
     );
   }
 
-  Widget _historyTicketRow(QueueTicket ticket) => PassListRow(
+  Widget _historyTicketRow(QueueTicket ticket) => TicketListRow(
     key: ValueKey('history-ticket-${ticket.id}'),
-    icon: LucideIcons.ticket,
+    ticket: ticket,
     onPressed: () => _openTicketDetails(ticket),
-    statuses: [_TicketStatusBadge(ticket: ticket)],
-    children: [
-      Text(ticket.vendorName ?? 'Queue ticket').h4(),
-      const SizedBox(height: 4),
-      Text('Ticket #${ticket.ticketNumber ?? ticket.lookupCode}'),
-      if (ticket.locationName != null) Text(ticket.locationName!),
-      if (ticket.joinedAt != null) ...[
-        const SizedBox(height: 4),
-        Text(_formatTicketDate(ticket.joinedAt!)),
-      ],
-    ],
   );
 
   void _openTicketDetails(QueueTicket ticket) {
@@ -5357,13 +5323,6 @@ class _TicketsPageState extends State<TicketsPage> {
         ),
       ),
     );
-  }
-
-  String _formatTicketDate(DateTime date) {
-    final local = date.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
   }
 
   Future<QueueTicket?> _confirmCancellation(QueueTicket ticket) async {
@@ -5501,11 +5460,18 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   late Future<_TicketDetailsData> _details;
   QueueTicket? _displayedTicket;
   bool _isCancelling = false;
+  Timer? _statusPoll;
+  bool _pollingStatus = false;
+  int _detailsRevision = 0;
 
   @override
   void initState() {
     super.initState();
     _details = _loadDetails();
+    _statusPoll = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _pollStatus(),
+    );
     widget.ticketRepository?.refreshVersion.addListener(
       _handleTicketRepositoryRefresh,
     );
@@ -5513,6 +5479,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
 
   @override
   void dispose() {
+    _statusPoll?.cancel();
     widget.ticketRepository?.refreshVersion.removeListener(
       _handleTicketRepositoryRefresh,
     );
@@ -5527,7 +5494,34 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     });
   }
 
+  Future<void> _pollStatus() async {
+    if (_pollingStatus ||
+        !mounted ||
+        _isCancelling ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent != true ||
+        (widget.queueRepository == null && widget.ticketRepository == null)) {
+      return;
+    }
+    _pollingStatus = true;
+    try {
+      final pending = _loadDetails(refreshTicket: true);
+      final revision = _detailsRevision;
+      final details = await pending;
+      if (mounted && revision == _detailsRevision && !_isCancelling) {
+        setState(() {
+          _details = SynchronousFuture(details);
+        });
+      }
+    } catch (_) {
+      // Keep the last successful state; the next poll or manual refresh retries.
+    } finally {
+      _pollingStatus = false;
+    }
+  }
+
   Future<_TicketDetailsData> _loadDetails({bool refreshTicket = false}) async {
+    _detailsRevision++;
     var ticket = widget.ticket;
     if (refreshTicket) {
       final ticketRepository = widget.ticketRepository;
@@ -5665,8 +5659,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 36),
               children: [
-                if (ticket.status == TicketStatus.called &&
-                    !ticket.isConfirmed) ...[
+                if (ticket.needsArrival) ...[
                   Container(
                     key: const Key('ticket-called-alert'),
                     padding: const EdgeInsets.all(16),
@@ -5752,14 +5745,26 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                         value: ticket.customerFriendlyStatusReason!,
                         textAlign: TextAlign.left,
                       ),
+                    if (ticket.serviceStartedAt != null)
+                      _TicketDetailRow(
+                        label: 'Service started',
+                        value: _formatTicketDateTime(ticket.serviceStartedAt!),
+                      ),
+                    if (ticket.serviceEndedAt != null)
+                      _TicketDetailRow(
+                        label: 'Service ended',
+                        value: _formatTicketDateTime(ticket.serviceEndedAt!),
+                      ),
                     const SizedBox(height: 16),
-                    if (ticket.status != TicketStatus.called ||
+                    if (ticket.serviceMessage != null ||
+                        ticket.status != TicketStatus.called ||
                         ticket.isConfirmed ||
                         details?.snapshot != null)
                       _TicketQueueStatusCard(
                         ticket: ticket,
                         snapshot: details?.snapshot,
                         showMessage:
+                            ticket.serviceMessage != null ||
                             ticket.status != TicketStatus.called ||
                             ticket.isConfirmed,
                       ),
@@ -5898,7 +5903,7 @@ class _TicketDetailStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _TicketStatusBadge(ticket: ticket);
+    return TicketStatusBadge(ticket: ticket);
   }
 }
 
@@ -5947,16 +5952,19 @@ class _TicketQueueStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final message = switch (ticket.status) {
-      TicketStatus.waiting => 'You are in the queue. Keep this ticket ready.',
-      TicketStatus.called when ticket.customerConfirmedAt != null =>
-        'Your arrival was confirmed. Please wait for staff to begin service.',
-      TicketStatus.called => 'Your ticket was called. Proceed to the vendor.',
-      TicketStatus.served => 'This ticket has already been served.',
-      TicketStatus.pendingCarryOver =>
-        'Your ticket is saved for the next eligible queue day.',
-      _ => 'This ticket is no longer active.',
-    };
+    final message =
+        ticket.serviceMessage ??
+        switch (ticket.status) {
+          TicketStatus.waiting =>
+            'You are in the queue. Keep this ticket ready.',
+          TicketStatus.called when ticket.customerConfirmedAt != null => 'Your arrival was confirmed. Please wait for staff to begin service.',
+          TicketStatus.called =>
+            'Your ticket was called. Proceed to the vendor.',
+          TicketStatus.served => 'This ticket has already been served.',
+          TicketStatus.pendingCarryOver =>
+            'Your ticket is saved for the next eligible queue day.',
+          _ => 'This ticket is no longer active.',
+        };
     return Container(
       key: const Key('ticket-details-queue-status'),
       padding: const EdgeInsets.all(18),
@@ -6095,7 +6103,7 @@ class _TicketProgress extends StatelessWidget {
                     : LucideIcons.circleDot)
               : null,
           caption: _statusCaption(ticket),
-          color: _statusColor(context, ticket.status),
+          color: _statusColor(context, ticket),
           isLast: true,
         ),
       ],
@@ -6112,6 +6120,7 @@ class _TicketProgress extends StatelessWidget {
       }
       return 'Position ${ticket.position} in line';
     }
+    if (ticket.serviceMessage != null) return ticket.serviceMessage!;
     return switch (ticket.status) {
       TicketStatus.waiting => 'Queue position is temporarily unavailable',
       TicketStatus.called when ticket.isConfirmed =>
@@ -6122,8 +6131,11 @@ class _TicketProgress extends StatelessWidget {
     };
   }
 
-  Color _statusColor(BuildContext context, TicketStatus status) {
-    return switch (status) {
+  Color _statusColor(BuildContext context, QueueTicket ticket) {
+    if (ticket.isInService) return GetPrioTheme.orange;
+    if (ticket.isServiceInterrupted) return GetPrioTheme.destructive;
+    if (ticket.isServiceCompleted) return GetPrioTheme.success;
+    return switch (ticket.status) {
       TicketStatus.called => GetPrioTheme.orange,
       TicketStatus.pendingCarryOver => GetPrioTheme.warning,
       TicketStatus.waiting => GetPrioTheme.colors(context).teal,

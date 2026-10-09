@@ -1,10 +1,9 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../account/ticket_repository.dart';
-import '../app_theme.dart';
 import '../bookings/booking_repository.dart';
 import '../bookings/booking_list_row.dart';
-import '../bookings/booking_presentation.dart';
+import '../queue/ticket_list_row.dart';
 import '../queue/queue_models.dart';
 
 class ListsOverview extends StatefulWidget {
@@ -133,61 +132,19 @@ class _ListsOverviewState extends State<ListsOverview>
           padding: EdgeInsets.symmetric(vertical: 16),
           child: Text('No active queue tickets.'),
         ),
-      for (final ticket in _tickets)
-        Button(
+      for (final (index, ticket) in _tickets.indexed) ...[
+        TicketListRow(
           key: ValueKey('lists-ticket-${ticket.id}'),
-          style: const ButtonStyle.ghost(density: ButtonDensity.compact),
+          ticket: ticket,
           onPressed: widget.onOpenTicket == null
               ? null
               : () async {
                   await widget.onOpenTicket!(ticket);
                   if (mounted) _loadTickets();
                 },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: GetPrioTheme.colors(context).line),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ticket.vendorName ?? 'Queue ticket').bold(),
-                      if (ticket.locationName != null)
-                        Text(ticket.locationName!),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(ticket.ticketNumber ?? ticket.lookupCode).bold(),
-                          BookingStatusBadge(
-                            status: ticket.isConfirmed
-                                ? 'confirmed'
-                                : ticket.status.name,
-                            label: ticket.displayStatusLabel,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Icon(
-                  LucideIcons.chevronRight,
-                  size: 18,
-                  color: GetPrioTheme.colors(context).mutedInk,
-                ),
-              ],
-            ),
-          ),
         ),
+        if (index < _tickets.length - 1) const Divider(),
+      ],
       const SizedBox(height: 28),
       const Text('Upcoming bookings').h3(),
       const SizedBox(height: 8),

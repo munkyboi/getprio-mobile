@@ -37,7 +37,7 @@ The customer’s record and place in one vendor location’s live queue, with a 
 _Avoid_: Queue entry, booking, appointment
 
 **Active queue ticket**:
-A queue ticket whose lifecycle is still relevant to the customer, including waiting, called, or carry-over states.
+A queue ticket whose lifecycle is still relevant to the customer, including waiting, called, or carry-over states. Called tickets may be arrival-confirmed or in service; these display states are derived from API timing fields. Completion and interruption are service outcomes, separate from the persisted queue status.
 _Avoid_: Current ticket when historical tickets are also visible
 
 **Queue ticket status**:

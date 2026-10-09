@@ -9,6 +9,63 @@ import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  testWidgets('polls service transitions without showing the called alert', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final api = FakeQueueApi(
+      snapshot: {
+        'focusTicket': {
+          'id': 'service-1',
+          'lookupCode': 'SERVICE1',
+          'status': 'called',
+          'serviceStartedAt': '2026-10-09T04:01:00Z',
+        },
+      },
+    );
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson({
+            'id': 'service-1',
+            'lookupCode': 'SERVICE1',
+            'status': 'called',
+            'tenantSlug': 'clinic',
+          }),
+          queueRepository: QueueRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('IN SERVICE'), findsOneWidget);
+    expect(find.byKey(const Key('ticket-called-alert')), findsNothing);
+    expect(find.text('Your service is in progress.'), findsOneWidget);
+    api.snapshot = {
+      'focusTicket': {
+        'id': 'service-1',
+        'lookupCode': 'SERVICE1',
+        'status': 'unserved',
+        'serviceStartedAt': '2026-10-09T04:01:00Z',
+        'serviceEndedAt': '2026-10-09T04:10:00Z',
+        'serviceOutcome': 'interrupted',
+      },
+    };
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    await tester.pump();
+    expect(api.loadCalls, 2);
+    await tester.pumpAndSettle();
+    expect(find.text('INTERRUPTED'), findsOneWidget);
+    expect(
+      find.text(
+        'Your service was interrupted. Contact the vendor about the next step.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('ticket-details-cancel')), findsNothing);
+    await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+  });
+
   testWidgets('opens the active Home ticket in ticket details', (tester) async {
     await tester.pumpWidget(
       ShadcnApp(

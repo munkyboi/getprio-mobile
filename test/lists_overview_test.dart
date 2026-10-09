@@ -114,7 +114,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Active clinic'), findsOneWidget);
       expect(find.text('Past clinic'), findsNothing);
-      expect(find.text('Called'), findsOneWidget);
+      expect(find.text('CALLED'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('lists-ticket-active')));
       await tester.pumpAndSettle();
       expect(openedTicket, 'ACTIVE');

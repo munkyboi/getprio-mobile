@@ -59,6 +59,9 @@ class QueueTicket {
     this.statusReason,
     this.carryOverExpiresAt,
     this.customerConfirmedAt,
+    this.serviceStartedAt,
+    this.serviceEndedAt,
+    this.serviceOutcome,
   });
 
   final String id;
@@ -80,7 +83,27 @@ class QueueTicket {
   final DateTime? carryOverExpiresAt;
   final DateTime? customerConfirmedAt;
 
+  final DateTime? serviceStartedAt;
+  final DateTime? serviceEndedAt;
+  final String? serviceOutcome;
+
+  bool get isInService => serviceStartedAt != null && serviceEndedAt == null;
+  bool get isServiceInterrupted =>
+      serviceOutcome == 'interrupted' || statusReason == 'service_interrupted';
+  bool get isServiceCompleted => serviceOutcome == 'completed';
+
+  // Queue lifecycle and actual service timing remain separate API facts.
   bool get isActive => status.isActive;
+  bool get needsArrival =>
+      status == TicketStatus.called && !isConfirmed && !isInService;
+
+  String? get serviceMessage => isInService
+      ? 'Your service is in progress.'
+      : isServiceInterrupted
+      ? 'Your service was interrupted. Contact the vendor about the next step.'
+      : isServiceCompleted
+      ? 'Your service is complete.'
+      : null;
 
   /// A vendor scan confirms the customer's arrival without serving the ticket.
   /// The API deliberately keeps the lifecycle status as `called` until staff
@@ -88,10 +111,20 @@ class QueueTicket {
   bool get isConfirmed =>
       status == TicketStatus.called && customerConfirmedAt != null;
 
-  String get displayStatusLabel => isConfirmed ? 'Confirmed' : status.label;
+  String get displayStatusLabel => isInService
+      ? 'In service'
+      : isServiceInterrupted
+      ? 'Interrupted'
+      : isServiceCompleted
+      ? 'Completed'
+      : isConfirmed
+      ? 'Confirmed'
+      : status.label;
 
   bool get canBeCancelled =>
-      status == TicketStatus.waiting || status == TicketStatus.pendingCarryOver;
+      !isInService &&
+      (status == TicketStatus.waiting ||
+          status == TicketStatus.pendingCarryOver);
 
   String? get customerFriendlyStatusReason =>
       customerFriendlyTicketReason(statusReason);
@@ -130,6 +163,9 @@ class QueueTicket {
       statusReason: json['statusReason'] as String?,
       carryOverExpiresAt: _asDate(json['carryOverExpiresAt']),
       customerConfirmedAt: _asDate(json['customerConfirmedAt']),
+      serviceStartedAt: _asDate(json['serviceStartedAt']),
+      serviceEndedAt: _asDate(json['serviceEndedAt']),
+      serviceOutcome: _asString(json['serviceOutcome']),
     );
   }
 
@@ -159,6 +195,9 @@ class QueueTicket {
       statusReason: statusReason,
       carryOverExpiresAt: carryOverExpiresAt,
       customerConfirmedAt: customerConfirmedAt,
+      serviceStartedAt: serviceStartedAt,
+      serviceEndedAt: serviceEndedAt,
+      serviceOutcome: serviceOutcome,
     );
   }
 }
@@ -179,6 +218,8 @@ String? customerFriendlyTicketReason(String? reason) {
       'Your carry-over opportunity expired before you were served.',
     'carry_over_declined' => 'You cancelled this ticket.',
     'customer_cancelled' => 'You cancelled this ticket.',
+    'service_interrupted' =>
+      'Your service was interrupted. Contact the vendor about the next step.',
     _ => _humanizeTicketReason(normalized),
   };
 }
