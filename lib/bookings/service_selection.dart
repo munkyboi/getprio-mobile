@@ -49,7 +49,9 @@ class ServiceSelection extends StatelessWidget {
                       height: 56,
                       child: Button(
                         key: ValueKey('service-thumbnail-${service.slug}'),
-                        style: const ButtonStyle.ghost(),
+                        style: const ButtonStyle.ghost(
+                          density: ButtonDensity.compact,
+                        ),
                         onPressed: () => Navigator.of(context).push(
                           SwipeBackPageRoute<void>(
                             builder: (_) => BookingImageViewer(
@@ -62,11 +64,16 @@ class ServiceSelection extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                           child: Image.network(
                             service.imageUrl,
-                            width: 48,
-                            height: 48,
+                            width: 56,
+                            height: 56,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) =>
-                                const Icon(LucideIcons.image, size: 32),
+                            errorBuilder: (_, _, _) => const SizedBox(
+                              width: 56,
+                              height: 56,
+                              child: Center(
+                                child: Icon(LucideIcons.image, size: 32),
+                              ),
+                            ),
                           ),
                         ),
                       ),

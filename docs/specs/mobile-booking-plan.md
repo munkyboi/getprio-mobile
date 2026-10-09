@@ -97,3 +97,9 @@ The manual-payment QR in eligible unpaid booking details is clickable and opens 
 ## Unified details and live booking refresh
 
 Queue ticket and booking details now share the Vendor Details artwork, centered app bar and single pass-card design. The called-ticket alert is a single sentence above the card, with other details inside. Booking details poll every 15 seconds while visible/foregrounded and refresh on app resume; failed refreshes retain the last data and payment draft, and stale fetches cannot overwrite submitted proof. Full behavior and verification are in `mobile-ticket-booking-details.md`. Flutter analysis passed; all 301 tests passed.
+
+## Service thumbnail sizing correction
+
+Service thumbnail buttons now use zero padding so images fill the full 56 × 56 square instead of being squeezed horizontally. The fallback keeps the same square dimensions; tapping still opens the shared image viewer. Flutter analysis and all seven mobile booking UI tests passed. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain.
+
+KanbanFlow update remains pending: the browser could not verify the admin-enforced access policy. Add this correction and its verification to M28 alongside the pending unified-details/live-refresh update; preserve the card's In Progress status and other fields.
