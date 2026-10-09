@@ -158,3 +158,11 @@ Queue ticket details now invert the barcode surface in effective dark appearance
 Verification: Flutter analysis and all 30 affected ticket-details, Appearance and Profile tests passed. KanbanFlow M28 update remains pending because the browser cannot verify the admin-enforced access policy; batch these two presentation refinements with the pending Appearance update and preserve In Progress.
 
 The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Physical dark-mode barcode viewing/scanning acceptance remains pending.
+
+## Tickets Active/History tabs
+
+Tickets and Bookings now share `ListFilterTabs`, using the same full-width shadcn `Tabs`/`TabItem` styling and selected semantics. Tickets defaults to Active and displays only the selected status group, with separate empty-state messages. Pending invitations appear in Active. Active ticket cards, lightweight history rows, detail navigation, cancellation, retries and pull-to-refresh remain available. Refresh signals retain the selected tab.
+
+Verification: Flutter analysis and all 52 affected widget, ticket-detail, invitation and booking-UI tests passed, including switching both directions and preserving History selection after a repository refresh. KanbanFlow M28 synchronization remains blocked by browser admin-policy verification; add this tab refinement and verification to the pending update, preserving In Progress.
+
+The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Physical tab interaction acceptance remains pending.

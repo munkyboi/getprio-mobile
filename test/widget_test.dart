@@ -927,12 +927,9 @@ void main() {
   testWidgets('separates active tickets from lightweight history', (
     tester,
   ) async {
+    final repository = QueueTicketRepository(FakeAccountQueueApi());
     await tester.pumpWidget(
-      ShadcnApp(
-        home: TicketsPage(
-          ticketRepository: QueueTicketRepository(FakeAccountQueueApi()),
-        ),
-      ),
+      ShadcnApp(home: TicketsPage(ticketRepository: repository)),
     );
     await tester.pumpAndSettle();
 
@@ -950,17 +947,35 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.fling(
-      find.byKey(const Key('tickets-page')),
-      const Offset(0, -600),
-      1000,
+    expect(
+      find.byKey(const ValueKey('history-ticket-history-1')),
+      findsNothing,
     );
+    await tester.tap(find.text('History'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('active-ticket-active-1')), findsNothing);
 
     expect(find.text('History'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('history-ticket-history-1')),
       findsOneWidget,
+    );
+    repository.requestRefresh();
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('history-ticket-history-1')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('active-ticket-active-1')), findsNothing);
+    await tester.tap(find.text('Active'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('active-ticket-active-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('history-ticket-history-1')),
+      findsNothing,
     );
   });
 

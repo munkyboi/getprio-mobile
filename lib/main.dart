@@ -1,3 +1,4 @@
+import 'navigation/list_filter_tabs.dart';
 import 'navigation/pass_list_row.dart';
 import 'appearance.dart';
 import 'navigation/tab_page_header.dart';
@@ -5002,6 +5003,7 @@ class _TicketsPageState extends State<TicketsPage> {
   List<QueueTicket>? _visibleTickets;
   List<TicketInvitation>? _visibleInvitations;
   int _loadGeneration = 0;
+  bool _history = false;
   String? _cancellingTicketId;
   String? _acceptingInvitationId;
 
@@ -5092,7 +5094,14 @@ class _TicketsPageState extends State<TicketsPage> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
             children: [
-              if (_visibleInvitations?.isNotEmpty == true) ...[
+              ListFilterTabs(
+                key: const Key('ticket-tabs'),
+                labels: const ['Active', 'History'],
+                index: _history ? 1 : 0,
+                onChanged: (index) => setState(() => _history = index == 1),
+              ),
+              const SizedBox(height: 20),
+              if (!_history && _visibleInvitations?.isNotEmpty == true) ...[
                 _ticketInvitationCard(_visibleInvitations!),
                 const SizedBox(height: 24),
               ],
@@ -5107,32 +5116,30 @@ class _TicketsPageState extends State<TicketsPage> {
                   onPressed: _reload,
                   child: const Text('Try again'),
                 ),
-              ] else if (tickets.isEmpty)
+              ] else if ((_history ? history : active).isEmpty)
                 Card(
                   child: Column(
                     children: [
                       Icon(LucideIcons.ticket, size: 40),
                       SizedBox(height: 12),
-                      Text('No tickets yet').h3(),
+                      Text(
+                        _history ? 'No past tickets yet' : 'No active tickets',
+                      ).h3(),
                       SizedBox(height: 4),
-                      Text('Your queue tickets will appear here.'),
+                      Text(
+                        _history
+                            ? 'Your past queue tickets will appear here.'
+                            : 'Join a queue to get a ticket.',
+                      ),
                     ],
                   ),
                 )
+              else if (!_history)
+                ...active.map(_activeTicketCard)
               else ...[
-                if (active.isNotEmpty) ...[
-                  const Text('Active').h3(),
-                  const SizedBox(height: 12),
-                  ...active.map(_activeTicketCard),
-                ],
-                if (history.isNotEmpty) ...[
-                  if (active.isNotEmpty) const SizedBox(height: 28),
-                  const Text('History').h3(),
-                  const SizedBox(height: 8),
-                  for (var index = 0; index < history.length; index++) ...[
-                    _historyTicketRow(history[index]),
-                    if (index < history.length - 1) const Divider(),
-                  ],
+                for (var index = 0; index < history.length; index++) ...[
+                  _historyTicketRow(history[index]),
+                  if (index < history.length - 1) const Divider(),
                 ],
               ],
             ],

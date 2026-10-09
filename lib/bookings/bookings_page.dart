@@ -1,3 +1,4 @@
+import '../navigation/list_filter_tabs.dart';
 import 'booking_list_row.dart';
 
 import 'dart:async';
@@ -117,25 +118,11 @@ class _BookingsPageState extends State<BookingsPage>
             key: const Key('bookings-page'),
             padding: const EdgeInsets.all(20),
             children: [
-              Tabs(
+              ListFilterTabs(
                 key: const Key('booking-tabs'),
+                labels: const ['Upcoming', 'History'],
                 index: _history ? 1 : 0,
                 onChanged: (index) => setState(() => _history = index == 1),
-                expand: true,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
-                  horizontal: 16,
-                ),
-                children: [
-                  for (final label in ['Upcoming', 'History'])
-                    TabItem(
-                      child: Semantics(
-                        selected: _history == (label == 'History'),
-                        button: true,
-                        child: Text(label),
-                      ),
-                    ),
-                ],
               ),
               const SizedBox(height: 20),
               if (widget.repository == null)
