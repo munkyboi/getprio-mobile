@@ -111,3 +111,7 @@ Removed default button padding around the two Lists cards so each surface fills 
 ## Shared safe-area top spacing
 
 The shared `GetPrioTheme.safeAreaTopSpacing` token is 10 logical pixels. CustomerShell applies it once inside its system SafeArea, across Home, Explore, Lists and Profile. Page list padding remains shared and unchanged; routed app-bar screens retain their existing header layout. Analysis and all nine navigation/mobile-booking UI tests passed. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Include this styling adjustment in the pending M28 update; the browser admin-policy verification blocker remains unresolved.
+
+## Consistent tab headers
+
+Home, Explore, Lists and Profile now use `TabPageHeader` with the same heading typography, bottom separator, eight-pixel title bottom padding, four-pixel description gap and twenty-pixel content gap. It applies no top margin, so the shell's ten-pixel safe-area spacing is the only extra top offset. This removes the prior heading modifier's hidden forty-pixel margin on Home/Explore/Profile and adds the missing separator to Lists. Analysis and all 33 affected navigation, booking UI, Home and Profile tests passed. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. Batch this correction into the pending M28 update while the board access-policy blocker persists.

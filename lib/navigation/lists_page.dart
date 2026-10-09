@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
+import 'tab_page_header.dart';
 
 class ListsPage extends StatelessWidget {
   const ListsPage({
@@ -14,10 +15,10 @@ class ListsPage extends StatelessWidget {
     key: const Key('lists-page'),
     padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
     children: [
-      const Text('Lists').h1(),
-      const SizedBox(height: 8),
-      const Text('Your tickets and scheduled visits, all in one place.'),
-      const SizedBox(height: 24),
+      const TabPageHeader(
+        title: 'Lists',
+        description: 'Your tickets and scheduled visits, all in one place.',
+      ),
       IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,

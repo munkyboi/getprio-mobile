@@ -1,3 +1,4 @@
+import 'navigation/tab_page_header.dart';
 import 'directory/vendor_profile_hero.dart';
 import 'details/detail_pass.dart';
 import 'queue/active_ticket_carousel.dart';
@@ -2658,10 +2659,10 @@ class _HomePageState extends State<HomePage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         children: [
-          Text('$_greeting, ${homeGreetingName(widget.user)}').h2(),
-          const SizedBox(height: 4),
-          const Text('Stay up to date with your queue tickets.'),
-          const SizedBox(height: 20),
+          TabPageHeader(
+            title: '$_greeting, ${homeGreetingName(widget.user)}',
+            description: 'Stay up to date with your queue tickets.',
+          ),
           _ActiveTicketCard(
             ticketRepository: widget.ticketRepository,
             onOpenJoin: widget.onOpenJoin,
@@ -3030,10 +3031,10 @@ class _ExplorePageState extends State<ExplorePage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + keyboardInsetOf(context)),
         children: [
-          const Text('Explore vendors').h2(),
-          const SizedBox(height: 4),
-          const Text('Browse vendors with queueing available.'),
-          const SizedBox(height: 20),
+          const TabPageHeader(
+            title: 'Explore vendors',
+            description: 'Browse vendors with queueing available.',
+          ),
           KeyboardAwareInput(
             child: TextField(
               key: const Key('vendor-search-field'),
@@ -6287,10 +6288,10 @@ class _AccountPageState extends State<AccountPage> {
             key: const Key('account-page'),
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
-              const Text('Profile').h2(),
-              const SizedBox(height: 4),
-              const Text('Manage your profile and app preferences.'),
-              const SizedBox(height: 20),
+              const TabPageHeader(
+                title: 'Profile',
+                description: 'Manage your profile and app preferences.',
+              ),
               Card(
                 child: Row(
                   children: [
