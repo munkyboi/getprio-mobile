@@ -52,3 +52,33 @@ class ScrollAwareAppBar extends StatelessWidget {
     ),
   );
 }
+
+/// Shared back action for app bars and vendor hero headers.
+class GetPrioBackButton extends StatelessWidget {
+  const GetPrioBackButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = GetPrioTheme.colors(context);
+    return Semantics(
+      button: true,
+      label: 'Back',
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: colors.dark ? colors.card : const Color(0xFFFFFFFF),
+          shape: BoxShape.circle,
+          border: colors.dark ? Border.all(color: colors.line) : null,
+        ),
+        child: IconButton.ghost(
+          shape: ButtonShape.circle,
+          onPressed: onPressed,
+          icon: Icon(LucideIcons.arrowLeft, size: 22, color: colors.ink),
+        ),
+      ),
+    );
+  }
+}

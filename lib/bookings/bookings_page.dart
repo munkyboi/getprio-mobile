@@ -103,10 +103,7 @@ class _BookingsPageState extends State<BookingsPage>
         ScrollAwareAppBar(
           title: const Text('Bookings'),
           leading: [
-            IconButton.ghost(
-              icon: const Icon(LucideIcons.arrowLeft),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+            GetPrioBackButton(onPressed: () => Navigator.of(context).pop()),
           ],
         ),
       ],

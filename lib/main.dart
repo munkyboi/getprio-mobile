@@ -1370,11 +1370,7 @@ class _RegisterPageState extends State<RegisterPage>
           ScrollAwareAppBar(
             title: Text(challenge == null ? 'Create account' : 'Verify email'),
             leading: [
-              GhostButton(
-                onPressed: () => Navigator.of(context).pop(),
-                density: ButtonDensity.icon,
-                child: const Icon(LucideIcons.arrowLeft),
-              ),
+              GetPrioBackButton(onPressed: () => Navigator.of(context).pop()),
             ],
           ),
         ],
@@ -1882,11 +1878,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage>
           ScrollAwareAppBar(
             title: const Text('Password recovery'),
             leading: [
-              GhostButton(
-                onPressed: () => Navigator.of(context).pop(),
-                density: ButtonDensity.icon,
-                child: const Icon(LucideIcons.arrowLeft),
-              ),
+              GetPrioBackButton(onPressed: () => Navigator.of(context).pop()),
             ],
           ),
         ],
@@ -2340,8 +2332,7 @@ class _CustomerShellState extends State<CustomerShell>
               ScrollAwareAppBar(
                 title: const Text('Tickets'),
                 leading: [
-                  IconButton.ghost(
-                    icon: const Icon(LucideIcons.arrowLeft),
+                  GetPrioBackButton(
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -2432,10 +2423,8 @@ class _CustomerShellState extends State<CustomerShell>
               ScrollAwareAppBar(
                 title: const Text('Scan to join'),
                 leading: [
-                  GhostButton(
+                  GetPrioBackButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    density: ButtonDensity.icon,
-                    child: const Icon(LucideIcons.arrowLeft),
                   ),
                 ],
               ),
@@ -2469,10 +2458,8 @@ class _CustomerShellState extends State<CustomerShell>
               ScrollAwareAppBar(
                 title: const Text('Join queue'),
                 leading: [
-                  GhostButton(
+                  GetPrioBackButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    density: ButtonDensity.icon,
-                    child: const Icon(LucideIcons.arrowLeft),
                   ),
                 ],
               ),
@@ -3441,7 +3428,7 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: _VendorBackButton(
+              child: GetPrioBackButton(
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
@@ -4136,7 +4123,7 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
         Positioned(
           top: MediaQuery.paddingOf(context).top + 12,
           left: 20,
-          child: _VendorBackButton(onPressed: widget.onBack, onImage: true),
+          child: GetPrioBackButton(onPressed: widget.onBack),
         ),
         Positioned(
           left: 0,
@@ -4173,44 +4160,6 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _VendorBackButton extends StatelessWidget {
-  const _VendorBackButton({required this.onPressed, this.onImage = false});
-
-  final VoidCallback onPressed;
-  final bool onImage;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Back',
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: onImage
-              ? GetPrioTheme.colors(context).card.withAlpha(224)
-              : GetPrioTheme.colors(context).card,
-          shape: BoxShape.circle,
-          border: Border.all(color: GetPrioTheme.colors(context).line),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x245B422A),
-              blurRadius: 14,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: GhostButton(
-          onPressed: onPressed,
-          density: ButtonDensity.icon,
-          child: const Icon(LucideIcons.arrowLeft, size: 22),
-        ),
-      ),
     );
   }
 }
@@ -7940,11 +7889,7 @@ class _SecurityPageState extends State<SecurityPage>
           ScrollAwareAppBar(
             title: const Text('Security and MFA'),
             leading: [
-              GhostButton(
-                onPressed: () => Navigator.of(context).pop(),
-                density: ButtonDensity.icon,
-                child: const Icon(LucideIcons.arrowLeft),
-              ),
+              GetPrioBackButton(onPressed: () => Navigator.of(context).pop()),
             ],
           ),
         ],

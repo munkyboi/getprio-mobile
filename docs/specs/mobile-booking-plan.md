@@ -236,3 +236,11 @@ Tickets and Bookings share listPagePadding (20 left/right/bottom, 10 top), align
 Verification: all 54 affected navigation, booking, social/rating and Lists tests pass; Flutter analysis reports no issues. KanbanFlow M28 update pending: record shared list spacing and complete multiline outside-tap dismissal with regression evidence. Preserve In Progress, remaining work, labels and estimates. Browser access remains blocked by the unavailable admin-enforced policy check; no workaround was used.
 
 Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched on Zero32. Physical spacing and keyboard interaction acceptance remain pending.
+
+## Shared AppBar back button — 9 October 2026
+
+GetPrioBackButton provides a consistent circular 48-pixel back action: white background and dark arrow in light appearance, dark card background with visible border and light arrow in dark appearance. It follows the effective theme, including System mode. All AppBar back actions and vendor hero back controls now use this shared component: registration, password recovery, Tickets, Bookings, ticket/booking details, queue joining/scanning, Security/MFA and vendor details. Existing navigation callbacks and detail back keys are preserved.
+
+Verification: Flutter analysis reports no issues and all 62 affected appearance, navigation, booking and ticket-details tests pass. KanbanFlow M28 update pending: record global back-button appearance and this verification, preserving In Progress and remaining work. Browser access remains blocked by the unavailable admin-enforced policy check; no workaround was used.
+
+Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched on Zero32. Physical light/dark visual acceptance remains pending.

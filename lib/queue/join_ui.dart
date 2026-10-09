@@ -1439,13 +1439,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
         headers: [
           ScrollAwareAppBar(
             title: const Text('Scan to join'),
-            leading: [
-              GhostButton(
-                onPressed: _handleBack,
-                density: ButtonDensity.icon,
-                child: const Icon(LucideIcons.arrowLeft),
-              ),
-            ],
+            leading: [GetPrioBackButton(onPressed: _handleBack)],
           ),
         ],
         child: body,

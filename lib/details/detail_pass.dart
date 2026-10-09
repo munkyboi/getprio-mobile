@@ -13,9 +13,8 @@ class DetailPassAppBar extends StatelessWidget {
   Widget build(BuildContext context) => ScrollAwareAppBar(
     title: Text(title),
     leading: [
-      IconButton.ghost(
+      GetPrioBackButton(
         key: backKey,
-        icon: const Icon(LucideIcons.arrowLeft),
         onPressed: () => Navigator.of(context).pop(),
       ),
     ],
