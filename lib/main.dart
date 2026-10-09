@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'auth/auth_models.dart';
@@ -64,8 +65,10 @@ Future<void> main() async {
   if (firebaseEnabled) {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
+  final packageInfo = await PackageInfo.fromPlatform();
   runApp(
     GetPrioApp(
+      appVersion: packageInfo.version,
       firebaseEnabled: firebaseEnabled,
       environmentConfig: environmentConfig,
     ),
@@ -76,6 +79,7 @@ class GetPrioApp extends StatelessWidget {
   GetPrioApp({
     super.key,
     AuthRepository? authRepository,
+    this.appVersion = '1.0.1',
     this.firebaseEnabled = false,
     this.onboardingStore = const InstallationOnboardingStore(),
     MobileEnvironmentConfig? environmentConfig,
@@ -90,6 +94,7 @@ class GetPrioApp extends StatelessWidget {
        approvedVendorStore = approvedVendorStore ?? SecureApprovedVendorStore();
 
   final AuthRepository authRepository;
+  final String appVersion;
   final bool firebaseEnabled;
   final OnboardingStore onboardingStore;
   final MobileEnvironmentConfig environmentConfig;
@@ -140,10 +145,7 @@ class GetPrioApp extends StatelessWidget {
             platform: defaultTargetPlatform == TargetPlatform.android
                 ? 'android'
                 : 'ios',
-            appVersion: const String.fromEnvironment(
-              'FLUTTER_BUILD_NAME',
-              defaultValue: '1.0.1',
-            ),
+            appVersion: appVersion,
             locale: 'en-PH',
             onSignal: (signal) async {
               pushSignal.value = signal;
