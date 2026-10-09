@@ -366,6 +366,7 @@ class VendorLocation {
     required this.name,
     this.slug,
     this.queueAvailable = false,
+    this.isPrimary = false,
     this.address,
     this.contactEmail,
     this.contactPhone,
@@ -377,6 +378,7 @@ class VendorLocation {
   final String name;
   final String? slug;
   final bool queueAvailable;
+  final bool isPrimary;
   final String? address;
   final String? contactEmail;
   final String? contactPhone;
@@ -395,6 +397,7 @@ class VendorLocation {
         : const <VendorStoreHour>[];
     final slug = _firstNonBlank([json['slug'] as String?]);
     return VendorLocation(
+      isPrimary: json['isPrimary'] == true,
       id: _firstNonBlank([json['id'] as String?, slug]) ?? '',
       name: json['name'] as String? ?? 'Location',
       slug: slug,
@@ -452,6 +455,7 @@ class VendorSummary {
     required this.slug,
     required this.name,
     required this.queueAvailable,
+    this.bookingAvailable = false,
     this.category,
     this.locations = const [],
     this.description,
@@ -467,6 +471,7 @@ class VendorSummary {
   final String slug;
   final String name;
   final bool queueAvailable;
+  final bool bookingAvailable;
   final String? category;
   final List<VendorLocation> locations;
   final String? description;
@@ -494,6 +499,9 @@ class VendorSummary {
     final theme = _asMap(themeContainer?['theme']) ?? themeContainer;
     final imageUrl = _firstNonBlank([json['imageUrl'] as String?]);
     return VendorSummary(
+      bookingAvailable:
+          (capabilities is Map<String, dynamic> &&
+          capabilities['booking'] == true),
       slug: json['slug'] as String? ?? '',
       name: json['name'] as String? ?? 'Vendor',
       queueAvailable:

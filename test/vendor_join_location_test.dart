@@ -24,18 +24,19 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      if (count > 1) {
+        await Scrollable.ensureVisible(
+          tester.element(find.byKey(const ValueKey('vendor-location-1'))),
+          alignment: .25,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('vendor-location-1')));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.byKey(const Key('vendor-join-queue-button')));
       await tester.pumpAndSettle();
-      if (count > 1) {
-        expect(selected, isNull);
-        expect(find.text('Select a location'), findsOneWidget);
-        await tester.tap(find.byKey(const Key('join-location-1')));
-        await tester.pumpAndSettle();
-        expect(selected?.slug, 'branch-1');
-      } else {
-        expect(find.text('Select a location'), findsNothing);
-        expect(selected?.slug, 'branch-0');
-      }
+      expect(find.text('Select a location'), findsNothing);
+      expect(selected?.slug, count > 1 ? 'branch-1' : 'branch-0');
       expect(tester.takeException(), isNull);
     });
   }

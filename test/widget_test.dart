@@ -525,7 +525,7 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Explore'), findsOneWidget);
     expect(find.text('Join Queue'), findsOneWidget);
-    expect(find.text('Tickets'), findsOneWidget);
+    expect(find.text('Lists'), findsOneWidget);
     expect(find.text('Profile'), findsOneWidget);
     expect(find.byType(NavigationItem), findsNWidgets(4));
     expect(find.byType(NavigationButton), findsOneWidget);
@@ -648,7 +648,9 @@ void main() {
       ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
     );
 
-    await tester.tap(find.text('Tickets'));
+    await tester.tap(find.text('Lists'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('lists-tickets')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('tickets-page')), findsOneWidget);

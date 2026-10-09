@@ -1,0 +1,322 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:getprio_mobile/auth/auth_models.dart';
+import 'package:getprio_mobile/bookings/booking_repository.dart';
+import 'package:getprio_mobile/bookings/bookings_page.dart';
+import 'package:getprio_mobile/bookings/booking_sheet.dart';
+import 'package:getprio_mobile/directory/directory_repository.dart';
+import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/queue/queue_models.dart';
+import 'package:pinput/pinput.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart';
+
+Future<void> reveal(WidgetTester tester, Finder finder) async {
+  await Scrollable.ensureVisible(tester.element(finder), alignment: .25);
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets('booking footer remains above the keyboard on a phone', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(390, 844),
+            viewInsets: EdgeInsets.only(bottom: 320),
+            padding: EdgeInsets.only(top: 44),
+          ),
+          child: Scaffold(
+            child: BookingSheet(
+              repository: BookingRepository(_BookingApi()),
+              vendor: const VendorSummary(
+                slug: 'clinic',
+                name: 'Clinic',
+                queueAvailable: false,
+                bookingAvailable: true,
+              ),
+              location: const VendorLocation(
+                id: 'primary',
+                name: 'Main',
+                slug: 'primary',
+              ),
+              services: [BookingService.fromJson(_service)],
+              selected: {'consult'},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getBottomLeft(find.text('Verify email to continue')).dy,
+      lessThanOrEqualTo(524),
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Lists cards open Tickets and Bookings and return to Lists', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const ShadcnApp(home: CustomerShell()));
+    await tester.tap(find.text('Lists'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('lists-tickets')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tickets-page')), findsOneWidget);
+    tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('lists-bookings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('bookings-page')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('primary location selects services and switching clears them', (
+    tester,
+  ) async {
+    final api = _BookingApi();
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: VendorDetailPage(
+          vendor: const VendorSummary(
+            slug: 'clinic',
+            name: 'Clinic',
+            queueAvailable: false,
+          ),
+          repository: DirectoryRepository(_DirectoryApi()),
+          bookingRepository: BookingRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(api.paths.first, contains('/locations/primary/services'));
+    await reveal(tester, find.byKey(const ValueKey('service-toggle-consult')));
+    await tester.tap(find.byKey(const ValueKey('service-toggle-consult')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 services selected'), findsOneWidget);
+    await reveal(tester, find.byKey(const ValueKey('vendor-location-other')));
+    await tester.tap(find.byKey(const ValueKey('vendor-location-other')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('services selected'), findsNothing);
+    expect(api.paths.last, contains('/locations/other/services'));
+    final join = tester.widget<OutlineButton>(
+      find.byType(OutlineButton).last,
+    ); // footer Book is outline
+    expect(join.onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+    'booking list separates upcoming from history and handles retry',
+    (tester) async {
+      final api = _BookingApi()..failList = true;
+      await tester.pumpWidget(
+        ShadcnApp(home: BookingsPage(repository: BookingRepository(api))),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not load bookings'), findsOneWidget);
+      api.failList = false;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(find.text('Upcoming Vendor'), findsOneWidget);
+      expect(find.text('Past Vendor'), findsNothing);
+      await tester.tap(find.text('History'));
+      await tester.pumpAndSettle();
+      expect(find.text('Past Vendor'), findsOneWidget);
+      expect(find.text('Upcoming Vendor'), findsNothing);
+    },
+  );
+  testWidgets(
+    'booking sheet uses OTP-bound payload, blocks duplicates and completes',
+    (tester) async {
+      final api = _BookingApi()..createGate = Completer<void>();
+      CustomerBooking? created;
+      final service = BookingService.fromJson(_service);
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: DrawerOverlay(
+            child: Scaffold(
+              child: Builder(
+                builder: (context) => PrimaryButton(
+                  onPressed: () async {
+                    created = await openDrawerOverlay<CustomerBooking>(
+                      context: context,
+                      position: OverlayPosition.bottom,
+                      expands: false,
+                      barrierDismissible: false,
+                      draggable: false,
+                      builder: (_) => BookingSheet(
+                        repository: BookingRepository(api),
+                        vendor: const VendorSummary(
+                          slug: 'clinic',
+                          name: 'Clinic',
+                          queueAvailable: false,
+                          bookingAvailable: true,
+                        ),
+                        location: const VendorLocation(
+                          id: 'primary',
+                          name: 'Main',
+                          slug: 'primary',
+                        ),
+                        services: [service],
+                        selected: {'consult'},
+                        customer: const AuthUser(
+                          id: 'customer',
+                          email: 'customer@example.com',
+                          profileName: 'Customer',
+                        ),
+                      ),
+                    ).future;
+                  },
+                  child: const Text('Open booking'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open booking'));
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('09:00'));
+      await tester.tap(find.text('09:00'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Verify email to continue'));
+      await tester.pumpAndSettle();
+      expect(api.otpPayload?['locationSlug'], 'primary');
+      expect(api.otpPayload?['bundleItems'], [
+        {'serviceSlug': 'consult', 'bookingQuantity': 1},
+      ]);
+      await reveal(tester, find.byType(Pinput));
+      await tester.enterText(find.byType(Pinput), '123456');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Submit booking'));
+      await tester.pump();
+      expect(api.createCount, 1);
+      final action = tester.widget<PrimaryButton>(
+        find
+            .ancestor(
+              of: find.text('Please wait...'),
+              matching: find.byType(PrimaryButton),
+            )
+            .first,
+      );
+      expect(action.onPressed, isNull);
+      api.createGate!.complete();
+      await tester.pumpAndSettle();
+      expect(api.createCount, 1);
+      expect(api.createPayload?['bookingVerificationToken'], 'verified');
+      expect(created?.id, 'new-booking');
+      expect(tester.takeException(), isNull);
+    },
+  );
+}
+
+const _service = {
+  'slug': 'consult',
+  'name': 'Consultation',
+  'description': 'A consultation.',
+  'priceDisplay': '₱100',
+  'priceAmountCents': 10000,
+  'durationMinutes': 30,
+};
+
+class _BookingApi implements BookingApi {
+  final paths = <String>[];
+  bool failList = false;
+  int createCount = 0;
+  Completer<void>? createGate;
+  Map<String, dynamic>? otpPayload, createPayload;
+  @override
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    paths.add(path);
+    if (path.endsWith('/services')) {
+      return {
+        'services': [_service],
+      };
+    }
+    if (path.endsWith('/slots')) {
+      return {
+        'slots': [
+          {
+            'startAt': '2030-01-01T09:00:00+08:00',
+            'endAt': '2030-01-01T09:30:00+08:00',
+            'isAvailable': true,
+            'remainingCapacity': 1,
+          },
+        ],
+      };
+    }
+    if (failList) throw StateError('offline');
+    return {
+      'bookings': [
+        {
+          'id': 'upcoming',
+          'tenantName': 'Upcoming Vendor',
+          'status': 'confirmed',
+        },
+        {'id': 'past', 'tenantName': 'Past Vendor', 'status': 'completed'},
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    if (path.endsWith('/booking-otp')) {
+      otpPayload = body;
+      return {
+        'otpId': 'otp',
+        'deliveryTarget': 'customer@example.com',
+        'expiresAt': DateTime.now()
+            .add(const Duration(minutes: 10))
+            .toIso8601String(),
+        'resendAvailableAt': DateTime.now().toIso8601String(),
+      };
+    }
+    if (path.endsWith('/verify')) {
+      return {'bookingVerificationToken': 'verified'};
+    }
+    createCount++;
+    createPayload = body;
+    if (createGate != null) await createGate!.future;
+    return {
+      'booking': {'id': 'new-booking', 'status': 'pending'},
+    };
+  }
+}
+
+class _DirectoryApi implements DirectoryApi {
+  @override
+  Future<Map<String, dynamic>> loadVendors({
+    String? search,
+    int limit = 20,
+  }) async => {};
+  @override
+  Future<Map<String, dynamic>> loadVendor(String tenantSlug) async => {
+    'slug': 'clinic',
+    'name': 'Clinic',
+    'capabilities': {'booking': true, 'queue': false},
+    'locations': [
+      {
+        'id': 'other',
+        'slug': 'other',
+        'name': 'Other',
+        'openStatus': {'isOpen': true},
+      },
+      {
+        'id': 'primary',
+        'slug': 'primary',
+        'name': 'Main',
+        'isPrimary': true,
+        'openStatus': {'isOpen': true},
+      },
+    ],
+  };
+}

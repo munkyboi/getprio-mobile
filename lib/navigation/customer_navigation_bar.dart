@@ -2,7 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 
-enum CustomerDestination { home, explore, tickets, account }
+enum CustomerDestination { home, explore, lists, account }
 
 class CustomerNavigationBar extends StatelessWidget {
   const CustomerNavigationBar({
@@ -49,9 +49,9 @@ class CustomerNavigationBar extends StatelessWidget {
         _joinQueueAction(context),
         _destinationItem(
           context: context,
-          destination: CustomerDestination.tickets,
-          label: 'Tickets',
-          icon: LucideIcons.ticket,
+          destination: CustomerDestination.lists,
+          label: 'Lists',
+          icon: LucideIcons.layoutGrid,
         ),
         _destinationItem(
           context: context,

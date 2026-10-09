@@ -1,6 +1,6 @@
 # GetPrio Customer Mobile
 
-This context defines the customer-facing language for the GetPrio mobile app. It covers discovering vendors, joining live queues, and managing queue tickets.
+This context defines the customer-facing language for the GetPrio mobile app. It covers discovering vendors, joining live queues, managing queue tickets, and planning service bookings.
 
 ## Language
 
@@ -51,3 +51,15 @@ _Avoid_: Ticket number, rank
 **Estimated wait**:
 An approximate number of minutes returned with a waiting ticket's current position. It is a planning estimate, not a service-time promise or a guarantee of being served before closing.
 _Avoid_: Appointment time, guarantee
+
+
+**Lists**:
+The bottom-navigation destination containing clickable Tickets and Bookings cards.
+
+**Booking**:
+A scheduled service request at one vendor location. Booking status and payment status are separate server-authoritative values. A queue ticket is created only after vendor check-in.
+
+**Manual payment evidence**:
+A payment reference and private receipt supplied by the customer for vendor review. Receipt submission is not payment verification or booking confirmation.
+
+The approved mobile booking scope and delivery stages are in `docs/specs/mobile-booking-plan.md`.

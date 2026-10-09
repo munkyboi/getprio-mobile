@@ -1,8 +1,7 @@
+import '../otp_input.dart';
 import '../directory/expandable_vendor_description.dart';
 
 import 'dart:async';
-
-import 'package:flutter/services.dart';
 
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
@@ -200,29 +199,14 @@ class _JoinPageState extends State<JoinPage>
                 'Enter the 6-digit code sent to ${challenge.email} to join this queue.',
               ),
               const SizedBox(height: 24),
-              ValidatedField(
-                validation: formValidation,
+              GetPrioOtpInput(
+                inputKey: const Key('queue-join-otp'),
                 controller: _otpController,
-                child: KeyboardAwareInput(
-                  child: TextField(
-                    key: const Key('queue-join-otp'),
-                    controller: _otpController,
-                    focusNode: _otpFocusNode,
-                    enabled: !_isBusy && !expired,
-                    keyboardType: TextInputType.number,
-                    autofillHints: const [AutofillHints.oneTimeCode],
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
-                    ],
-                    features: const [focusedClearInputFeature],
-                    scrollPadding: const EdgeInsets.only(top: 24, bottom: 96),
-                    onChanged: (value) {
-                      setState(() {});
-                      if (value.length == 6) unawaited(_verifyEmail());
-                    },
-                  ),
-                ),
+                focusNode: _otpFocusNode,
+                enabled: !_isBusy && !expired,
+                validation: formValidation,
+                onChanged: (_) => setState(() {}),
+                onCompleted: (_) => unawaited(_verifyEmail()),
               ),
               if (expired)
                 const Padding(

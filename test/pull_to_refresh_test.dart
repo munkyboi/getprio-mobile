@@ -119,7 +119,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Tickets'));
+    await tester.tap(find.text('Lists'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('lists-tickets')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('active-ticket-active-1')));
     await tester.pumpAndSettle();
@@ -155,7 +157,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tickets'));
+    await tester.tap(find.text('Lists'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('lists-tickets')));
     await tester.pumpAndSettle();
 
     expect(find.text('WAITING'), findsOneWidget);

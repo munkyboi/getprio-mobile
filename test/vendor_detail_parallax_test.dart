@@ -99,11 +99,19 @@ void main() {
     await tester.pumpAndSettle();
     final description = find.textContaining('A welcoming clinic');
     expect(tester.widget<Text>(description).maxLines, 3);
-    await tester.ensureVisible(find.text('Read more'));
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Read more')),
+      alignment: .25,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Read more'));
     await tester.pump();
     expect(tester.widget<Text>(description).maxLines, isNull);
-    await tester.ensureVisible(find.text('Show less'));
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Show less')),
+      alignment: .25,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Show less'));
     await tester.pump();
     expect(tester.widget<Text>(description).maxLines, 3);

@@ -37,6 +37,12 @@ import 'directory/directory_repository.dart';
 import 'directory/vendor_contact.dart';
 import 'feedback_toast.dart';
 import 'form_validation.dart';
+import 'otp_input.dart';
+import 'navigation/lists_page.dart';
+import 'bookings/booking_repository.dart';
+import 'bookings/bookings_page.dart';
+import 'bookings/booking_sheet.dart';
+import 'bookings/service_selection.dart';
 import 'keyboard_avoidance.dart';
 import 'navigation/customer_navigation_bar.dart';
 import 'navigation/scroll_aware_app_bar.dart';
@@ -527,8 +533,6 @@ class _LabeledTextField extends StatefulWidget {
     this.onChanged,
     this.supportingText,
     this.supportingTextColor,
-    this.inputFormatters,
-    this.maxLength,
   });
 
   final String label;
@@ -542,8 +546,6 @@ class _LabeledTextField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final String? supportingText;
   final Color? supportingTextColor;
-  final List<TextInputFormatter>? inputFormatters;
-  final int? maxLength;
 
   @override
   State<_LabeledTextField> createState() => _LabeledTextFieldState();
@@ -588,8 +590,6 @@ class _LabeledTextFieldState extends State<_LabeledTextField> {
         scrollPadding: inputScrollPadding,
         onTap: widget.onTap,
         onChanged: widget.onChanged,
-        inputFormatters: widget.inputFormatters,
-        maxLength: widget.maxLength,
         onEditingComplete: _dismissKeyboard,
       ),
     );
@@ -623,6 +623,44 @@ class _LabeledTextFieldState extends State<_LabeledTextField> {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _LabeledOtpField extends StatelessWidget {
+  const _LabeledOtpField({
+    required this.controller,
+    required this.label,
+    this.inputKey,
+    this.onTap,
+    this.onChanged,
+  });
+  final TextEditingController controller;
+  final String label;
+  final Key? inputKey;
+  final VoidCallback? onTap;
+  final ValueChanged<String>? onChanged;
+  @override
+  Widget build(BuildContext context) {
+    FormValidation? validation;
+    var enabled = true;
+    context.visitAncestorElements((element) {
+      if (element is StatefulElement && element.state is FormValidationMixin) {
+        final owner = element.state as FormValidationMixin;
+        validation = owner.formValidation;
+        enabled = !owner.formBusy;
+        return false;
+      }
+      return true;
+    });
+    return GetPrioOtpInput(
+      controller: controller,
+      label: label,
+      inputKey: inputKey,
+      enabled: enabled,
+      validation: validation,
+      onTap: onTap,
+      onChanged: onChanged,
     );
   }
 }
@@ -998,12 +1036,10 @@ class _SignInPageState extends State<SignInPage>
                         onTap: () => _keepFieldVisible(_recoveryController),
                       )
                     else
-                      _LabeledTextField(
+                      _LabeledOtpField(
                         inputKey: const Key('mfa-code'),
                         controller: _mfaController,
                         label: 'Authenticator code',
-                        placeholder: 'Enter your 6-digit code',
-                        keyboardType: TextInputType.number,
                         onTap: () => _keepFieldVisible(_mfaController),
                       ),
                     const SizedBox(height: 12),
@@ -1460,14 +1496,10 @@ class _RegisterPageState extends State<RegisterPage>
           'We sent a 6-digit verification code to ${challenge.deliveryTarget}.',
         ),
         const SizedBox(height: 20),
-        _LabeledTextField(
+        _LabeledOtpField(
           inputKey: const Key('register-otp'),
           controller: _otp,
           label: 'Verification code',
-          placeholder: 'Enter your 6-digit code',
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          maxLength: 6,
         ),
         const SizedBox(height: 20),
         GetPrioActionButton.primary(
@@ -2047,7 +2079,8 @@ class _CustomerShellState extends State<CustomerShell>
       return;
     }
     _lastInvitationNotificationId = signal.notificationId;
-    _selectDestination(CustomerDestination.tickets);
+    _selectDestination(CustomerDestination.lists);
+    _openTickets();
     unawaited(_presentTicketInvitation(signal));
   }
 
@@ -2269,12 +2302,7 @@ class _CustomerShellState extends State<CustomerShell>
                 onOpenJoin: (vendor, locationSlug) =>
                     unawaited(_openVendorJoin(vendor, locationSlug)),
               ),
-              TicketsPage(
-                ticketRepository: widget.ticketRepository,
-                queueRepository: widget.queueRepository,
-                directoryRepository: widget.directoryRepository,
-                sandbox: widget.sandbox,
-              ),
+              ListsPage(onTickets: _openTickets, onBookings: _openBookings),
               AccountPage(
                 socialRepository: widget.directoryRepository?.social,
                 onOpenVendor: _openFavoriteVendor,
@@ -2290,6 +2318,57 @@ class _CustomerShellState extends State<CustomerShell>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  BookingRepository? get _bookingRepository {
+    final api = widget.directoryRepository?.api;
+    return api is RestDirectoryApi
+        ? BookingRepository(RestBookingApi(api.client))
+        : null;
+  }
+
+  bool _ticketsOpen = false;
+  void _openTickets() async {
+    if (_ticketsOpen) return;
+    _ticketsOpen = true;
+    widget.ticketRepository?.requestRefresh();
+    await Navigator.of(context).push(
+      SwipeBackPageRoute<void>(
+        builder: (context) => ScrollNotificationObserver(
+          child: Scaffold(
+            headers: [
+              ScrollAwareAppBar(
+                title: const Text('Tickets'),
+                leading: [
+                  IconButton.ghost(
+                    icon: const Icon(LucideIcons.arrowLeft),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ],
+            child: SafeArea(
+              top: false,
+              child: TicketsPage(
+                ticketRepository: widget.ticketRepository,
+                queueRepository: widget.queueRepository,
+                directoryRepository: widget.directoryRepository,
+                sandbox: widget.sandbox,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    _ticketsOpen = false;
+  }
+
+  void _openBookings() {
+    Navigator.of(context).push(
+      SwipeBackPageRoute<void>(
+        builder: (_) => BookingsPage(repository: _bookingRepository),
       ),
     );
   }
@@ -2492,7 +2571,7 @@ class _CustomerShellState extends State<CustomerShell>
   void _selectDestination(CustomerDestination destination) {
     if (widget.sandbox && destination == CustomerDestination.explore) return;
     setState(() => _selectedDestination = destination);
-    if (destination == CustomerDestination.tickets) {
+    if (destination == CustomerDestination.lists) {
       widget.ticketRepository?.requestRefresh();
     }
   }
@@ -2981,9 +3060,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 }
                 final vendors = snapshot.data ?? const <VendorSummary>[];
                 if (vendors.isEmpty) {
-                  return const Card(
-                    child: Text('No queue-capable vendors found.'),
-                  );
+                  return const Card(child: Text('No vendors found.'));
                 }
 
                 final categories =
@@ -3125,9 +3202,7 @@ class _VendorCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        '${vendor.locations.length} queue-capable location(s)',
-                      ),
+                      child: Text('${vendor.locations.length} location(s)'),
                     ),
                     if (vendor.locations.any(
                       (location) => location.queueAvailable,
@@ -3278,6 +3353,7 @@ class VendorDetailPage extends StatefulWidget {
     required this.vendor,
     required this.repository,
     this.queueRepository,
+    this.bookingRepository,
     this.onJoinQueue,
     this.onJoinLocation,
     this.contactLauncher = const ExternalVendorContactLauncher(),
@@ -3286,6 +3362,7 @@ class VendorDetailPage extends StatefulWidget {
   final VendorSummary vendor;
   final DirectoryRepository repository;
   final QueueRepository? queueRepository;
+  final BookingRepository? bookingRepository;
   final VoidCallback? onJoinQueue;
   final ValueChanged<VendorLocation>? onJoinLocation;
   final VendorContactLauncher contactLauncher;
@@ -3368,87 +3445,6 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
     );
   }
 
-  Future<void> _selectJoinLocation(
-    BuildContext context,
-    VendorSummary vendor,
-  ) async {
-    final locations = vendor.locations;
-    VendorLocation? selected;
-    if (locations.length == 1) {
-      selected = locations.single;
-    } else if (locations.isNotEmpty) {
-      selected = await openDrawerOverlay<VendorLocation>(
-        context: context,
-        position: OverlayPosition.bottom,
-        expands: false,
-        draggable: true,
-        transformBackdrop: false,
-        builder: (sheetContext) => SafeArea(
-          top: false,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(sheetContext).height * .75,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                GetPrioTheme.bottomSheetTopPadding,
-                20,
-                20,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Select a location').h3(),
-                  const SizedBox(height: 16),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: locations.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (_, index) {
-                        final location = locations[index];
-                        return CardButton(
-                          key: ValueKey('join-location-${location.id}'),
-                          onPressed: location.slug?.trim().isNotEmpty == true
-                              ? () => closeDrawer(sheetContext, location)
-                              : null,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(location.name).bold(),
-                              if (location.address != null)
-                                Text(location.address!),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ).future;
-    }
-    if (!mounted) return;
-    if (selected != null && selected.slug?.trim().isNotEmpty == true) {
-      if (widget.onJoinLocation != null) {
-        widget.onJoinLocation!(selected);
-      } else {
-        widget.onJoinQueue?.call();
-      }
-    } else if (locations.isEmpty && context.mounted) {
-      showFeedbackToast(
-        context,
-        message: 'No queue locations are available.',
-        isError: true,
-      );
-    }
-  }
-
   void _openContactSheet(BuildContext context, VendorSummary vendor) {
     final email = vendor.contactEmail;
     if (email == null) return;
@@ -3514,10 +3510,21 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
                 queueRepository: widget.queueRepository,
                 queueRefreshVersion: _queueRefreshVersion,
                 onBack: () => Navigator.of(context).pop(),
-                onJoinQueue:
-                    widget.onJoinLocation == null && widget.onJoinQueue == null
-                    ? null
-                    : () => _selectJoinLocation(context, details),
+                onJoinLocation:
+                    widget.onJoinLocation ??
+                    (widget.onJoinQueue == null
+                        ? null
+                        : (_) => widget.onJoinQueue!()),
+                bookingRepository:
+                    widget.bookingRepository ??
+                    (widget.repository.api is RestDirectoryApi
+                        ? BookingRepository(
+                            RestBookingApi(
+                              (widget.repository.api as RestDirectoryApi)
+                                  .client,
+                            ),
+                          )
+                        : null),
                 onContact: details.contactEmail == null
                     ? null
                     : () => _openContactSheet(context, details),
@@ -3530,7 +3537,7 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
   }
 }
 
-class _VendorProfileView extends StatelessWidget {
+class _VendorProfileView extends StatefulWidget {
   const _VendorProfileView({
     this.socialRepository,
     required this.vendor,
@@ -3538,7 +3545,8 @@ class _VendorProfileView extends StatelessWidget {
     required this.queueRepository,
     required this.queueRefreshVersion,
     required this.onBack,
-    required this.onJoinQueue,
+    required this.onJoinLocation,
+    this.bookingRepository,
     required this.onContact,
   });
 
@@ -3551,8 +3559,172 @@ class _VendorProfileView extends StatelessWidget {
   final QueueRepository? queueRepository;
   final int queueRefreshVersion;
   final VoidCallback onBack;
-  final VoidCallback? onJoinQueue;
+  final ValueChanged<VendorLocation>? onJoinLocation;
+  final BookingRepository? bookingRepository;
   final VoidCallback? onContact;
+
+  @override
+  State<_VendorProfileView> createState() => _VendorProfileViewState();
+}
+
+class _VendorProfileViewState extends State<_VendorProfileView> {
+  VendorSummary get vendor => widget.vendor;
+  VendorSocialRepository? get socialRepository => widget.socialRepository;
+  QueueRepository? get queueRepository => widget.queueRepository;
+  int get queueRefreshVersion => widget.queueRefreshVersion;
+  int get openLocations => widget.openLocations;
+  VoidCallback get onBack => widget.onBack;
+  VoidCallback? get onContact => widget.onContact;
+  static const surfaceOverlap = _VendorProfileView.surfaceOverlap;
+  static const logoSize = _VendorProfileView.logoSize;
+  String? _selectedLocationId;
+  Set<String> _selectedServices = {};
+  List<BookingService> _services = [];
+  bool _servicesLoading = false;
+  String? _servicesError;
+  int _serviceRequest = 0;
+
+  VendorLocation? get _location {
+    for (final location in vendor.locations) {
+      if (location.id == _selectedLocationId) return location;
+    }
+    for (final location in vendor.locations) {
+      if (location.isPrimary) return location;
+    }
+    return vendor.locations.firstOrNull;
+  }
+
+  VoidCallback? get onJoinQueue {
+    final location = _location;
+    if (!vendor.queueAvailable ||
+        widget.onJoinLocation == null ||
+        location?.slug == null ||
+        location?.queueAvailable != true) {
+      return null;
+    }
+    return () => widget.onJoinLocation!(location!);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadServices();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VendorProfileView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.vendor != vendor ||
+        oldWidget.queueRefreshVersion != queueRefreshVersion) {
+      _loadServices();
+    }
+  }
+
+  Future<void> _loadServices() async {
+    final request = ++_serviceRequest;
+    final location = _location;
+    if (!vendor.bookingAvailable ||
+        location?.slug == null ||
+        widget.bookingRepository == null) {
+      _services = [];
+      _selectedServices.clear();
+      _servicesLoading = false;
+      _servicesError = null;
+      return;
+    }
+    setState(() {
+      _servicesLoading = true;
+      _servicesError = null;
+    });
+    try {
+      final services = await widget.bookingRepository!.services(
+        vendor.slug,
+        location!.slug!,
+      );
+      if (mounted && request == _serviceRequest) {
+        setState(() {
+          _services = services;
+          _selectedServices.retainAll(services.map((service) => service.slug));
+        });
+      }
+    } catch (_) {
+      if (mounted && request == _serviceRequest) {
+        setState(() {
+          _services = [];
+          _servicesError = 'Could not load services.';
+        });
+      }
+    } finally {
+      if (mounted && request == _serviceRequest) {
+        setState(() => _servicesLoading = false);
+      }
+    }
+  }
+
+  void _selectLocation(VendorLocation location) {
+    if (_location?.id == location.id) return;
+    setState(() {
+      _selectedLocationId = location.id;
+      _selectedServices = {};
+      _services = [];
+    });
+    _loadServices();
+  }
+
+  bool _openingBooking = false;
+  Future<void> _openBooking() async {
+    if (_openingBooking ||
+        _location == null ||
+        widget.bookingRepository == null) {
+      return;
+    }
+    _openingBooking = true;
+    try {
+      AuthUser? customer;
+      final api = widget.bookingRepository!.api;
+      if (api is RestBookingApi) {
+        customer = (await api.client.authRepository.restoreSession())?.user;
+      }
+      if (!mounted) return;
+      final booking = await openDrawerOverlay<CustomerBooking>(
+        context: context,
+        position: OverlayPosition.bottom,
+        expands: false,
+        draggable: false,
+        barrierDismissible: false,
+        useSafeArea: false,
+        transformBackdrop: false,
+        builder: (_) => BookingSheet(
+          repository: widget.bookingRepository!,
+          vendor: vendor,
+          location: _location!,
+          services: _services,
+          selected: _selectedServices,
+          customer: customer,
+        ),
+      ).future;
+      if (booking != null && mounted) {
+        await Navigator.of(context).push(
+          SwipeBackPageRoute<void>(
+            builder: (_) => BookingDetailPage(
+              repository: widget.bookingRepository!,
+              booking: booking,
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showFeedbackToast(
+          context,
+          message: 'Could not open booking. Please try again.',
+          isError: true,
+        );
+      }
+    } finally {
+      _openingBooking = false;
+    }
+  }
 
   void _openStoreHoursSheet(BuildContext context, VendorLocation location) {
     openDrawerOverlay<void>(
@@ -3654,27 +3826,65 @@ class _VendorProfileView extends StatelessWidget {
               ExpandableVendorDescription(description: vendor.description!),
             ],
             const SizedBox(height: 32),
-            const Text('Queue-capable locations').h3(),
+            const Text('Locations').h3(),
             const SizedBox(height: 8),
             if (vendor.locations.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('No queue-capable locations are listed.'),
+                child: Text('No locations are listed.'),
               )
             else ...[
               for (var index = 0; index < vendor.locations.length; index++) ...[
                 _VendorLocationRow(
                   location: vendor.locations[index],
+                  selected: _location?.id == vendor.locations[index].id,
+                  onSelect: () => _selectLocation(vendor.locations[index]),
                   onShowStoreHours: () =>
                       _openStoreHoursSheet(context, vendor.locations[index]),
                 ),
-                if (queueRepository != null)
-                  _VendorQueueStatus(
-                    vendor: vendor,
-                    location: vendor.locations[index],
-                    queueRepository: queueRepository!,
-                    refreshVersion: queueRefreshVersion,
-                  ),
+                if (_location?.id == vendor.locations[index].id) ...[
+                  if (queueRepository != null &&
+                      vendor.queueAvailable)
+                    _VendorQueueStatus(
+                      vendor: vendor,
+                      location: vendor.locations[index],
+                      queueRepository: queueRepository!,
+                      refreshVersion: queueRefreshVersion,
+                    ),
+                  if (vendor.bookingAvailable) ...[
+                    const SizedBox(height: 12),
+                    const Text('Services').h3(),
+                    const SizedBox(height: 8),
+                    if (_servicesLoading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (_servicesError != null) ...[
+                      Text(_servicesError!),
+                      OutlineButton(
+                        onPressed: _loadServices,
+                        child: const Text('Try again'),
+                      ),
+                    ] else if (_services.isEmpty)
+                      const Text('No bookable services at this location.')
+                    else
+                      ServiceSelection(
+                        services: _services,
+                        selected: _selectedServices,
+                        onToggle: (service) => setState(() {
+                          if (!_selectedServices.remove(service.slug)) {
+                            _selectedServices.add(service.slug);
+                          }
+                        }),
+                      ),
+                    if (_selectedServices.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 12),
+                        child: Text(
+                          '${_selectedServices.length} services selected · ₱${(_services.where((service) => _selectedServices.contains(service.slug)).fold<int>(0, (sum, service) => sum + service.priceAmountCents) / 100).toStringAsFixed(2)}',
+                        ).bold(),
+                      ),
+                  ],
+                  const SizedBox(height: 12),
+                ],
                 if (index < vendor.locations.length - 1) const Divider(),
               ],
             ],
@@ -3725,6 +3935,10 @@ class _VendorProfileView extends StatelessWidget {
         logoSize: logoSize,
         onBack: onBack,
         onJoinQueue: onJoinQueue,
+        onBook:
+            vendor.bookingAvailable && !_servicesLoading && _services.isNotEmpty
+            ? _openBooking
+            : null,
         surface: surface,
       ),
     );
@@ -3739,6 +3953,7 @@ class _VendorProfileParallax extends StatefulWidget {
     required this.logoSize,
     required this.onBack,
     required this.onJoinQueue,
+    required this.onBook,
     required this.surface,
   });
 
@@ -3748,6 +3963,7 @@ class _VendorProfileParallax extends StatefulWidget {
   final double logoSize;
   final VoidCallback onBack;
   final VoidCallback? onJoinQueue;
+  final VoidCallback? onBook;
   final Widget surface;
 
   @override
@@ -3883,10 +4099,24 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
               20,
               MediaQuery.paddingOf(context).bottom + 16,
             ),
-            child: GetPrioActionButton.primary(
-              key: const Key('vendor-join-queue-button'),
-              onPressed: widget.onJoinQueue,
-              child: const Text('Join Queue'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GetPrioActionButton.outline(
+                    key: const Key('vendor-book-button'),
+                    onPressed: widget.onBook,
+                    child: const Text('Book'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GetPrioActionButton.primary(
+                    key: const Key('vendor-join-queue-button'),
+                    onPressed: widget.onJoinQueue,
+                    child: const Text('Join Queue'),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -4353,75 +4583,96 @@ class _VendorHighlight extends StatelessWidget {
 class _VendorLocationRow extends StatelessWidget {
   const _VendorLocationRow({
     required this.location,
+    required this.selected,
+    required this.onSelect,
     required this.onShowStoreHours,
   });
-
   final VendorLocation location;
-  final VoidCallback onShowStoreHours;
-
+  final bool selected;
+  final VoidCallback onSelect, onShowStoreHours;
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: GetPrioTheme.paperAccent,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(LucideIcons.mapPin, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Semantics(
+        selected: selected,
+        expanded: selected,
+        child: Button(
+          key: ValueKey('vendor-location-${location.id}'),
+          style: const ButtonStyle.ghost(),
+          onPressed: onSelect,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected
+                        ? GetPrioTheme.primary.withValues(alpha: .12)
+                        : GetPrioTheme.paperAccent,
+                  ),
+                  child: Icon(
+                    LucideIcons.mapPin,
+                    size: 20,
+                    color: selected
+                        ? GetPrioTheme.primary
+                        : GetPrioTheme.mutedInk,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         location.name,
-                        style: theme.typography.p.copyWith(
+                        style: Theme.of(context).typography.p.copyWith(
                           fontWeight: FontWeight.w600,
+                          color: selected
+                              ? GetPrioTheme.primary
+                              : GetPrioTheme.ink,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    location.queueAvailable
-                        ? const SecondaryBadge(child: Text('STORE OPEN'))
-                        : const DestructiveBadge(child: Text('UNAVAILABLE')),
-                  ],
-                ),
-                if (location.address != null) ...[
-                  const SizedBox(height: 5),
-                  Text(location.address!, style: theme.typography.textMuted),
-                ],
-                if (location.openStatus != null ||
-                    location.hours.isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  GetPrioActionButton.outline(
-                    key: ValueKey(
-                      'store-hours-button-${location.slug ?? location.id}',
-                    ),
-                    onPressed: onShowStoreHours,
-                    leading: const Icon(LucideIcons.clock, size: 18),
-                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
-                    child: const Text('Show operating hours'),
+                      if (location.address != null)
+                        Text(
+                          location.address!,
+                          style: Theme.of(context).typography.textMuted,
+                        ),
+                      if (location.openStatus != null && location.hours.isEmpty)
+                        Text(
+                          location.openStatus!,
+                          style: Theme.of(context).typography.small,
+                        ),
+                    ],
                   ),
-                ],
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  selected ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                  size: 18,
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
-    );
-  }
+      if (selected &&
+          (location.openStatus != null || location.hours.isNotEmpty))
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: GetPrioActionButton.outline(
+            key: ValueKey('store-hours-button-${location.slug ?? location.id}'),
+            onPressed: onShowStoreHours,
+            leading: const Icon(LucideIcons.clock, size: 18),
+            child: const Text('Show operating hours'),
+          ),
+        ),
+    ],
+  );
 }
 
 class _VendorStoreHoursSheet extends StatelessWidget {
@@ -6956,12 +7207,10 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
         const SizedBox(height: 8),
         Text('$description It expires in 10 minutes.'),
         const SizedBox(height: 20),
-        _LabeledTextField(
+        _LabeledOtpField(
           inputKey: const Key('profile-email-code'),
           controller: _code,
           label: '6-digit code',
-          placeholder: 'Enter the code',
-          keyboardType: TextInputType.number,
           onChanged: (value) => _limitDigits(_code, value),
         ),
         if (_error != null) ...[
@@ -6997,12 +7246,10 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
           'Enter the code sent to ${_challenge?.deliveryTarget ?? 'your email address'} and your current password.',
         ),
         const SizedBox(height: 20),
-        _LabeledTextField(
+        _LabeledOtpField(
           inputKey: const Key('profile-phone-code'),
           controller: _code,
           label: '6-digit code',
-          placeholder: 'Enter the code',
-          keyboardType: TextInputType.number,
           onChanged: (value) => _limitDigits(_code, value),
         ),
         const SizedBox(height: 16),
@@ -7652,12 +7899,10 @@ class _SecurityPageState extends State<SecurityPage>
                 ),
               ),
               const SizedBox(height: 12),
-              _LabeledTextField(
+              _LabeledOtpField(
                 controller: _mfaCode,
                 inputKey: const Key('mfa-enrollment-code'),
                 label: 'Authenticator code',
-                placeholder: 'Enter your 6-digit code',
-                keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 12),
               GetPrioActionButton.primary(
@@ -7855,19 +8100,19 @@ class _SecurityPageState extends State<SecurityPage>
             ),
             const SizedBox(height: 12),
           ],
-          _LabeledTextField(
-            inputKey: const Key('mfa-current-code'),
-            controller: _currentMfaCode,
-            label: removing && _useMfaRecoveryCode
-                ? 'Recovery code'
-                : 'Current authenticator code',
-            placeholder: removing && _useMfaRecoveryCode
-                ? 'Enter a recovery code'
-                : 'Enter your 6-digit code',
-            keyboardType: removing && _useMfaRecoveryCode
-                ? TextInputType.text
-                : TextInputType.number,
-          ),
+          if (removing && _useMfaRecoveryCode)
+            _LabeledTextField(
+              inputKey: const Key('mfa-current-code'),
+              controller: _currentMfaCode,
+              label: 'Recovery code',
+              placeholder: 'Enter a recovery code',
+            )
+          else
+            _LabeledOtpField(
+              inputKey: const Key('mfa-current-code'),
+              controller: _currentMfaCode,
+              label: 'Current authenticator code',
+            ),
           if (removing)
             GetPrioActionButton.outline(
               key: const Key('mfa-toggle-recovery'),

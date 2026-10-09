@@ -36,7 +36,7 @@ void main() {
     );
     expect(homePage.padding, const EdgeInsets.fromLTRB(20, 0, 20, 20));
 
-    for (final key in const ['explore-page', 'tickets-page', 'account-page']) {
+    for (final key in const ['explore-page', 'lists-page', 'account-page']) {
       final page = tester.widget<ListView>(
         find.byKey(Key(key), skipOffstage: false),
       );
@@ -63,6 +63,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('account-page')), findsOneWidget);
-    expect(find.text('Manage your profile and app preferences.'), findsOneWidget);
+    expect(
+      find.text('Manage your profile and app preferences.'),
+      findsOneWidget,
+    );
   });
 }

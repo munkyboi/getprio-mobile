@@ -37,7 +37,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('STORE OPEN'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('vendor-location-main-clinic')),
+      findsOneWidget,
+    );
     expect(find.text('QUEUE OPEN'), findsNothing);
     expect(find.text('Sun 09:00-17:00, Mon 09:00-17:00'), findsNothing);
     expect(
