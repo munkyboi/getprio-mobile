@@ -1,6 +1,6 @@
 # Customer mobile booking plan
 
-Approved in chat on 9 October 2026. Primary development device: Zero32 Domain.
+Approved in chat on 9 October 2026. Primary development device: Zero32 (`00008120-001A3D101E68C01E`), switched from Zero32 Domain on 9 October 2026.
 
 Target: the main GetPrio customer mobile app (`mobile-app` repository, iOS `Runner` scheme). The user clarified that this feature is not being built for the separate Sandbox mobile app. Use the main app identity and production API configuration for subsequent device builds.
 
@@ -166,3 +166,7 @@ Tickets and Bookings now share `ListFilterTabs`, using the same full-width shadc
 Verification: Flutter analysis and all 52 affected widget, ticket-detail, invitation and booking-UI tests passed, including switching both directions and preserving History selection after a repository refresh. KanbanFlow M28 synchronization remains blocked by browser admin-policy verification; add this tab refinement and verification to the pending update, preserving In Progress.
 
 The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Physical tab interaction acceptance remains pending.
+
+## Test device switch to Zero32
+
+On 9 October 2026, the user switched the main-app test target to Zero32 (`00008120-001A3D101E68C01E`). The current signed main Runner Profile build, including Active/History ticket tabs, was installed and launched successfully on Zero32. Subsequent device work should use this device; earlier Zero32 Domain verification records remain historical. Physical feature acceptance on Zero32 remains pending.

@@ -64,4 +64,4 @@ A payment reference and private receipt supplied by the customer for vendor revi
 
 The approved mobile booking scope and delivery stages are in `docs/specs/mobile-booking-plan.md`.
 
-Booking development targets the main GetPrio customer app, not the separate Sandbox app. Zero32 Domain is the primary development device.
+Booking development targets the main GetPrio customer app, not the separate Sandbox app. Zero32 is the primary development device (iOS device ID `00008120-001A3D101E68C01E`), replacing Zero32 Domain as of 9 October 2026.
