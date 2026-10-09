@@ -108,6 +108,40 @@ void main() {
     expect(join.onPressed, isNotNull);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('location selection keeps the vendor page scroll position', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: VendorDetailPage(
+          vendor: const VendorSummary(
+            slug: 'clinic',
+            name: 'Clinic',
+            queueAvailable: false,
+          ),
+          repository: DirectoryRepository(_LongLocationsApi()),
+          bookingRepository: BookingRepository(_ManyServicesApi()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final other = find.byKey(const ValueKey('vendor-location-other'));
+    await reveal(tester, other);
+    final scrollable = find.descendant(
+      of: find.byKey(const Key('vendor-details-scroll')),
+      matching: find.byType(Scrollable),
+    );
+    final position = tester.state<ScrollableState>(scrollable).position;
+    final offset = position.pixels;
+    final headerTop = tester.getTopLeft(other).dy;
+    expect(offset, greaterThan(200));
+    await tester.tap(other);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(other).dy, closeTo(headerTop, 1));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'booking list separates upcoming from history and handles retry',
     (tester) async {
@@ -319,4 +353,30 @@ class _DirectoryApi implements DirectoryApi {
       },
     ],
   };
+}
+
+class _LongLocationsApi extends _DirectoryApi {
+  @override
+  Future<Map<String, dynamic>> loadVendor(String tenantSlug) async {
+    final data = await super.loadVendor(tenantSlug);
+    data['locations'] = (data['locations'] as List).reversed.toList();
+    return data;
+  }
+}
+
+class _ManyServicesApi extends _BookingApi {
+  @override
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    if (path.endsWith('/services')) {
+      return {
+        'services': [
+          for (var i = 0; i < 12; i++) {..._service, 'slug': 'service-$i'},
+        ],
+      };
+    }
+    return super.get(path, query: query);
+  }
 }

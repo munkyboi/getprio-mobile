@@ -67,3 +67,7 @@ On 9 October 2026, built the main iOS `Runner` scheme with `Profile`, `GETPRIO_E
 - Installed and launched the main app successfully on Zero32 Domain.
 - All nine environment configuration tests passed.
 - This is a local development build, not an App Store/TestFlight release. Physical interaction, live OTP/booking, payment and vendor acceptance remain pending.
+
+## Location accordion scroll correction
+
+On 9 October 2026, corrected location switching after a long expanded service list. The tapped location header is anchored to its viewport position while the previous location collapses, with normal scroll bounds for shorter pages. A phone-size regression test reproduces the displaced header before the fix and passes afterward. All 12 affected booking, location selection and parallax tests passed; Flutter analysis passed. Main Runner Profile build and signature verification passed.

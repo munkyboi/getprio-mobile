@@ -3577,6 +3577,8 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
   VoidCallback? get onContact => widget.onContact;
   static const surfaceOverlap = _VendorProfileView.surfaceOverlap;
   static const logoSize = _VendorProfileView.logoSize;
+  final _locationScrollController = ScrollController();
+  final _locationKeys = <String, GlobalKey>{};
   String? _selectedLocationId;
   Set<String> _selectedServices = {};
   List<BookingService> _services = [];
@@ -3661,14 +3663,46 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
     }
   }
 
+  @override
+  void dispose() {
+    _locationScrollController.dispose();
+    super.dispose();
+  }
+
   void _selectLocation(VendorLocation location) {
     if (_location?.id == location.id) return;
+    final headerKey = _locationKeys[location.id];
+    final header = headerKey?.currentContext?.findRenderObject();
+    final headerTop = header is RenderBox
+        ? header.localToGlobal(Offset.zero).dy
+        : null;
     setState(() {
       _selectedLocationId = location.id;
       _selectedServices = {};
       _services = [];
     });
     _loadServices();
+    // Collapsing content above the tapped header changes its document position.
+    // Keep that header at the same viewport position instead of losing it above
+    // the screen. Clamp only when the shortened page cannot fill the viewport.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          headerTop == null ||
+          !_locationScrollController.hasClients) {
+        return;
+      }
+      final updatedHeader = headerKey?.currentContext?.findRenderObject();
+      if (updatedHeader is! RenderBox) return;
+      final delta = updatedHeader.localToGlobal(Offset.zero).dy - headerTop;
+      final position = _locationScrollController.position;
+      final target = (position.pixels + delta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      if ((target - position.pixels).abs() > 0.5) {
+        _locationScrollController.jumpTo(target);
+      }
+    });
   }
 
   bool _openingBooking = false;
@@ -3836,6 +3870,10 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
             else ...[
               for (var index = 0; index < vendor.locations.length; index++) ...[
                 _VendorLocationRow(
+                  key: _locationKeys.putIfAbsent(
+                    vendor.locations[index].id,
+                    GlobalKey.new,
+                  ),
                   location: vendor.locations[index],
                   selected: _location?.id == vendor.locations[index].id,
                   onSelect: () => _selectLocation(vendor.locations[index]),
@@ -3843,8 +3881,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
                       _openStoreHoursSheet(context, vendor.locations[index]),
                 ),
                 if (_location?.id == vendor.locations[index].id) ...[
-                  if (queueRepository != null &&
-                      vendor.queueAvailable)
+                  if (queueRepository != null && vendor.queueAvailable)
                     _VendorQueueStatus(
                       vendor: vendor,
                       location: vendor.locations[index],
@@ -3929,6 +3966,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: _VendorProfileParallax(
+        scrollController: _locationScrollController,
         socialRepository: socialRepository,
         vendor: vendor,
         coverHeight: coverHeight,
@@ -3947,6 +3985,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
 
 class _VendorProfileParallax extends StatefulWidget {
   const _VendorProfileParallax({
+    required this.scrollController,
     this.socialRepository,
     required this.vendor,
     required this.coverHeight,
@@ -3957,6 +3996,7 @@ class _VendorProfileParallax extends StatefulWidget {
     required this.surface,
   });
 
+  final ScrollController scrollController;
   final VendorSocialRepository? socialRepository;
   final VendorSummary vendor;
   final double coverHeight;
@@ -3975,13 +4015,7 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
   static const logoParallaxFactor = 0.7;
   static const logoFadeViewportFraction = 0.5;
 
-  final _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
+  ScrollController get _scrollController => widget.scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -4582,6 +4616,7 @@ class _VendorHighlight extends StatelessWidget {
 
 class _VendorLocationRow extends StatelessWidget {
   const _VendorLocationRow({
+    super.key,
     required this.location,
     required this.selected,
     required this.onSelect,
