@@ -828,6 +828,7 @@ class _VendorRatingFormState extends State<VendorRatingForm> {
                 child: TextField(
                   controller: comment,
                   focusNode: _commentFocus,
+                  onTapOutside: (_) => _commentFocus.unfocus(),
                   enabled: !busy,
                   maxLines: 5,
                   maxLength: 500,

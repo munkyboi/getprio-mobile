@@ -1,5 +1,3 @@
-import 'package:cupertino_tabbar/cupertino_tabbar.dart' as cupertino_tabs;
-
 import 'booking_list_row.dart';
 
 import 'dart:async';
@@ -119,31 +117,25 @@ class _BookingsPageState extends State<BookingsPage>
             key: const Key('bookings-page'),
             padding: const EdgeInsets.all(20),
             children: [
-              cupertino_tabs.CupertinoTabBar(
-                GetPrioTheme.ink,
-                GetPrioTheme.teal,
-                [
+              Tabs(
+                key: const Key('booking-tabs'),
+                index: _history ? 1 : 0,
+                onChanged: (index) => setState(() => _history = index == 1),
+                expand: true,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 16,
+                ),
+                children: [
                   for (final label in ['Upcoming', 'History'])
-                    Semantics(
-                      selected: _history == (label == 'History'),
-                      button: true,
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          color: Color(0xFFFFFFFF),
-                          fontWeight: FontWeight.w600,
-                        ),
+                    TabItem(
+                      child: Semantics(
+                        selected: _history == (label == 'History'),
+                        button: true,
+                        child: Text(label),
                       ),
                     ),
                 ],
-                () => _history ? 1 : 0,
-                (int index) => setState(() => _history = index == 1),
-                key: const Key('booking-tabs'),
-                allowExpand: true,
-                useSeparators: true,
-                innerVerticalPadding: 12,
-                outerHorizontalPadding: 0,
-                duration: const Duration(milliseconds: 250),
               ),
               const SizedBox(height: 20),
               if (widget.repository == null)

@@ -180,6 +180,15 @@ void main() {
     await tester.enterText(find.byType(TextField), 'x' * 510);
     await tester.pump();
     expect(find.text('500/500'), findsOneWidget);
+    expect(tester.testTextInput.isVisible, isTrue);
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.focusNode!.hasFocus, isTrue);
+    await tester.tap(find.text('Rate Clinic'));
+    await tester.pumpAndSettle();
+    expect(field.focusNode!.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(field.controller!.text, hasLength(500));
+
     await tester.tap(find.text('Rate vendor'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 4));

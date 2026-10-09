@@ -128,3 +128,13 @@ Home, Explore, Lists and Profile now use `TabPageHeader` with the same heading t
 Verification: analysis passed; all 311 tests passed, including tab switching, status pagination/sorting, active-ticket filtering, row navigation and last-data retention after refresh errors. The signed main Runner Profile build passed signature verification and was installed on Zero32 Domain. No production booking, OTP, payment proof or arrival was submitted during verification; physical visual/end-to-end acceptance remains pending.
 
 KanbanFlow synchronization remains blocked because the browser could not verify its admin-enforced access policy. Pending M28 update: add this UI refinement, new Lists data sections and dependency, record verification, and retain In Progress with remaining cancellation and physical end-to-end acceptance work.
+
+## Shared-library tabs and review keyboard dismissal
+
+The Forui request was withdrawn; the app continues using `shadcn_flutter`. Bookings now uses the existing library's `Tabs` and `TabItem` widgets for its full-width Upcoming/History selector, retaining selected semantics, list filtering, pagination and retry. `cupertino_tabbar` has been removed from the manifest and lockfile, superseding the earlier Cupertino tab refinement.
+
+The vendor rating comment explicitly unfocuses on an outside pointer tap, including mobile touch input. This hides the onscreen keyboard and keeps the entered comment and selected stars available for submission. Existing drag-to-dismiss and submit-time dismissal remain. The regression test checks focus and keyboard visibility after tapping the dialog title, draft retention and successful rating submission; it fails without the fix and passes with it.
+
+KanbanFlow M28 update pending: record the tab dependency removal, review keyboard fix and verified checks, retaining In Progress and the existing remaining lifecycle/physical acceptance work. Board access remains blocked because the browser cannot verify its admin-enforced access policy.
+
+Verification: Flutter analysis passed and all 18 affected social/booking UI tests passed. The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Review submission used a fake API in tests; physical keyboard interaction and live review acceptance remain to be checked.
