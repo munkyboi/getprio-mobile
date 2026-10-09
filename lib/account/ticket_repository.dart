@@ -219,8 +219,19 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
         tickets.map((raw) async {
           if (raw is! Map<String, dynamic>) return raw;
           final ticket = QueueTicket.fromJson(raw);
-          if (ticket.status != TicketStatus.waiting ||
-              ticket.position != null ||
+          final needsPosition =
+              ticket.status == TicketStatus.waiting && ticket.position == null;
+          // Older account responses omit confirmation/service fields. Resolve
+          // called tickets against their live snapshot until that API catches up.
+          final needsServiceProgress =
+              ticket.status == TicketStatus.called &&
+              [
+                'customerConfirmedAt',
+                'serviceStartedAt',
+                'serviceEndedAt',
+                'serviceOutcome',
+              ].any((key) => !raw.containsKey(key));
+          if ((!needsPosition && !needsServiceProgress) ||
               ticket.tenantSlug == null ||
               ticket.tenantSlug!.isEmpty ||
               ticket.lookupCode.isEmpty) {
@@ -245,6 +256,9 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
                 'position',
                 'estimatedWaitMinutes',
                 'customerConfirmedAt',
+                'serviceStartedAt',
+                'serviceEndedAt',
+                'serviceOutcome',
                 'statusReason',
               ])
                 if (focus.containsKey(key)) key: focus[key],
