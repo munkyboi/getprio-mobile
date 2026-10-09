@@ -150,3 +150,11 @@ The shell’s safe-area top spacing is now 20 logical pixels for Home, Explore, 
 KanbanFlow M28 synchronization remains pending: add the Appearance setting, persisted theme behavior, shared booking rows and 20-pixel spacing, plus final verification. Preserve In Progress, estimates/labels and remaining booking lifecycle/physical acceptance work. Browser access is blocked by admin-enforced policy verification.
 
 Verification: Flutter analysis passed and the complete 316-test suite passed. After tightening the late-read guard for an explicit System selection, all seven affected Appearance/navigation tests passed again. The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Device screenshots and physical visual/light-dark/relaunch acceptance remain to be checked; tests use a fake preference store and fake APIs. No production review, booking, payment proof or arrival was submitted.
+
+## Dark ticket barcode and Settings ordering
+
+Queue ticket details now invert the barcode surface in effective dark appearance: white bars on black, including when System follows a dark device setting. Light appearance retains the existing dark bars on white. This supersedes the earlier fixed-white queue barcode surface; barcode data, quiet-zone padding and payment/MFA QR images are unchanged. Profile Settings places Appearance directly after Notifications, separated by a divider.
+
+Verification: Flutter analysis and all 30 affected ticket-details, Appearance and Profile tests passed. KanbanFlow M28 update remains pending because the browser cannot verify the admin-enforced access policy; batch these two presentation refinements with the pending Appearance update and preserve In Progress.
+
+The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Physical dark-mode barcode viewing/scanning acceptance remains pending.

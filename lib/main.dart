@@ -5767,7 +5767,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                     const SizedBox(height: 12),
                     Container(
                       key: const Key('ticket-details-barcode'),
-                      color: Colors.white,
+                      color: GetPrioTheme.colors(context).dark
+                          ? Colors.black
+                          : Colors.white,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 12,
@@ -5777,7 +5779,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                         barcode: Barcode.code128(),
                         height: 72,
                         drawText: false,
-                        color: GetPrioTheme.ink,
+                        color: GetPrioTheme.colors(context).dark
+                            ? Colors.white
+                            : GetPrioTheme.ink,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -6375,16 +6379,6 @@ class _AccountPageState extends State<AccountPage> {
               const SizedBox(height: 20),
               const Text('Settings').h3(),
               const SizedBox(height: 8),
-              _AccountAction(
-                key: const Key('profile-appearance'),
-                icon: LucideIcons.palette,
-                title: 'Appearance',
-                subtitle: 'Light, Dark, or follow your device.',
-                onPressed: AppearanceScope.maybeOf(context) == null
-                    ? null
-                    : () => showAppearanceSheet(overlayContext),
-              ),
-              const Divider(),
               if (widget.approvedVendorStore != null) ...[
                 _AccountAction(
                   key: const Key('profile-approved-vendors'),
@@ -6403,6 +6397,16 @@ class _AccountPageState extends State<AccountPage> {
                     ? 'Queue alerts unavailable'
                     : 'Manage queue alerts and app preferences.',
                 onPressed: () => _openNotificationsSheet(overlayContext),
+              ),
+              const Divider(),
+              _AccountAction(
+                key: const Key('profile-appearance'),
+                icon: LucideIcons.palette,
+                title: 'Appearance',
+                subtitle: 'Light, Dark, or follow your device.',
+                onPressed: AppearanceScope.maybeOf(context) == null
+                    ? null
+                    : () => showAppearanceSheet(overlayContext),
               ),
               const Divider(),
               const SizedBox(height: 20),
