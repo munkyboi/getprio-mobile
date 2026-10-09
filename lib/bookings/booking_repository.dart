@@ -5,19 +5,21 @@ class BookingService {
     required this.slug,
     required this.name,
     this.description = '',
+    this.imageUrl = '',
     this.durationMinutes = 0,
     this.priceDisplay = '',
     this.priceAmountCents = 0,
     this.allowQuantity = false,
     this.quantityLabel = 'quantity',
   });
-  final String slug, name, description, priceDisplay, quantityLabel;
+  final String slug, name, description, imageUrl, priceDisplay, quantityLabel;
   final int durationMinutes, priceAmountCents;
   final bool allowQuantity;
   factory BookingService.fromJson(Map<String, dynamic> json) => BookingService(
     slug: json['slug'] as String? ?? '',
     name: json['name'] as String? ?? 'Service',
     description: json['description'] as String? ?? '',
+    imageUrl: (json['imageUrl'] as String? ?? '').trim(),
     durationMinutes: (json['durationMinutes'] as num?)?.toInt() ?? 0,
     priceDisplay: json['priceDisplay'] as String? ?? '',
     priceAmountCents: (json['priceAmountCents'] as num?)?.toInt() ?? 0,

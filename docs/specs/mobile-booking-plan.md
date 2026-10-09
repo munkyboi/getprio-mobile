@@ -83,3 +83,9 @@ The report about BKG-B980FDAC exposed the missing post-OTP payment UI. The web/b
 - Private proof preview, live payment upload/vendor review acceptance and remaining lifecycle work are still pending.
 
 Verification: Flutter analysis passed; all 295 tests passed. The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Payment upload tests use fake APIs; no live receipt, payment or vendor decision was submitted.
+
+## Vendor location and service images
+
+Single-location vendors keep their location content open and omit the accordion chevron and expanded accessibility hint. Multi-location vendors keep the chevrons. Services with an `imageUrl` from the existing public API now show a compact thumbnail that opens a larger pinch-to-zoom image viewer with a close action. Image taps do not add/remove a service; absent images do not leave thumbnail gaps, and failed image loads show a fallback.
+
+Verification: all 13 affected booking/location/parallax tests passed, including image viewer navigation and single/multiple-location chevrons; Flutter analysis passed. Signed main Runner Profile build succeeded and signature verification passed.

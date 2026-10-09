@@ -1,6 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
+import '../navigation/swipe_back_page_route.dart';
 import 'booking_repository.dart';
 
 class ServiceSelection extends StatelessWidget {
@@ -38,6 +39,38 @@ class ServiceSelection extends StatelessWidget {
             ),
             child: Row(
               children: [
+                if (service.imageUrl.isNotEmpty) ...[
+                  Semantics(
+                    label: 'View image of ${service.name}',
+                    button: true,
+                    child: SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: Button(
+                        key: ValueKey('service-thumbnail-${service.slug}'),
+                        style: const ButtonStyle.ghost(),
+                        onPressed: () => Navigator.of(context).push(
+                          SwipeBackPageRoute<void>(
+                            builder: (_) =>
+                                ServiceImageViewer(service: service),
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            service.imageUrl,
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) =>
+                                const Icon(LucideIcons.image, size: 32),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,5 +151,49 @@ class ServiceSelection extends StatelessWidget {
           ),
         ),
     ],
+  );
+}
+
+class ServiceImageViewer extends StatelessWidget {
+  const ServiceImageViewer({super.key, required this.service});
+  final BookingService service;
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    headers: [
+      AppBar(
+        title: Text(service.name),
+        leading: [
+          IconButton.ghost(
+            key: const Key('service-image-close'),
+            icon: const Icon(LucideIcons.x),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    ],
+    child: SafeArea(
+      top: false,
+      child: Center(
+        child: InteractiveViewer(
+          key: const Key('service-image-viewer'),
+          minScale: 1,
+          maxScale: 5,
+          child: Image.network(
+            service.imageUrl,
+            fit: BoxFit.contain,
+            semanticLabel: service.name,
+            loadingBuilder: (_, child, progress) => progress == null
+                ? child
+                : const Center(child: CircularProgressIndicator()),
+            errorBuilder: (_, _, _) => const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Could not load service image. Close the viewer and tap the thumbnail to try again.',
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }

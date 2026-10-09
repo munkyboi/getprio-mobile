@@ -5,6 +5,7 @@ import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/bookings/booking_repository.dart';
 import 'package:getprio_mobile/bookings/bookings_page.dart';
 import 'package:getprio_mobile/bookings/booking_sheet.dart';
+import 'package:getprio_mobile/bookings/service_selection.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
@@ -17,6 +18,44 @@ Future<void> reveal(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  testWidgets('service thumbnail opens zoom viewer without selecting service', (
+    tester,
+  ) async {
+    final service = BookingService.fromJson({
+      ..._service,
+      'imageUrl': 'https://example.com/service.png',
+    });
+    expect(service.imageUrl, 'https://example.com/service.png');
+    var toggles = 0;
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: Scaffold(
+          child: ServiceSelection(
+            services: [
+              service,
+              const BookingService(slug: 'plain', name: 'No image'),
+            ],
+            selected: {},
+            onToggle: (_) => toggles++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('service-thumbnail-plain')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('service-thumbnail-consult')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('service-image-viewer')), findsOneWidget);
+    expect(toggles, 0);
+    await tester.tap(find.byKey(const Key('service-image-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('service-image-viewer')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('service-toggle-consult')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('booking footer remains above the keyboard on a phone', (
     tester,
   ) async {

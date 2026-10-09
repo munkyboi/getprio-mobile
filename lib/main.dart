@@ -3876,6 +3876,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
                   ),
                   location: vendor.locations[index],
                   selected: _location?.id == vendor.locations[index].id,
+                  showChevron: vendor.locations.length > 1,
                   onSelect: () => _selectLocation(vendor.locations[index]),
                   onShowStoreHours: () =>
                       _openStoreHoursSheet(context, vendor.locations[index]),
@@ -4619,11 +4620,12 @@ class _VendorLocationRow extends StatelessWidget {
     super.key,
     required this.location,
     required this.selected,
+    required this.showChevron,
     required this.onSelect,
     required this.onShowStoreHours,
   });
   final VendorLocation location;
-  final bool selected;
+  final bool selected, showChevron;
   final VoidCallback onSelect, onShowStoreHours;
   @override
   Widget build(BuildContext context) => Column(
@@ -4631,7 +4633,7 @@ class _VendorLocationRow extends StatelessWidget {
     children: [
       Semantics(
         selected: selected,
-        expanded: selected,
+        expanded: showChevron ? selected : null,
         child: Button(
           key: ValueKey('vendor-location-${location.id}'),
           style: const ButtonStyle.ghost(),
@@ -4685,11 +4687,14 @@ class _VendorLocationRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  selected ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-                  size: 18,
-                ),
+                if (showChevron) ...[
+                  const SizedBox(width: 8),
+                  Icon(
+                    key: ValueKey('vendor-location-chevron-${location.id}'),
+                    selected ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                    size: 18,
+                  ),
+                ],
               ],
             ),
           ),

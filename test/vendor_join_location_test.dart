@@ -24,6 +24,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('vendor-location-chevron-0')),
+        count == 1 ? findsNothing : findsOneWidget,
+      );
       if (count > 1) {
         await Scrollable.ensureVisible(
           tester.element(find.byKey(const ValueKey('vendor-location-1'))),
