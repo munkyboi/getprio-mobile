@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'auth/auth_models.dart';
@@ -64,8 +65,10 @@ Future<void> main() async {
   if (firebaseEnabled) {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
+  final packageInfo = await PackageInfo.fromPlatform();
   runApp(
     GetPrioApp(
+      appVersion: packageInfo.version,
       firebaseEnabled: firebaseEnabled,
       environmentConfig: environmentConfig,
     ),
@@ -76,6 +79,7 @@ class GetPrioApp extends StatelessWidget {
   GetPrioApp({
     super.key,
     AuthRepository? authRepository,
+    this.appVersion = '1.0.1',
     this.firebaseEnabled = false,
     this.onboardingStore = const InstallationOnboardingStore(),
     MobileEnvironmentConfig? environmentConfig,
@@ -90,6 +94,7 @@ class GetPrioApp extends StatelessWidget {
        approvedVendorStore = approvedVendorStore ?? SecureApprovedVendorStore();
 
   final AuthRepository authRepository;
+  final String appVersion;
   final bool firebaseEnabled;
   final OnboardingStore onboardingStore;
   final MobileEnvironmentConfig environmentConfig;
@@ -106,9 +111,12 @@ class GetPrioApp extends StatelessWidget {
         home: _EnvironmentConfigurationError(message: configurationError),
       );
     }
-    const appleSignInEnabled = bool.fromEnvironment(
+    const sandboxAppleSignInEnabled = bool.fromEnvironment(
       'GETPRIO_APPLE_SIGN_IN_ENABLED',
       defaultValue: false,
+    );
+    final appleSignInEnabled = environmentConfig.appleSignInEnabled(
+      sandboxOverride: sandboxAppleSignInEnabled,
     );
     final apiClient = AuthenticatedApiClient(
       baseUrl: baseUrl,
@@ -137,10 +145,7 @@ class GetPrioApp extends StatelessWidget {
             platform: defaultTargetPlatform == TargetPlatform.android
                 ? 'android'
                 : 'ios',
-            appVersion: const String.fromEnvironment(
-              'FLUTTER_BUILD_NAME',
-              defaultValue: '1.0.1',
-            ),
+            appVersion: appVersion,
             locale: 'en-PH',
             onSignal: (signal) async {
               pushSignal.value = signal;
@@ -2241,6 +2246,7 @@ class _CustomerShellState extends State<CustomerShell>
             selectedDestination: _selectedDestination,
             onDestinationSelected: _selectDestination,
             onJoinQueue: _openJoin,
+            exploreEnabled: !widget.sandbox,
           ),
         ],
         child: SafeArea(
@@ -2484,7 +2490,7 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   void _selectDestination(CustomerDestination destination) {
-    if (destination == CustomerDestination.explore) return;
+    if (widget.sandbox && destination == CustomerDestination.explore) return;
     setState(() => _selectedDestination = destination);
     if (destination == CustomerDestination.tickets) {
       widget.ticketRepository?.requestRefresh();

@@ -10,11 +10,13 @@ class CustomerNavigationBar extends StatelessWidget {
     required this.selectedDestination,
     required this.onDestinationSelected,
     required this.onJoinQueue,
+    this.exploreEnabled = true,
   });
 
   final CustomerDestination selectedDestination;
   final ValueChanged<CustomerDestination> onDestinationSelected;
   final VoidCallback onJoinQueue;
+  final bool exploreEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +44,7 @@ class CustomerNavigationBar extends StatelessWidget {
           destination: CustomerDestination.explore,
           label: 'Explore',
           icon: LucideIcons.compass,
-          enabled: false,
+          enabled: exploreEnabled,
         ),
         _joinQueueAction(context),
         _destinationItem(

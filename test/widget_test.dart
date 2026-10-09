@@ -164,6 +164,32 @@ void main() {
     expect(find.text('Email or username'), findsOneWidget);
   });
 
+  testWidgets(
+    'production iOS distribution shows Google, Facebook, and Apple sign-in',
+    (tester) async {
+      await tester.pumpWidget(
+        GetPrioApp(
+          environmentConfig: const MobileEnvironmentConfig(
+            environment: GetPrioEnvironment.production,
+            apiBaseUrl: 'https://api.getprio.online',
+            approvedHosts: 'app.getprio.online',
+          ),
+          authRepository: AuthRepository(
+            api: UnusedAuthApi(),
+            tokenStore: MemoryTokenStore(),
+          ),
+          onboardingStore: MemoryOnboardingStore(completed: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('Continue with Google'), findsOneWidget);
+      expect(find.bySemanticsLabel('Continue with Facebook'), findsOneWidget);
+      expect(find.bySemanticsLabel('Continue with Apple'), findsOneWidget);
+    },
+    variant: TargetPlatformVariant({TargetPlatform.iOS}),
+  );
+
   testWidgets('labels customer registration fields', (tester) async {
     await tester.pumpWidget(
       ShadcnApp(
@@ -544,7 +570,9 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+      ShadcnApp(
+        home: const CustomerShell(user: AuthUserForTest.user, sandbox: true),
+      ),
     );
 
     final explore = tester.widget<NavigationItem>(
@@ -557,6 +585,23 @@ void main() {
 
     expect(find.byKey(const Key('home-page')), findsOneWidget);
     expect(find.byKey(const Key('explore-page')), findsNothing);
+  });
+
+  testWidgets('opens Explore in the production app', (tester) async {
+    await tester.pumpWidget(
+      ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
+    );
+
+    final explore = tester.widget<NavigationItem>(
+      find.byKey(const ValueKey(CustomerDestination.explore)),
+    );
+    expect(explore.enabled, isTrue);
+
+    await tester.tap(find.text('Explore'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('explore-page')), findsOneWidget);
+    expect(find.byKey(const Key('home-page')), findsNothing);
   });
 
   testWidgets('centers phone action button content', (tester) async {
