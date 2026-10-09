@@ -37,6 +37,12 @@ class CustomerBooking {
   String get locationName => data['locationName'] as String? ?? '';
   String get serviceName => data['serviceName'] as String? ?? 'Service';
   String get status => data['status'] as String? ?? 'unknown';
+  bool get isCheckedIn =>
+      data['checkedInAt'] != null ||
+      linkedTicket != null ||
+      data['queueTicketId'] != null;
+  String get listStatusLabel =>
+      isUpcoming && isCheckedIn ? 'checked-in' : status.replaceAll('_', ' ');
   String get paymentStatus => data['paymentStatus'] as String? ?? 'unknown';
   DateTime? get startAt =>
       DateTime.tryParse('${data['scheduledStartAt']}')?.toLocal();

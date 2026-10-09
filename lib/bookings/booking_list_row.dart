@@ -20,7 +20,7 @@ class BookingListRow extends StatelessWidget {
     statuses: [
       BookingStatusBadge(
         status: booking.status,
-        label: booking.status.replaceAll('_', ' '),
+        label: booking.listStatusLabel,
       ),
       const SizedBox(height: 6),
       BookingStatusBadge(

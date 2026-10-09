@@ -40,6 +40,7 @@ class OverviewTickets implements AccountQueueApi {
 class OverviewBookings implements BookingApi {
   final requests = <Map<String, String>>[];
   bool fail = false;
+  bool checkedIn = false;
   @override
   Future<Map<String, dynamic>> get(
     String path, {
@@ -55,6 +56,8 @@ class OverviewBookings implements BookingApi {
         {
           'id': id,
           'status': status,
+          if (checkedIn && status == 'confirmed')
+            'checkedInAt': '2026-10-10T09:00:00Z',
           'tenantName': 'Vendor $id',
           'paymentStatus': 'paid',
           'scheduledStartAt': '2026-10-${page == '2' ? '10' : '12'}T09:00:00Z',
@@ -72,6 +75,62 @@ class OverviewBookings implements BookingApi {
 }
 
 void main() {
+  test(
+    'booking row uses check-in evidence without hiding terminal statuses',
+    () {
+      for (final evidence in [
+        {'checkedInAt': '2026-10-10T09:00:00Z'},
+        {'queueTicketId': 'ticket-1'},
+        {
+          'linkedTicket': {'id': 'ticket-1', 'lookupCode': 'ABC123'},
+        },
+      ]) {
+        final upcoming = CustomerBooking({'status': 'confirmed', ...evidence});
+        expect(upcoming.listStatusLabel, 'checked-in');
+        expect(upcoming.status, 'confirmed');
+        expect(upcoming.isUpcoming, isTrue);
+        expect(
+          CustomerBooking({'status': 'canceled', ...evidence}).listStatusLabel,
+          'canceled',
+        );
+      }
+      expect(
+        CustomerBooking({'status': 'confirmed'}).listStatusLabel,
+        'confirmed',
+      );
+    },
+  );
+  testWidgets('Lists upcoming checked-in booking displays checked-in status', (
+    tester,
+  ) async {
+    final api = OverviewBookings()..checkedIn = true;
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: SingleChildScrollView(
+          child: ListsOverview(
+            active: true,
+            bookingRepository: BookingRepository(api),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('lists-booking-confirmed-1'));
+    await Scrollable.ensureVisible(tester.element(row));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: row, matching: find.text('checked-in')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.text('confirmed')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: row, matching: find.text('Payment: paid')),
+      findsOneWidget,
+    );
+  });
   test('upcoming includes every status page and orders by visit', () async {
     final api = OverviewBookings();
     final items = await BookingRepository(api).upcoming();

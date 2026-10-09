@@ -258,3 +258,11 @@ Verification: 69 affected tests pass (the 63-test affected suite plus six additi
 Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched on Zero32. Physical confirmation/service status and real push delivery acceptance remain pending.
 
 KanbanFlow access recovered on 10 October 2026. M28's description was updated and visibly verified with this queue preview fix, agreed service push contract/dependency, test evidence, and the earlier pending UI/appearance/keyboard/device updates. Existing historical description, In Progress status, labels, estimate and remaining acceptance work were preserved. This resolves the earlier board-sync blockers; it does not mark backend deployment or physical acceptance complete. Screenshot evidence: /tmp/getprio-m28-service-status-sync.png.
+
+## Upcoming booking check-in label — 10 October 2026
+
+The Lists upcoming booking row displayed raw confirmed status even after arrival/check-in. CustomerBooking now derives the shared list label from API check-in evidence (checkedInAt, linkedTicket or queueTicketId), displaying checked-in for upcoming bookings. Lists and Bookings use the same row. Raw lifecycle grouping, payment badges and terminal statuses are preserved.
+
+Verification: the Lists widget regression failed before the fix and passes afterward. All 21 affected booking, check-in, payment and Lists tests pass, including evidence-source and terminal-status boundaries; Flutter analysis reports no issues. Signed production-configured main Runner Profile build passed signature verification, installed and launched com.getprio.getprioMobile on Zero32. Physical visual acceptance remains pending.
+
+KanbanFlow M28 description was updated and visibly verified, preserving In Progress, previous history, labels, estimates and remaining release work. Screenshot evidence: /tmp/getprio-m28-booking-check-in.png.
