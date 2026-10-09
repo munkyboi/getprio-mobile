@@ -605,7 +605,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                               ? 'Please wait...'
                               : _otp == null
                               ? 'Verify email to continue'
-                              : 'Submit booking',
+                              : 'Submit request and continue',
                         ),
                       ),
                     ],

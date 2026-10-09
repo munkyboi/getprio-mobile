@@ -1,0 +1,212 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart';
+import 'package:getprio_mobile/bookings/booking_payment.dart';
+import 'package:getprio_mobile/bookings/booking_repository.dart';
+import 'package:getprio_mobile/bookings/bookings_page.dart';
+
+Map<String, dynamic> paymentBooking() => {
+  'id': 'booking-1',
+  'reference': 'BKG-TEST',
+  'status': 'pending',
+  'paymentStatus': 'unpaid',
+  'serviceManualPaymentRequired': true,
+  'manualPaymentDestination': {
+    'methodLabel': 'Bank Transfer',
+    'bankName': 'Test Bank',
+    'accountDisplayName': 'Vendor',
+    'accountIdentifierDisplay': '12345',
+    'amountCents': 20000,
+    'currency': 'PHP',
+  },
+};
+
+class PaymentApi implements BookingApi, BookingProofApi {
+  int uploads = 0, submissions = 0;
+  Map<String, dynamic>? submitted;
+  Completer<void>? gate;
+  bool fail = false;
+  @override
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, String>? query,
+  }) async => {'booking': paymentBooking()};
+  @override
+  Future<Map<String, dynamic>> uploadProof(
+    String path, {
+    required List<int> bytes,
+    required String contentType,
+    required String fileName,
+  }) async {
+    uploads++;
+    expect(
+      path,
+      '/api/account/bookings/booking-1/payment-proof/uploads/direct',
+    );
+    expect(contentType, 'image/png');
+    return {
+      'proof': {
+        'objectKey': 'private/server-key',
+        'fileName': 'receipt.png',
+        'contentType': 'image/png',
+        'sizeBytes': bytes.length,
+      },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    submissions++;
+    submitted = body;
+    if (gate != null) await gate!.future;
+    if (fail) throw StateError('temporary failure');
+    return {
+      'booking': {
+        ...paymentBooking(),
+        'paymentStatus': 'pending',
+        'paymentReference': body['paymentReference'],
+        'paymentProof': {'fileName': 'receipt.png'},
+      },
+    };
+  }
+}
+
+void main() {
+  test('manual evidence eligibility follows the server lifecycle', () {
+    expect(CustomerBooking(paymentBooking()).canSubmitProof, isTrue);
+    for (final change in [
+      {'status': 'expired'},
+      {'status': 'canceled'},
+      {'checkedInAt': '2030-01-01'},
+      {'linkedTicket': {}},
+      {
+        'paymentProof': {'fileName': 'receipt.png'},
+      },
+      {'bookingPaymentSource': 'group_funded'},
+      {'serviceManualPaymentRequired': false},
+    ]) {
+      expect(
+        CustomerBooking({...paymentBooking(), ...change}).canSubmitProof,
+        isFalse,
+      );
+    }
+  });
+  test('invalid receipts never start an upload', () async {
+    final api = PaymentApi();
+    final repository = BookingRepository(api);
+    await expectLater(
+      repository.submitPaymentProof(
+        CustomerBooking(paymentBooking()),
+        reference: 'ref',
+        bytes: [1],
+        contentType: 'application/pdf',
+        fileName: 'receipt.pdf',
+      ),
+      throwsArgumentError,
+    );
+    await expectLater(
+      repository.submitPaymentProof(
+        CustomerBooking(paymentBooking()),
+        reference: ' ',
+        bytes: [1],
+        contentType: 'image/png',
+        fileName: 'receipt.png',
+      ),
+      throwsArgumentError,
+    );
+    expect(api.uploads, 0);
+  });
+  testWidgets(
+    'existing unpaid booking exposes payment destination and proof continuation',
+    (tester) async {
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: BookingDetailPage(
+            repository: BookingRepository(PaymentApi()),
+            booking: CustomerBooking(paymentBooking()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Test Bank'), findsOneWidget);
+      expect(find.text('Total payable: PHP 200.00'), findsOneWidget);
+      expect(find.textContaining('Payment proof required.'), findsOneWidget);
+      expect(find.text('Submit payment proof'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'receipt submission requires reference, blocks duplicate submits and remains pending review',
+    (tester) async {
+      final api = PaymentApi()
+        ..gate = Completer<void>()
+        ..fail = true;
+      CustomerBooking? updated;
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: Scaffold(
+            child: SingleChildScrollView(
+              child: BookingPayment(
+                repository: BookingRepository(api),
+                booking: CustomerBooking(paymentBooking()),
+                pickReceipt: () async => XFile.fromData(
+                  Uint8List.fromList([1, 2, 3]),
+                  name: 'receipt.png',
+                  path: 'receipt.png',
+                  mimeType: 'image/png',
+                ),
+                onSubmitted: (booking) => updated = booking,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final submit = find.widgetWithText(PrimaryButton, 'Submit payment proof');
+      expect(tester.widget<PrimaryButton>(submit).onPressed, isNull);
+      await tester.tap(find.text('Choose payment receipt'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<PrimaryButton>(submit).onPressed, isNull);
+      await tester.enterText(
+        find.byKey(const Key('booking-payment-reference')),
+        '  BANK-123  ',
+      );
+      await tester.pumpAndSettle();
+      await Scrollable.ensureVisible(tester.element(submit));
+      await tester.pumpAndSettle();
+      await tester.tap(submit);
+      await tester.pump();
+      expect(api.submissions, 1);
+      expect(
+        tester
+            .widget<PrimaryButton>(
+              find.widgetWithText(PrimaryButton, 'Please wait...'),
+            )
+            .onPressed,
+        isNull,
+      );
+      api.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(updated, isNull);
+      expect(find.text('receipt.png'), findsOneWidget);
+      expect(find.textContaining('Your receipt is kept here'), findsOneWidget);
+      api.fail = false;
+      await tester.tap(
+        find.widgetWithText(PrimaryButton, 'Submit payment proof'),
+      );
+      await tester.pumpAndSettle();
+      expect(api.submissions, 2);
+      expect(api.submitted?['paymentReference'], 'BANK-123');
+      expect(api.submitted?['objectKey'], 'private/server-key');
+      expect(updated?.status, 'pending');
+      expect(updated?.paymentStatus, 'pending');
+      expect(updated?.canSubmitProof, isFalse);
+      expect(updated?.nextStep, contains('Awaiting vendor review'));
+    },
+  );
+}

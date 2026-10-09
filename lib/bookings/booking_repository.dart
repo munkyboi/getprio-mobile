@@ -38,6 +38,25 @@ class CustomerBooking {
   String get paymentStatus => data['paymentStatus'] as String? ?? 'unknown';
   DateTime? get startAt =>
       DateTime.tryParse('${data['scheduledStartAt']}')?.toLocal();
+  bool get requiresManualPayment =>
+      data['serviceManualPaymentRequired'] == true;
+  bool get hasPaymentProof => data['paymentProof'] is Map;
+  bool get canSubmitProof =>
+      requiresManualPayment &&
+      isUpcoming &&
+      data['bookingPaymentSource'] != 'group_funded' &&
+      data['groupFundedBookingId'] == null &&
+      data['checkedInAt'] == null &&
+      data['linkedTicket'] == null &&
+      data['queueTicketId'] == null &&
+      !hasPaymentProof;
+  String get nextStep => canSubmitProof
+      ? 'Payment proof required. This request is awaiting vendor confirmation.'
+      : hasPaymentProof && paymentStatus == 'pending'
+      ? 'Payment proof submitted. Awaiting vendor review; payment is not yet verified.'
+      : status == 'pending'
+      ? 'Request submitted. Awaiting vendor confirmation.'
+      : 'Booking: $status · Payment: $paymentStatus';
   bool get isUpcoming =>
       ['pending', 'confirmed', 'rescheduled'].contains(status);
 }
@@ -47,9 +66,30 @@ abstract interface class BookingApi {
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body);
 }
 
-class RestBookingApi implements BookingApi {
+abstract interface class BookingProofApi {
+  Future<Map<String, dynamic>> uploadProof(
+    String path, {
+    required List<int> bytes,
+    required String contentType,
+    required String fileName,
+  });
+}
+
+class RestBookingApi implements BookingApi, BookingProofApi {
   RestBookingApi(this.client);
   final AuthenticatedApiClient client;
+  @override
+  Future<Map<String, dynamic>> uploadProof(
+    String path, {
+    required List<int> bytes,
+    required String contentType,
+    required String fileName,
+  }) => client.uploadBytes(
+    path,
+    bytes: bytes,
+    contentType: contentType,
+    queryParameters: {'fileName': fileName},
+  );
   @override
   Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) =>
       client.get(path, queryParameters: query);
@@ -76,6 +116,45 @@ class BookingRepository {
     '/api/account/bookings',
     query: {'page': '$page', 'pageSize': '20'},
   );
+  Future<CustomerBooking> submitPaymentProof(
+    CustomerBooking booking, {
+    required String reference,
+    required List<int> bytes,
+    required String contentType,
+    required String fileName,
+  }) async {
+    if (!booking.canSubmitProof) {
+      throw StateError('This booking cannot accept payment proof.');
+    }
+    if (reference.trim().isEmpty) {
+      throw ArgumentError('Payment reference is required.');
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].contains(contentType) ||
+        bytes.isEmpty ||
+        bytes.length > 8 * 1024 * 1024) {
+      throw ArgumentError('Choose a JPEG, PNG, or WebP receipt up to 8 MB.');
+    }
+    final uploader = api;
+    if (uploader is! BookingProofApi) {
+      throw StateError('Payment upload is unavailable.');
+    }
+    final path =
+        '/api/account/bookings/${Uri.encodeComponent(booking.id)}/payment-proof';
+    final upload = await (uploader as BookingProofApi).uploadProof(
+      '$path/uploads/direct',
+      bytes: bytes,
+      contentType: contentType,
+      fileName: fileName,
+    );
+    final proof = upload['proof'] as Map<String, dynamic>;
+    final response = await api.post(path, {
+      'paymentReference': reference.trim(),
+      for (final key in ['objectKey', 'fileName', 'contentType', 'sizeBytes'])
+        key: proof[key],
+    });
+    return CustomerBooking(response['booking'] as Map<String, dynamic>);
+  }
+
   Future<CustomerBooking> detail(String id) async => CustomerBooking(
     (await api.get(
           '/api/account/bookings/${Uri.encodeComponent(id)}',

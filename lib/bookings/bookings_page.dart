@@ -4,6 +4,7 @@ import '../app_theme.dart';
 import '../navigation/scroll_aware_app_bar.dart';
 import '../navigation/swipe_back_page_route.dart';
 import 'booking_repository.dart';
+import 'booking_payment.dart';
 
 String bookingDateLabel(DateTime? date) => date == null
     ? 'Schedule unavailable'
@@ -273,6 +274,35 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
               const SizedBox(height: 12),
               Text('Booking: ${bookingStatusLabel(item.status)}'),
               Text('Payment: ${bookingStatusLabel(item.paymentStatus)}'),
+              const SizedBox(height: 12),
+              Text(item.nextStep).bold(),
+              if (item.canSubmitProof) ...[
+                const SizedBox(height: 20),
+                BookingPayment(
+                  key: ValueKey(item.id),
+                  repository: widget.repository,
+                  booking: item,
+                  onSubmitted: (updated) => setState(() {
+                    _detail = Future.value(updated);
+                  }),
+                ),
+              ],
+              if (item.hasPaymentProof) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Payment reference: ${item.data['paymentReference'] ?? ''}',
+                ),
+                Text(
+                  'Receipt: ${(item.data['paymentProof'] as Map)['fileName'] ?? 'Submitted'}',
+                ),
+              ],
+              const SizedBox(height: 12),
+              OutlineButton(
+                onPressed: () => setState(() {
+                  _detail = widget.repository.detail(widget.booking.id);
+                }),
+                child: const Text('Refresh status'),
+              ),
               const SizedBox(height: 20),
               const Text('Services').h3(),
               for (final service

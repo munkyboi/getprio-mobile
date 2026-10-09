@@ -225,7 +225,7 @@ void main() {
       await reveal(tester, find.byType(Pinput));
       await tester.enterText(find.byType(Pinput), '123456');
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Submit booking'));
+      await tester.tap(find.text('Submit request and continue'));
       await tester.pump();
       expect(api.createCount, 1);
       final action = tester.widget<PrimaryButton>(

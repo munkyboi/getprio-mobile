@@ -30,12 +30,12 @@ Branch: `codex/mobile-booking-lists-ui`, based on mobile `origin/main` at `0b9fd
 - Shared `GetPrioOtpInput` uses Pinput 5.0.2, six digit boxes, digit filtering, complete-code paste/autofill, external controllers, validation, focus and disabled states. Registration, MFA, account email/phone verification and queue joining use it. Existing queue-join automatic verification remains intact.
 - Lists routes to the existing Tickets page and an API-backed paginated Bookings page. Invitation notifications still open Tickets directly.
 - Vendor details select the primary location, display only its expanded content, fetch location services, clear selection on switching, and disable queue joins for vendors without queue capability.
-- The booking sheet additionally implements the first part of stage 2: quantities, composed/single-service slots, contact details, OTP request/verify/resend, and creation through the existing account API. Booking/payment statuses are shown separately in the list and read-only details.
+- The booking sheet additionally implements the first part of stage 2: quantities, composed/single-service slots, contact details, OTP request/verify/resend, and creation through the existing account API. Booking/payment statuses are shown separately in the list and details. After creation, the details page continues into native manual payment instructions and receipt submission for eligible bookings.
 - Booking drafts remain in memory while the sheet is open. Closing requires discard confirmation; backdrop and drag dismissal are disabled. Durable interrupted-draft/session recovery is pending.
 
 ## Remaining before booking release
 
-- Native vendor payment instructions/QR/bank information, reference/proof upload, private proof viewing, review outcomes and expired/rejected handling.
+- Private proof viewing, richer review/expiry outcomes, and physical end-to-end vendor payment acceptance. Native payment instructions, reference and proof upload are now implemented.
 - Eligible cancellation, linked queue-ticket navigation and complete lifecycle/refund messaging.
 - Booking push delivery/deep links and durable session/interrupted-flow recovery.
 - Physical verification of email OTP autofill, photo upload, keyboard/safe areas, application switching and vendor approval/check-in.
@@ -71,3 +71,15 @@ On 9 October 2026, built the main iOS `Runner` scheme with `Profile`, `GETPRIO_E
 ## Location accordion scroll correction
 
 On 9 October 2026, corrected location switching after a long expanded service list. The tapped location header is anchored to its viewport position while the previous location collapses, with normal scroll bounds for shorter pages. A phone-size regression test reproduces the displaced header before the fix and passes afterward. All 12 affected booking, location selection and parallax tests passed; Flutter analysis passed. Main Runner Profile build and signature verification passed.
+
+## Manual payment continuation
+
+The report about BKG-B980FDAC exposed the missing post-OTP payment UI. The web/backend contract creates a pending, unpaid request before uploading evidence; creating the record is not vendor confirmation. The specific production record was not read or altered during this fix.
+
+- New requests open details with the required manual-payment continuation; existing eligible unpaid requests can resume from Lists → Bookings.
+- Vendor QR or bank/account details and server-owned amount are displayed with a payment reference and private receipt picker.
+- JPEG/PNG/WebP receipts up to 8 MB use the existing authenticated direct-upload API, followed by evidence submission using server-returned metadata.
+- Payment evidence remains pending vendor review, with separate booking and payment status messages. Duplicate submits are disabled and failed attempts retain the reference and receipt for retry. Expired/canceled/checked-in/group-funded bookings and already-submitted proofs do not offer upload.
+- Private proof preview, live payment upload/vendor review acceptance and remaining lifecycle work are still pending.
+
+Verification: Flutter analysis passed; all 295 tests passed. The signed main Runner Profile build passed signature verification and was installed and launched on Zero32 Domain. Payment upload tests use fake APIs; no live receipt, payment or vendor decision was submitted.
