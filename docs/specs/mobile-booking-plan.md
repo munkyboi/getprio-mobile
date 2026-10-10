@@ -280,3 +280,7 @@ Device verification: signed production-configured main Runner Profile build pass
 Expanded the white background to the entire queue-ticket barcode section: instruction, barcode, verification code and surrounding padding. Dark ink text/bars are explicit in all appearance modes. DetailPassCard supports an optional full-width footer clipped to its rounded bottom corners; booking cards retain their existing padding. Ticket cancellation/review actions keep their original order and themed background.
 
 Verification: all 23 affected ticket-details, appearance and booking UI tests pass; Flutter analysis is clean. Signed production-configured main Runner Profile build passed signature verification and installed/launched on both Zero32 and wirelessly connected Zero32 Domain. Physical visual/scanner acceptance remains pending. KanbanFlow M28 updated and visibly verified, preserving history, In Progress, labels, estimates and remaining work. Screenshot: /tmp/getprio-m28-white-barcode-section.png.
+
+White barcode section follow-up: removed the dashed divider immediately above it, retaining 20 pixels of space and the other ticket separators. All 11 ticket-detail tests pass; Flutter analysis is clean. This is a small visual follow-up to the preceding M28 barcode section update; include it in the next significant board synchronization.
+
+Follow-up device verification: signed main Runner Profile build installed and launched on Zero32 and Zero32 Domain. Physical visual acceptance remains pending.

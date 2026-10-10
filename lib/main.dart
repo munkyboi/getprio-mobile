@@ -5773,7 +5773,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                         'Live queue details are temporarily unavailable.',
                       ),
                     ],
-                    const DetailPassDivider(),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ],
