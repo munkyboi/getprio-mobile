@@ -299,4 +299,4 @@ Device verification: signed main Runner Profile build with production API config
 
 Enabled shadcn_flutter's built-in transformBackdrop on the Profile Personal Info drawer, applying the zoom-out effect from the drawer example (https://sunarya-thito.github.io/shadcn_flutter/#/components/drawer). Other drawers retain their current behavior. All 20 Profile/appearance tests pass; analysis is clean. Physical animation/keyboard acceptance remains pending. Include this small visual refinement in the next significant M28 synchronization.
 
-Device verification: signed main Runner Profile build passed signature verification, installed and launched on Zero32 and Zero32 Domain.
+Device verification: signed main Runner Profile build passed signature verification and installed on Zero32 and Zero32 Domain. Launch succeeded on Zero32; Zero32 Domain launch was denied because the device is locked.
