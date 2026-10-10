@@ -316,3 +316,13 @@ All 12 drawer entry points use shared openAppDrawer (lib/navigation/app_drawer.d
 Verification: all 52 affected Profile, appearance, vendor social, booking, join/location/email, keyboard and navigation tests pass; Flutter analysis is clean. KanbanFlow M28 updated and visibly verified, preserving history, In Progress, labels, estimates and remaining release work. Screenshot: /tmp/getprio-m28-drawer-gap.png. Physical spacing/keyboard acceptance remains pending.
 
 Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched successfully on Zero32 and Zero32 Domain.
+
+## Global bottom drawer styling — 10 October 2026
+
+All bottom drawers share AppDrawerTitle with the Personal Info h3 typography. The shared grabber-to-title gap is now 8 pixels, superseding the zero-gap entry above. Drawer header close buttons are removed. Inner vendor contact, operating-hours and checkout backgrounds now match the Personal Info drawer background in Light/Dark/System; other drawers inherit that shared theme background. The zoom-out backdrop remains enabled.
+
+Booking now allows swipe/backdrop dismissal and navigator dismissal while idle. Its former close-button draft-discard confirmation is removed along with the close button; durable interrupted drafts remain pending. Submission still blocks navigator popping while busy. Full-screen image/barcode modal close controls are unchanged.
+
+Verification: all 52 affected Profile, appearance, social, booking, join/location/email, keyboard and navigation tests pass; Flutter analysis is clean. Signed production-configured main Runner Profile build passed signature verification, installed and launched on Zero32. Zero32 Domain wireless installation failed with a tunnel timeout; one retry acquired a connection but also timed out, so installation/launch of this update on that device is unverified. Physical visual/keyboard/dismissal acceptance remains pending.
+
+KanbanFlow M28 updated and visibly verified, preserving In Progress, full history, labels, estimates and remaining release work. Screenshot: /tmp/getprio-m28-bottom-drawer-style.png.

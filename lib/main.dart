@@ -3718,8 +3718,8 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
         context: context,
         position: OverlayPosition.bottom,
         expands: false,
-        draggable: false,
-        barrierDismissible: false,
+        draggable: true,
+        barrierDismissible: true,
         useSafeArea: false,
         builder: (_) => BookingSheet(
           repository: widget.bookingRepository!,
@@ -4295,7 +4295,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
       key: const Key('vendor-contact-sheet'),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: GetPrioTheme.colors(context).card,
+        color: appDrawerBackground(context),
         borderRadius: _VendorContactSheet.borderRadius,
       ),
       child: SafeArea(
@@ -4314,19 +4314,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      'Contact ${widget.vendor.name}',
-                      style: theme.typography.h2,
-                    ),
-                  ),
-                  Semantics(
-                    button: true,
-                    label: 'Close contact form',
-                    child: GhostButton(
-                      onPressed: () => closeSheet(context),
-                      density: ButtonDensity.icon,
-                      child: const Icon(LucideIcons.x),
-                    ),
+                    child: AppDrawerTitle('Contact ${widget.vendor.name}'),
                   ),
                 ],
               ),
@@ -4565,7 +4553,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
       key: const Key('vendor-store-hours-sheet'),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: GetPrioTheme.colors(context).card,
+        color: appDrawerBackground(context),
         borderRadius: borderRadius,
       ),
       child: SafeArea(
@@ -4587,7 +4575,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Operating hours', style: theme.typography.h2),
+                        const AppDrawerTitle('Operating hours'),
                         const SizedBox(height: 4),
                         Text(
                           location.name,
@@ -4596,15 +4584,6 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  Semantics(
-                    button: true,
-                    label: 'Close operating hours',
-                    child: GhostButton(
-                      onPressed: () => closeSheet(context),
-                      density: ButtonDensity.icon,
-                      child: const Icon(LucideIcons.x),
                     ),
                   ),
                 ],
@@ -6888,7 +6867,6 @@ class _ProfileSheetContent extends StatelessWidget {
   const _ProfileSheetContent({
     super.key,
     required this.title,
-    required this.closeLabel,
     required this.child,
     this.maxHeight,
   });
@@ -6896,7 +6874,6 @@ class _ProfileSheetContent extends StatelessWidget {
   static const borderRadius = BorderRadius.vertical(top: Radius.circular(28));
 
   final String title;
-  final String closeLabel;
   final Widget child;
   final double? maxHeight;
 
@@ -6919,24 +6896,7 @@ class _ProfileSheetContent extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(child: Text(title).h3()),
-                  Semantics(
-                    button: true,
-                    label: closeLabel,
-                    child: GhostButton(
-                      key: ValueKey(closeLabel),
-                      onPressed: () {
-                        _dismissKeyboard();
-                        closeOverlay(context);
-                      },
-                      density: ButtonDensity.icon,
-                      child: const Icon(LucideIcons.x),
-                    ),
-                  ),
-                ],
-              ),
+              AppDrawerTitle(title),
               const SizedBox(height: 12),
               if (maxHeight == null)
                 ConstrainedBox(
@@ -7021,7 +6981,6 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
       title: _step == _PersonalInfoStep.form
           ? 'Personal info'
           : 'Verify your changes',
-      closeLabel: 'Close personal info',
       child: KeyboardAwareScrollView(
         child: switch (_step) {
           _PersonalInfoStep.form => _buildForm(context),
@@ -7496,7 +7455,6 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     return _ProfileSheetContent(
       key: const Key('profile-notifications-sheet'),
       title: 'Notifications',
-      closeLabel: 'Close notifications',
       child: settings == null
           ? const SingleChildScrollView(
               child: Column(
@@ -7920,7 +7878,6 @@ class _SecurityPageState extends State<SecurityPage>
               : 'profile-${section.name}-sheet',
         ),
         title: title,
-        closeLabel: 'Close $title',
         maxHeight: MediaQuery.sizeOf(context).height * 0.8,
         child: content,
       );

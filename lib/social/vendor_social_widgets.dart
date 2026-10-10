@@ -72,16 +72,7 @@ class SocialSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(child: Text(title).h3()),
-                GhostButton(
-                  density: ButtonDensity.icon,
-                  onPressed: () => closeDrawer(context),
-                  child: const Icon(LucideIcons.x),
-                ),
-              ],
-            ),
+            AppDrawerTitle(title),
             SizedBox(height: headerSpacing),
             Expanded(child: child),
             ?footer,

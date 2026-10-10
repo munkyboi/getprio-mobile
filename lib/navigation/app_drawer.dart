@@ -1,6 +1,6 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
-/// Shared drawer presentation: zoomed backdrop and no gap below the grabber.
+/// Shared drawer presentation: zoomed backdrop and 8px below the grabber.
 DrawerOverlayCompleter<T?> openAppDrawer<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -34,8 +34,19 @@ DrawerOverlayCompleter<T?> openAppDrawer<T>({
       surfaceOpacity: theme?.surfaceOpacity,
       surfaceBlur: theme?.surfaceBlur,
       barrierColor: theme?.barrierColor,
-      gapAfterDragger: 0,
+      gapAfterDragger: 8,
       child: Builder(builder: builder),
     ),
   );
+}
+
+Color appDrawerBackground(BuildContext context) =>
+    Theme.of(context).colorScheme.background;
+
+class AppDrawerTitle extends StatelessWidget {
+  const AppDrawerTitle(this.title, {super.key});
+  final String title;
+  @override
+  Widget build(BuildContext context) =>
+      Text(title, style: Theme.of(context).typography.h3);
 }

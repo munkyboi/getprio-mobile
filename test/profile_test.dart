@@ -78,7 +78,7 @@ void main() {
     expect(find.text('Personal info'), findsWidgets);
     expect(find.text('(0917) 123-4567'), findsWidgets);
 
-    await tester.tap(find.byKey(const ValueKey('Close personal info')));
+    await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('profile-personal-info')));
     await tester.pumpAndSettle();
@@ -215,7 +215,7 @@ void main() {
     );
     expect(find.text('Email address updated.'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
-    await tester.tap(find.byKey(const ValueKey('Close personal info')));
+    await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     expect(find.text('new@example.com'), findsOneWidget);
     await tester.tap(find.byKey(const Key('profile-personal-info')));

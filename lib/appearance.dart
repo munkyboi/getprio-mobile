@@ -144,21 +144,7 @@ class AppearanceSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Appearance',
-                    style: Theme.of(context).typography.h3,
-                  ),
-                ),
-                IconButton.ghost(
-                  key: const Key('appearance-close'),
-                  icon: const Icon(LucideIcons.x),
-                  onPressed: () => closeSheet(context),
-                ),
-              ],
-            ),
+            const AppDrawerTitle('Appearance'),
             const SizedBox(height: 8),
             const Text('Choose how GetPrio looks on this device.'),
             const SizedBox(height: 24),

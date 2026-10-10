@@ -6,6 +6,7 @@ import '../app_theme.dart';
 import '../auth/auth_models.dart';
 import '../auth/auth_repository.dart';
 import '../form_validation.dart';
+import '../navigation/app_drawer.dart';
 import '../otp_input.dart';
 import '../queue/queue_models.dart';
 import 'booking_repository.dart';
@@ -278,7 +279,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
           sum + service.priceAmountCents * (_quantities[service.slug] ?? 1),
     );
     return PopScope(
-      canPop: false,
+      canPop: !_busy,
       child: Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom,
@@ -308,53 +309,13 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Plan your visit',
-                              style: Theme.of(context).typography.h2,
-                            ),
+                            const AppDrawerTitle('Plan your visit'),
                             const SizedBox(height: 4),
                             Text(
                               '${widget.vendor.name} · ${widget.location.name}',
                             ),
                           ],
                         ),
-                      ),
-                      IconButton.ghost(
-                        icon: const Icon(LucideIcons.x),
-                        onPressed: _busy
-                            ? null
-                            : () async {
-                                final discard = await showGeneralDialog<bool>(
-                                  context: context,
-                                  pageBuilder: (dialogContext, _, _) => Center(
-                                    child: AlertDialog(
-                                      title: const Text(
-                                        'Discard booking draft?',
-                                      ),
-                                      content: const Text(
-                                        'Your selected schedule and entered details will be discarded.',
-                                      ),
-                                      actions: [
-                                        OutlineButton(
-                                          onPressed: () =>
-                                              Navigator.of(dialogContext)
-                                                  .pop(false),
-                                          child: const Text('Keep editing'),
-                                        ),
-                                        DestructiveButton(
-                                          onPressed: () =>
-                                              Navigator.of(dialogContext)
-                                                  .pop(true),
-                                          child: const Text('Discard'),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                                if (discard == true && context.mounted) {
-                                  closeDrawer(context);
-                                }
-                              },
                       ),
                     ],
                   ),

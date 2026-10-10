@@ -120,16 +120,7 @@ class ServiceSelection extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Row(
-                                  children: [
-                                    Expanded(child: Text(service.name).h3()),
-                                    IconButton.ghost(
-                                      icon: const Icon(LucideIcons.x),
-                                      onPressed: () =>
-                                          closeDrawer(sheetContext),
-                                    ),
-                                  ],
-                                ),
+                                AppDrawerTitle(service.name),
                                 const SizedBox(height: 12),
                                 Flexible(
                                   child: SingleChildScrollView(

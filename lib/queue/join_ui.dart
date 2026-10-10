@@ -869,7 +869,7 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
         child: Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: GetPrioTheme.colors(context).card,
+            color: appDrawerBackground(context),
             borderRadius: CheckoutBottomSheet.borderRadius,
           ),
           child: SafeArea(
@@ -887,22 +887,7 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          'Secure checkout',
-                          style: theme.typography.h2,
-                        ),
-                      ),
-                      Semantics(
-                        button: true,
-                        label: 'Close checkout',
-                        child: GhostButton(
-                          key: const Key('checkout-close'),
-                          onPressed: _isBusy ? null : () => closeSheet(context),
-                          density: ButtonDensity.icon,
-                          child: const Icon(LucideIcons.x),
-                        ),
-                      ),
+                      Expanded(child: const AppDrawerTitle('Secure checkout')),
                     ],
                   ),
                   const SizedBox(height: 6),

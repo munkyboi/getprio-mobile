@@ -188,7 +188,7 @@ void main() {
         expect(find.byKey(const Key('appearance-sheet')), findsOneWidget);
         expect(tester.takeException(), isNull);
       }
-      await tester.tap(find.byKey(const Key('appearance-close')));
+      await tester.tapAt(const Offset(5, 5));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('appearance-sheet')), findsNothing);
       expect(find.byKey(const Key('account-page')), findsOneWidget);
