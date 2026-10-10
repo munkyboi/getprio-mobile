@@ -5,6 +5,7 @@ import 'appearance.dart';
 import 'navigation/tab_page_header.dart';
 import 'directory/vendor_profile_hero.dart';
 import 'details/detail_pass.dart';
+import 'details/ticket_barcode_viewer.dart';
 import 'queue/active_ticket_carousel.dart';
 import 'directory/expandable_vendor_description.dart';
 import 'social/vendor_social_widgets.dart';
@@ -5602,21 +5603,32 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                               style: TextStyle(color: GetPrioTheme.ink),
                             ),
                             const SizedBox(height: 12),
-                            Container(
-                              key: const Key('ticket-details-barcode'),
-                              color: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 12,
-                              ),
-                              child: BarcodeWidget(
-                                data:
-                                    ticket.verificationCode ??
-                                    ticket.lookupCode,
-                                barcode: Barcode.code128(),
-                                height: 72,
-                                drawText: false,
-                                color: GetPrioTheme.ink,
+                            Semantics(
+                              label: 'Enlarge ticket barcode',
+                              button: true,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => showTicketBarcode(
+                                  context,
+                                  ticket.verificationCode ?? ticket.lookupCode,
+                                ),
+                                child: Container(
+                                  key: const Key('ticket-details-barcode'),
+                                  color: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 12,
+                                  ),
+                                  child: BarcodeWidget(
+                                    data:
+                                        ticket.verificationCode ??
+                                        ticket.lookupCode,
+                                    barcode: Barcode.code128(),
+                                    height: 72,
+                                    drawText: false,
+                                    color: GetPrioTheme.ink,
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 8),

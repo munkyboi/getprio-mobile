@@ -284,3 +284,13 @@ Verification: all 23 affected ticket-details, appearance and booking UI tests pa
 White barcode section follow-up: removed the dashed divider immediately above it, retaining 20 pixels of space and the other ticket separators. All 11 ticket-detail tests pass; Flutter analysis is clean. This is a small visual follow-up to the preceding M28 barcode section update; include it in the next significant board synchronization.
 
 Follow-up device verification: signed main Runner Profile build installed and launched on Zero32 and Zero32 Domain. Physical visual acceptance remains pending.
+
+## Barcode modal and temporary brightness — 10 October 2026
+
+Tapping the queue ticket barcode opens a modal with a blurred backdrop and white rounded panel. Code 128 bars are 160 pixels high with dark ink, white quiet space and the verification code (lookup code fallback). Close, outside tap and navigator dismissal preserve the ticket. The panel scrolls in short viewports.
+
+Application brightness uses screen_brightness 2.1.11 (https://pub.dev/documentation/screen_brightness/latest/screen_brightness/ScreenBrightness-class.html), temporarily setting 1 while visible. Close/dispose and background restore system brightness or an existing application override; resume boosts while the modal remains open. Native calls are serialized so a delayed read/boost is followed by restoration after disposal. Brightness failures do not prevent display/dismissal. No permanent system brightness setting is changed.
+
+Verification: all 20 affected viewer, ticket-details and appearance tests pass; analysis is clean. Tests cover actual ticket barcode tapping/data, close and outside dismissal, white/dark barcode rendering, backdrop blur, background/resume, prior override restoration, delayed reads after close and brightness failure. KanbanFlow M28 description updated and visibly verified, including the preceding dashed divider removal; In Progress, history, labels, estimates and remaining release work preserved. Screenshot: /tmp/getprio-m28-barcode-viewer.png. Physical brightness/blur/scanner acceptance remains pending.
+
+Device verification: signed main Runner Profile build with production API configuration passed signature verification, installed and launched on Zero32 and Zero32 Domain. The native screen-brightness plugin compiled through the existing Flutter Swift Package integration.

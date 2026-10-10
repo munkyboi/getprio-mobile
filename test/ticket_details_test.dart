@@ -160,6 +160,18 @@ void main() {
     expect(find.text('4 waiting'), findsOneWidget);
     expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
     expect(find.text('A0C18AF'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('ticket-details-barcode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ticket-details-barcode')));
+    await tester.pumpAndSettle();
+    final enlarged = tester.widget<BarcodeWidget>(
+      find.byKey(const Key('ticket-barcode-enlarged')),
+    );
+    expect(String.fromCharCodes(enlarged.data), 'A0C18AF');
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+
     await tester.fling(
       find.byKey(const Key('ticket-details-page')),
       const Offset(0, -700),

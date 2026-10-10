@@ -46,6 +46,7 @@ dependencies:
   mobile_scanner: ^7.4.0
   package_info_plus: ^10.2.2
   pinput: ^5.0.2
+  screen_brightness: ^2.1.11
   shadcn_flutter: ^0.0.54
   sign_in_with_apple: ^6.1.4
   url_launcher: ^6.3.2
