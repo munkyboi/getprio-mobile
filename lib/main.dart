@@ -6460,7 +6460,7 @@ class _AccountPageState extends State<AccountPage> {
       draggable: true,
       useSafeArea: false,
       borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: false,
+      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.92,
       ),
