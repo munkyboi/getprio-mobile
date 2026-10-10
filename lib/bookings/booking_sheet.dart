@@ -295,7 +295,12 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 12, 12),
+                  padding: const EdgeInsets.fromLTRB(
+                    20,
+                    GetPrioTheme.bottomSheetTopPadding,
+                    12,
+                    12,
+                  ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

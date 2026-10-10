@@ -1,3 +1,5 @@
+import '../navigation/app_drawer.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart' show Icons;
@@ -16,11 +18,10 @@ Future<void> showFavoritesSheet(
   VendorSocialRepository repository, {
   ValueChanged<VendorSummary>? onOpen,
 }) async {
-  await openDrawerOverlay<void>(
+  await openAppDrawer<void>(
     context: context,
     position: OverlayPosition.bottom,
     expands: false,
-    transformBackdrop: true,
     builder: (context) => SocialSheet(
       title: 'Favorites',
       topPadding: GetPrioTheme.bottomSheetTopPadding,
@@ -497,11 +498,10 @@ Future<void> showReviewsSheet(
   VendorSocialRepository repository,
   String slug,
 ) async {
-  await openDrawerOverlay<void>(
+  await openAppDrawer<void>(
     context: context,
     position: OverlayPosition.bottom,
     expands: false,
-    transformBackdrop: true,
     builder: (context) => SocialSheet(
       title: 'Reviews',
       topPadding: GetPrioTheme.bottomSheetTopPadding,

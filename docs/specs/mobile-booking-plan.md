@@ -308,3 +308,11 @@ All 12 app drawer entry points now explicitly enable transformBackdrop, extendin
 Verification: all 52 affected Profile, appearance, vendor social, mobile booking, location/join, email, keyboard and navigation tests pass; analysis is clean. Signed production-configured main Runner Profile build passed signature verification. KanbanFlow M28 updated and visibly verified, preserving history, In Progress, labels, estimates and remaining work. Screenshot: /tmp/getprio-m28-all-drawer-zoom.png. Physical animation/keyboard acceptance remains pending.
 
 Device verification: main Runner Profile build installed and launched successfully on Zero32 and Zero32 Domain.
+
+## Global grabber/title spacing — 10 October 2026
+
+All 12 drawer entry points use shared openAppDrawer (lib/navigation/app_drawer.dart). It uses the public shadcn openRawDrawer/DrawerWrapper APIs with gapAfterDragger: 0, preserving theme options, drag/dismiss settings, constraints and the zoom-out backdrop. Additional title top padding is zero for Booking, Appearance and service descriptions, matching the existing shared Profile/social/checkout/vendor header padding. The standard space above the grabber remains intact.
+
+Verification: all 52 affected Profile, appearance, vendor social, booking, join/location/email, keyboard and navigation tests pass; Flutter analysis is clean. KanbanFlow M28 updated and visibly verified, preserving history, In Progress, labels, estimates and remaining release work. Screenshot: /tmp/getprio-m28-drawer-gap.png. Physical spacing/keyboard acceptance remains pending.
+
+Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched successfully on Zero32 and Zero32 Domain.

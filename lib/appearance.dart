@@ -1,3 +1,5 @@
+import 'navigation/app_drawer.dart';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -114,11 +116,10 @@ class _AppearanceHostState extends State<AppearanceHost> {
 Future<void> showAppearanceSheet(BuildContext context) async {
   final controller = AppearanceScope.maybeOf(context);
   if (controller == null) return;
-  await openDrawerOverlay<void>(
+  await openAppDrawer<void>(
     context: context,
     position: OverlayPosition.bottom,
     expands: false,
-    transformBackdrop: true,
     builder: (_) => AppearanceSheet(controller: controller),
   ).future;
 }
@@ -133,7 +134,12 @@ class AppearanceSheet extends StatelessWidget {
       top: false,
       child: Padding(
         key: const Key('appearance-sheet'),
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          GetPrioTheme.bottomSheetTopPadding,
+          20,
+          24,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

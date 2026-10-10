@@ -1,3 +1,4 @@
+import 'navigation/app_drawer.dart';
 import 'theme_artwork.dart';
 import 'navigation/list_filter_tabs.dart';
 import 'queue/ticket_list_row.dart';
@@ -3442,14 +3443,13 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
   void _openContactSheet(BuildContext context, VendorSummary vendor) {
     final email = vendor.contactEmail;
     if (email == null) return;
-    openDrawerOverlay<void>(
+    openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: true,
       draggable: true,
       useSafeArea: false,
       borderRadius: _VendorContactSheet.borderRadius,
-      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.82,
       ),
@@ -3714,14 +3714,13 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
         customer = (await api.client.authRepository.restoreSession())?.user;
       }
       if (!mounted) return;
-      final booking = await openDrawerOverlay<CustomerBooking>(
+      final booking = await openAppDrawer<CustomerBooking>(
         context: context,
         position: OverlayPosition.bottom,
         expands: false,
         draggable: false,
         barrierDismissible: false,
         useSafeArea: false,
-        transformBackdrop: true,
         builder: (_) => BookingSheet(
           repository: widget.bookingRepository!,
           vendor: vendor,
@@ -3761,14 +3760,13 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
   }
 
   void _openStoreHoursSheet(BuildContext context, VendorLocation location) {
-    openDrawerOverlay<void>(
+    openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: true,
       draggable: true,
       useSafeArea: false,
       borderRadius: _VendorStoreHoursSheet.borderRadius,
-      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.82,
       ),
@@ -6453,14 +6451,13 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   Future<void> _openPersonalInfoSheet(BuildContext context) async {
-    final completer = openDrawerOverlay<AuthUser>(
+    final completer = openAppDrawer<AuthUser>(
       context: context,
       position: OverlayPosition.bottom,
       expands: false,
       draggable: true,
       useSafeArea: false,
       borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.92,
       ),
@@ -6485,14 +6482,13 @@ class _AccountPageState extends State<AccountPage> {
     final settings = await (_notificationSettingsFuture ??=
         _loadNotificationSettings());
     if (!mounted || !context.mounted) return;
-    final completer = openDrawerOverlay<void>(
+    final completer = openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: false,
       draggable: true,
       useSafeArea: false,
       borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.78,
       ),
@@ -6509,11 +6505,10 @@ class _AccountPageState extends State<AccountPage> {
     final store = widget.approvedVendorStore;
     final accountId = _user?.id ?? widget.user?.id;
     if (store == null || accountId == null) return;
-    await openDrawerOverlay<void>(
+    await openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: false,
-      transformBackdrop: true,
       builder: (sheetContext) => SocialSheet(
         key: const Key('profile-approved-vendors-sheet'),
         title: 'Approved Vendors',
@@ -6548,14 +6543,13 @@ class _AccountPageState extends State<AccountPage> {
         .findAncestorWidgetOfExactType<AuthGate>()
         ?.authRepository
         .biometricLogin;
-    final completer = openDrawerOverlay<void>(
+    final completer = openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: false,
       draggable: true,
       useSafeArea: false,
       borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.8,
       ),

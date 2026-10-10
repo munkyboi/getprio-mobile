@@ -1,3 +1,5 @@
+import '../navigation/app_drawer.dart';
+
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
@@ -101,15 +103,19 @@ class ServiceSelection extends StatelessWidget {
                     child: IconButton.ghost(
                       key: ValueKey('service-info-${service.slug}'),
                       icon: const Icon(LucideIcons.info, size: 18),
-                      onPressed: () => openDrawerOverlay<void>(
+                      onPressed: () => openAppDrawer<void>(
                         context: context,
                         position: OverlayPosition.bottom,
-                        transformBackdrop: true,
                         expands: false,
                         builder: (sheetContext) => SafeArea(
                           top: false,
                           child: Padding(
-                            padding: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.fromLTRB(
+                              20,
+                              GetPrioTheme.bottomSheetTopPadding,
+                              20,
+                              20,
+                            ),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.stretch,

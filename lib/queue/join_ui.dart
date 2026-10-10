@@ -1,3 +1,4 @@
+import '../navigation/app_drawer.dart';
 import '../otp_input.dart';
 import '../directory/expandable_vendor_description.dart';
 
@@ -602,14 +603,13 @@ class _JoinPageState extends State<JoinPage>
     _checkoutSheetOpen = true;
     final preview = _preview;
     try {
-      final completer = openDrawerOverlay<void>(
+      final completer = openAppDrawer<void>(
         context: overlayContext,
         position: OverlayPosition.bottom,
         expands: false,
         draggable: true,
         useSafeArea: false,
         borderRadius: CheckoutBottomSheet.borderRadius,
-        transformBackdrop: true,
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.78,
         ),
