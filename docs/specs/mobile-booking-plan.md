@@ -336,3 +336,9 @@ Completion dismisses the keyboard and invokes the existing server verification f
 Verification: all 340 tests pass; Flutter analysis is clean. Shared tests cover obscured display/editor, autofill configuration, pasted filtering/length limits, incomplete/duplicate completion, clear/edit/re-completion, validation reset and disabled/narrow layouts. Flow tests cover automatic registration/Profile/MFA/queue/booking progression and duplicate booking prevention. Previously stale drawer-close test expectations now use backdrop dismissal. Signed production-configured MAIN Runner Profile build passed signature verification, installed and launched on Zero32 and Zero32 Domain. Physical OTP autofill/interaction and live server acceptance remain pending; tests use fake APIs.
 
 KanbanFlow M28 updated and visibly verified, preserving In Progress, full history, labels, estimates and remaining release work. Screenshot: /tmp/getprio-m28-obscured-otp.png.
+
+## Centered OTP alignment — 10 October 2026
+
+Shared GetPrioOtpInput now centers the intrinsic-width masked display and its editor together, instead of allowing stretched form constraints to align digits to the left. Labels are centered too. Applies to Scan to join, email verification, booking and every other shared OTP flow; paste/autofill and automatic verification remain intact.
+
+Verification: all 40 affected OTP/queue/Profile/registration/booking/MFA tests pass; the two shared OTP tests also pass after adding a horizontal center-coordinate assertion. Flutter analysis is clean. Signed production-configured MAIN Runner Profile build passed signature verification, installed and launched on Zero32 and Zero32 Domain. Physical visual acceptance remains pending. KanbanFlow M28 updated and visibly verified, preserving In Progress, history, labels, estimates and remaining work. Screenshot: /tmp/getprio-m28-centered-otp.png.

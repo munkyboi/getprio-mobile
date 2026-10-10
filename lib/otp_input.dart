@@ -62,58 +62,60 @@ class _GetPrioOtpInputState extends State<GetPrioOtpInput> {
       builder: (context, _) {
         if (widget.controller.text.length < 6) _completed = null;
         final field = KeyboardAwareInput(
-          child: IntrinsicWidth(
-            child: Stack(
-              children: [
-                ExcludeSemantics(
-                  child: ExcludeFocus(
-                    child: IgnorePointer(
-                      child: InputOTP(
-                        // InputOTP initialValue does not update existing digits.
-                        key: ValueKey(widget.controller.text),
-                        initialValue: List.generate(
-                          6,
-                          (index) => index < widget.controller.text.length
-                              ? widget.controller.text.codeUnitAt(index)
-                              : null,
+          child: Center(
+            child: IntrinsicWidth(
+              child: Stack(
+                children: [
+                  ExcludeSemantics(
+                    child: ExcludeFocus(
+                      child: IgnorePointer(
+                        child: InputOTP(
+                          // InputOTP initialValue does not update existing digits.
+                          key: ValueKey(widget.controller.text),
+                          initialValue: List.generate(
+                            6,
+                            (index) => index < widget.controller.text.length
+                                ? widget.controller.text.codeUnitAt(index)
+                                : null,
+                          ),
+                          children: [
+                            for (var i = 0; i < 7; i++)
+                              if (i == 3)
+                                InputOTPChild.separator
+                              else
+                                InputOTPChild.character(
+                                  allowDigit: true,
+                                  obscured: true,
+                                  readOnly: true,
+                                ),
+                          ],
                         ),
-                        children: [
-                          for (var i = 0; i < 7; i++)
-                            if (i == 3)
-                              InputOTPChild.separator
-                            else
-                              InputOTPChild.character(
-                                allowDigit: true,
-                                obscured: true,
-                                readOnly: true,
-                              ),
-                        ],
                       ),
                     ),
                   ),
-                ),
-                Positioned.fill(
-                  child: Opacity(
-                    opacity: 0,
-                    alwaysIncludeSemantics: true,
-                    child: TextField(
-                      key: widget.inputKey,
-                      controller: widget.controller,
-                      focusNode: widget.focusNode,
-                      enabled: widget.enabled,
-                      obscureText: true,
-                      keyboardType: TextInputType.number,
-                      autofillHints: const [AutofillHints.oneTimeCode],
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(6),
-                      ],
-                      onChanged: _changed,
-                      onTap: widget.onTap,
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: 0,
+                      alwaysIncludeSemantics: true,
+                      child: TextField(
+                        key: widget.inputKey,
+                        controller: widget.controller,
+                        focusNode: widget.focusNode,
+                        enabled: widget.enabled,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        autofillHints: const [AutofillHints.oneTimeCode],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
+                        onChanged: _changed,
+                        onTap: widget.onTap,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -122,6 +124,7 @@ class _GetPrioOtpInputState extends State<GetPrioOtpInput> {
           children: [
             Text(
               widget.label,
+              textAlign: TextAlign.center,
               style: Theme.of(context).typography.small
                   .copyWith(fontWeight: FontWeight.w600),
             ),

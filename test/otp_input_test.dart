@@ -23,6 +23,10 @@ void main() {
           ),
         ),
       );
+      expect(
+        tester.getCenter(find.byType(InputOTP)).dx,
+        closeTo(tester.getCenter(find.byType(GetPrioOtpInput)).dx, 0.5),
+      );
       await tester.enterText(
         find
             .descendant(
