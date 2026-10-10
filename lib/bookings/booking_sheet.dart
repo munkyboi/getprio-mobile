@@ -512,6 +512,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                           const SizedBox(height: 12),
                           GetPrioOtpInput(
                             controller: _code,
+                            onCompleted: (_) => unawaited(_submit()),
                             enabled: !_busy && !_expired,
                             validation: formValidation,
                           ),

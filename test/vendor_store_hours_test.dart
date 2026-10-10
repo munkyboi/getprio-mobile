@@ -84,7 +84,7 @@ void main() {
     expect(find.text('Open 24 hours'), findsOneWidget);
     expect(find.text('Closed'), findsOneWidget);
 
-    await tester.tap(find.bySemanticsLabel('Close operating hours'));
+    await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('vendor-store-hours-sheet')), findsNothing);
   });

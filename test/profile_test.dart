@@ -186,20 +186,30 @@ void main() {
     expect(find.text('Verify your current email'), findsOneWidget);
 
     await tester.enterText(
-      find.byKey(const Key('profile-email-code')),
+      find
+          .descendant(
+            of: find.byKey(const Key('profile-email-code')),
+            matching: find.byType(EditableText),
+          )
+          .first,
       '111111',
     );
     await tester.pump();
-    await tester.tap(find.byKey(const Key('profile-verify-code')));
+
     await tester.pumpAndSettle();
     expect(find.text('Verify your new email'), findsOneWidget);
 
     await tester.enterText(
-      find.byKey(const Key('profile-email-code')),
+      find
+          .descendant(
+            of: find.byKey(const Key('profile-email-code')),
+            matching: find.byType(EditableText),
+          )
+          .first,
       '222222',
     );
     await tester.pump();
-    await tester.tap(find.byKey(const Key('profile-verify-code')));
+
     await tester.pumpAndSettle();
 
     expect(api.emailChangeVerifications, 2);

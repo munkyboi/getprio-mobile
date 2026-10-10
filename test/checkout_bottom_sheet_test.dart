@@ -45,7 +45,7 @@ void main() {
       expect(find.byKey(const Key('checkout-bottom-sheet')), findsOneWidget);
       expect(api.joinCalls, 1);
 
-      await tester.tap(find.byKey(const Key('checkout-close')));
+      await tester.tapAt(const Offset(5, 5));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('checkout-bottom-sheet')), findsNothing);
       expect(find.text('Resume checkout'), findsOneWidget);

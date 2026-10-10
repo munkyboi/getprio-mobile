@@ -88,7 +88,12 @@ void main() {
         );
         await tapKey(tester, 'mfa-replace-button');
         await tester.enterText(
-          find.byKey(const Key('mfa-current-code')),
+          find
+              .descendant(
+                of: find.byKey(const Key('mfa-current-code')),
+                matching: find.byType(EditableText),
+              )
+              .first,
           '123456',
         );
         await tapKey(tester, 'mfa-replace-confirm');
@@ -103,7 +108,12 @@ void main() {
           expect(find.byKey(const Key('mfa-setup-button')), findsNothing);
         } else {
           await tester.enterText(
-            find.byKey(const Key('mfa-enrollment-code')),
+            find
+                .descendant(
+                  of: find.byKey(const Key('mfa-enrollment-code')),
+                  matching: find.byType(EditableText),
+                )
+                .first,
             '654321',
           );
           await tapKey(tester, 'mfa-confirm-button');
@@ -141,7 +151,12 @@ void main() {
         );
         if (recovery) await tapKey(tester, 'mfa-toggle-recovery');
         await tester.enterText(
-          find.byKey(const Key('mfa-current-code')),
+          find
+              .descendant(
+                of: find.byKey(const Key('mfa-current-code')),
+                matching: find.byType(EditableText),
+              )
+              .first,
           recovery ? 'ABCDE-12345' : '123456',
         );
         await tapKey(tester, 'mfa-remove-confirm');
@@ -181,8 +196,16 @@ void main() {
       find.byKey(const Key('mfa-management-password')),
       'password',
     );
-    await tester.enterText(find.byKey(const Key('mfa-current-code')), '123456');
-    await tapKey(tester, 'mfa-remove-confirm');
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byKey(const Key('mfa-current-code')),
+            matching: find.byType(EditableText),
+          )
+          .first,
+      '123456',
+    );
+    await tester.pumpAndSettle();
     expect(changed, isNull);
     expect(find.byKey(const Key('mfa-setup-button')), findsNothing);
     expect(
@@ -215,8 +238,16 @@ void main() {
       ),
     );
     await tapKey(tester, 'mfa-replace-button');
-    await tester.enterText(find.byKey(const Key('mfa-current-code')), '123456');
-    await tapKey(tester, 'mfa-replace-confirm');
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byKey(const Key('mfa-current-code')),
+            matching: find.byType(EditableText),
+          )
+          .first,
+      '123456',
+    );
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('mfa-enrollment-qr')), findsNothing);
     expect(
       find.text('Please sign in again before replacing your authenticator.'),

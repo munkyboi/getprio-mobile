@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pinput/pinput.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'package:getprio_mobile/otp_input.dart';
 import 'package:getprio_mobile/form_validation.dart';
@@ -24,13 +23,61 @@ void main() {
           ),
         ),
       );
-      await tester.enterText(find.byType(Pinput), '123456');
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byType(GetPrioOtpInput),
+              matching: find.byType(EditableText),
+            )
+            .last,
+        '123456',
+      );
       await tester.pump();
       expect(controller.text, '123456');
       expect(completed, ['123456']);
-      await tester.enterText(find.byType(Pinput), 'a12b345678');
+      final display = tester.widget<InputOTP>(find.byType(InputOTP));
+      expect(
+        display.children.whereType<CharacterInputOTPChild>().every(
+          (child) => child.obscured,
+        ),
+        isTrue,
+      );
+      final editorWidget = tester.widget<EditableText>(
+        find
+            .descendant(
+              of: find.byType(GetPrioOtpInput),
+              matching: find.byType(EditableText),
+            )
+            .last,
+      );
+      expect(editorWidget.obscureText, isTrue);
+      expect(editorWidget.autofillHints, contains(AutofillHints.oneTimeCode));
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byType(GetPrioOtpInput),
+              matching: find.byType(EditableText),
+            )
+            .last,
+        'a12b345678',
+      );
       await tester.pump();
       expect(controller.text, '123456');
+      expect(completed, ['123456']); // Unchanged full code does not retry.
+      controller.clear();
+      await tester.pump();
+      final editor = find
+          .descendant(
+            of: find.byType(GetPrioOtpInput),
+            matching: find.byType(EditableText),
+          )
+          .last;
+      await tester.enterText(editor, '65432');
+      await tester.pump();
+      expect(completed.length, 1);
+      await tester.enterText(editor, '654321');
+      await tester.pump();
+      expect(completed, ['123456', '654321']);
       expect(tester.takeException(), isNull);
     },
   );
@@ -59,12 +106,32 @@ void main() {
       validation.setErrors({controller: 'Incorrect code'});
       await tester.pump();
       expect(find.text('Incorrect code'), findsOneWidget);
-      await tester.enterText(find.byType(Pinput), '12345');
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byType(GetPrioOtpInput),
+              matching: find.byType(EditableText),
+            )
+            .last,
+        '12345',
+      );
       await tester.pump();
       expect(controller.text, '12345');
       expect(find.text('Incorrect code'), findsNothing);
       await tester.pumpWidget(app(false));
-      expect(tester.widget<Pinput>(find.byType(Pinput)).enabled, isFalse);
+      expect(
+        tester
+            .widget<TextField>(
+              find
+                  .descendant(
+                    of: find.byType(GetPrioOtpInput),
+                    matching: find.byType(TextField),
+                  )
+                  .last,
+            )
+            .enabled,
+        isFalse,
+      );
       expect(tester.takeException(), isNull);
     },
   );

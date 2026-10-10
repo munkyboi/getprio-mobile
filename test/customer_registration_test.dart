@@ -121,9 +121,16 @@ void main() {
     expect(find.textContaining('j***@example.com'), findsOneWidget);
     expect(authenticated, isFalse);
 
-    await tester.enterText(find.byKey(const Key('register-otp')), '123456');
-    await tester.ensureVisible(find.byKey(const Key('register-otp-submit')));
-    await tester.tap(find.byKey(const Key('register-otp-submit')));
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byKey(const Key('register-otp')),
+            matching: find.byType(EditableText),
+          )
+          .first,
+      '123456',
+    );
+    await tester.pump();
     await tester.pumpAndSettle();
 
     expect(api.verifyCalls, 1);

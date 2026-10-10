@@ -29,17 +29,41 @@ void main() {
       expect(api.location, 'cebu');
       expect(find.text('Verify your email'), findsOneWidget);
       expect(joined, isNull);
-      await tester.enterText(find.byKey(const Key('queue-join-otp')), '123');
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byKey(const Key('queue-join-otp')),
+              matching: find.byType(EditableText),
+            )
+            .first,
+        '123',
+      );
       await tester.pump();
       expect(api.verifyCalls, 0);
-      await tester.enterText(find.byKey(const Key('queue-join-otp')), '000000');
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byKey(const Key('queue-join-otp')),
+              matching: find.byType(EditableText),
+            )
+            .first,
+        '000000',
+      );
       await tester.pumpAndSettle();
       expect(find.text('Incorrect code'), findsOneWidget);
       expect(joined, isNull);
       await tester.tap(find.byKey(const Key('queue-join-otp-resend')));
       await tester.pumpAndSettle();
       expect(api.resendCalls, 1);
-      await tester.enterText(find.byKey(const Key('queue-join-otp')), '123456');
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byKey(const Key('queue-join-otp')),
+              matching: find.byType(EditableText),
+            )
+            .first,
+        '123456',
+      );
       await tester.pumpAndSettle();
       expect(api.lastOtpId, '2');
       expect(api.verifyCalls, 2);

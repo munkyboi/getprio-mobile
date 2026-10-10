@@ -653,11 +653,13 @@ class _LabeledOtpField extends StatelessWidget {
     required this.label,
     this.inputKey,
     this.onChanged,
+    this.onCompleted,
   });
   final TextEditingController controller;
   final String label;
   final Key? inputKey;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onCompleted;
   @override
   Widget build(BuildContext context) {
     FormValidation? validation;
@@ -678,6 +680,7 @@ class _LabeledOtpField extends StatelessWidget {
       enabled: enabled,
       validation: validation,
       onChanged: onChanged,
+      onCompleted: onCompleted,
     );
   }
 }
@@ -1061,6 +1064,7 @@ class _SignInPageState extends State<SignInPage>
                     else
                       _LabeledOtpField(
                         inputKey: const Key('mfa-code'),
+                        onCompleted: (_) => unawaited(_verifyMfa(challenge)),
                         controller: _mfaController,
                         label: 'Authenticator code',
                       ),
@@ -1476,6 +1480,7 @@ class _RegisterPageState extends State<RegisterPage>
         const SizedBox(height: 20),
         _LabeledOtpField(
           inputKey: const Key('register-otp'),
+          onCompleted: (_) => unawaited(_verifyRegistrationOtp()),
           controller: _otp,
           label: 'Verification code',
         ),
@@ -7114,6 +7119,7 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
         const SizedBox(height: 20),
         _LabeledOtpField(
           inputKey: const Key('profile-email-code'),
+          onCompleted: (_) => unawaited(onSubmit()),
           controller: _code,
           label: '6-digit code',
           onChanged: (value) => _limitDigits(_code, value),
@@ -7153,6 +7159,9 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
         const SizedBox(height: 20),
         _LabeledOtpField(
           inputKey: const Key('profile-phone-code'),
+          onCompleted: (_) {
+            if (_password.text.isNotEmpty) unawaited(_verifyPhone());
+          },
           controller: _code,
           label: '6-digit code',
           onChanged: (value) => _limitDigits(_code, value),
@@ -7809,6 +7818,7 @@ class _SecurityPageState extends State<SecurityPage>
               _LabeledOtpField(
                 controller: _mfaCode,
                 inputKey: const Key('mfa-enrollment-code'),
+                onCompleted: (_) => unawaited(_confirmMfa()),
                 label: 'Authenticator code',
               ),
               const SizedBox(height: 12),
@@ -8013,6 +8023,13 @@ class _SecurityPageState extends State<SecurityPage>
           else
             _LabeledOtpField(
               inputKey: const Key('mfa-current-code'),
+              onCompleted: (_) {
+                if (removing) {
+                  if (_mfaPassword.text.isNotEmpty) unawaited(_removeMfa());
+                } else {
+                  unawaited(_replaceMfa());
+                }
+              },
               controller: _currentMfaCode,
               label: 'Current authenticator code',
             ),

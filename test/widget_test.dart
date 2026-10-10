@@ -443,8 +443,16 @@ void main() {
     expect(find.textContaining('j***@example.com'), findsOneWidget);
     expect(authenticated, isFalse);
 
-    await tester.enterText(find.byKey(const Key('register-otp')), '123456');
-    await tester.tap(find.byKey(const Key('register-otp-submit')));
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byKey(const Key('register-otp')),
+            matching: find.byType(EditableText),
+          )
+          .first,
+      '123456',
+    );
+    await tester.pump();
     await tester.pumpAndSettle();
 
     expect(authenticated, isTrue);
@@ -823,7 +831,7 @@ void main() {
     expect(find.byKey(const Key('vendor-contact-sheet')), findsOneWidget);
     expect(find.text('Contact City Clinic'), findsOneWidget);
     expect(find.text('hello@cityclinic.example'), findsOneWidget);
-    expect(find.bySemanticsLabel('Close contact form'), findsOneWidget);
+    expect(find.bySemanticsLabel('Close contact form'), findsNothing);
 
     final sheetOverlay = tester.widget<DrawerWrapper>(
       find.byWidgetPredicate((widget) => widget is DrawerWrapper),

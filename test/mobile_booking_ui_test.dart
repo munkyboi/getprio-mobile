@@ -8,8 +8,8 @@ import 'package:getprio_mobile/bookings/booking_sheet.dart';
 import 'package:getprio_mobile/bookings/service_selection.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/otp_input.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
-import 'package:pinput/pinput.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 Future<void> reveal(WidgetTester tester, Finder finder) async {
@@ -261,10 +261,17 @@ void main() {
       expect(api.otpPayload?['bundleItems'], [
         {'serviceSlug': 'consult', 'bookingQuantity': 1},
       ]);
-      await reveal(tester, find.byType(Pinput));
-      await tester.enterText(find.byType(Pinput), '123456');
+      await reveal(tester, find.byType(InputOTP));
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byType(GetPrioOtpInput),
+              matching: find.byType(EditableText),
+            )
+            .last,
+        '123456',
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Submit request and continue'));
       await tester.pump();
       expect(api.createCount, 1);
       final action = tester.widget<PrimaryButton>(

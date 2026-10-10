@@ -1,15 +1,10 @@
 import 'package:flutter/services.dart';
-import 'package:flutter/material.dart'
-    show Material, MaterialType, DefaultMaterialLocalizations;
-import 'package:pinput/pinput.dart';
-import 'package:flutter/cupertino.dart' show DefaultCupertinoLocalizations;
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
-import 'app_theme.dart';
 import 'form_validation.dart';
 
-/// One editable value, rendered as six boxes, preserves paste and OTP autofill.
-class GetPrioOtpInput extends StatelessWidget {
+/// The shadcn obscured display with one editor for paste, autofill and deletion.
+class GetPrioOtpInput extends StatefulWidget {
   const GetPrioOtpInput({
     super.key,
     required this.controller,
@@ -34,108 +29,113 @@ class GetPrioOtpInput extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
+  State<GetPrioOtpInput> createState() => _GetPrioOtpInputState();
+}
+
+class _GetPrioOtpInputState extends State<GetPrioOtpInput> {
+  String? _completed;
+
+  void _changed(String code) {
+    widget.onChanged?.call(code);
+    if (code.length != 6) {
+      _completed = null;
+      return;
+    }
+    if (_completed == code) return;
+    _completed = code;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !widget.enabled ||
+          widget.controller.text != code ||
+          _completed != code) {
+        return;
+      }
+      FocusManager.instance.primaryFocus?.unfocus();
+      widget.onCompleted?.call(code);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([controller, ?validation]),
+      listenable: widget.controller,
       builder: (context, _) {
-        final error = validation?.errorFor(controller);
+        if (widget.controller.text.length < 6) _completed = null;
         final field = KeyboardAwareInput(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              const gap = 8.0;
-              final width = ((constraints.maxWidth - gap * 5) / 6).clamp(
-                24.0,
-                52.0,
-              );
-              final base = PinTheme(
-                width: width,
-                height: 56,
-                textStyle: Theme.of(context).typography.h3
-                    .copyWith(color: GetPrioTheme.colors(context).ink),
-                decoration: BoxDecoration(
-                  color: GetPrioTheme.colors(context).card,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: GetPrioTheme.colors(context).line),
+          child: IntrinsicWidth(
+            child: Stack(
+              children: [
+                ExcludeSemantics(
+                  child: ExcludeFocus(
+                    child: IgnorePointer(
+                      child: InputOTP(
+                        // InputOTP initialValue does not update existing digits.
+                        key: ValueKey(widget.controller.text),
+                        initialValue: List.generate(
+                          6,
+                          (index) => index < widget.controller.text.length
+                              ? widget.controller.text.codeUnitAt(index)
+                              : null,
+                        ),
+                        children: [
+                          for (var i = 0; i < 7; i++)
+                            if (i == 3)
+                              InputOTPChild.separator
+                            else
+                              InputOTPChild.character(
+                                allowDigit: true,
+                                obscured: true,
+                                readOnly: true,
+                              ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              );
-              PinTheme themed(Color border, Color background) => base.copyWith(
-                decoration: BoxDecoration(
-                  color: background,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: border, width: 2),
-                ),
-              );
-              return Semantics(
-                label: '$label, 6 digits',
-                child: Localizations.override(
-                  context: context,
-                  delegates: const [
-                    DefaultMaterialLocalizations.delegate,
-                    DefaultCupertinoLocalizations.delegate,
-                  ],
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: Pinput(
-                      key: inputKey,
-                      length: 6,
-                      controller: controller,
-                      focusNode: focusNode,
-                      enabled: enabled,
-                      defaultPinTheme: base,
-                      focusedPinTheme: themed(
-                        GetPrioTheme.primary,
-                        GetPrioTheme.colors(context).card,
-                      ),
-                      submittedPinTheme: themed(
-                        GetPrioTheme.colors(context).teal,
-                        GetPrioTheme.colors(context).paper,
-                      ),
-                      errorPinTheme: themed(
-                        GetPrioTheme.destructive,
-                        GetPrioTheme.colors(context).card,
-                      ),
-                      disabledPinTheme: themed(
-                        GetPrioTheme.colors(context).line,
-                        GetPrioTheme.colors(context).paper,
-                      ),
-                      forceErrorState: error != null,
-                      separatorBuilder: (_) => const SizedBox(width: gap),
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: 0,
+                    alwaysIncludeSemantics: true,
+                    child: TextField(
+                      key: widget.inputKey,
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      enabled: widget.enabled,
+                      obscureText: true,
                       keyboardType: TextInputType.number,
                       autofillHints: const [AutofillHints.oneTimeCode],
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                         LengthLimitingTextInputFormatter(6),
                       ],
-                      closeKeyboardWhenCompleted: false,
-                      isCursorAnimationEnabled: false,
-                      enableSuggestions: false,
-                      onChanged: onChanged,
-                      onCompleted: onCompleted,
-                      onTap: onTap,
+                      onChanged: _changed,
+                      onTap: widget.onTap,
                     ),
                   ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
         );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              label,
+              widget.label,
               style: Theme.of(context).typography.small
                   .copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            if (validation == null)
-              field
-            else
-              ValidatedField(
-                validation: validation!,
-                controller: controller,
-                child: field,
-              ),
+            Semantics(
+              label: '${widget.label}, 6 digits',
+              child: widget.validation == null
+                  ? field
+                  : ValidatedField(
+                      validation: widget.validation!,
+                      controller: widget.controller,
+                      child: field,
+                    ),
+            ),
           ],
         );
       },
