@@ -5587,6 +5587,94 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                 DetailPassCard(
                   key: const Key('ticket-details-card'),
                   vendor: vendor,
+                  footer: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        key: const Key('ticket-details-barcode-section'),
+                        color: Colors.white,
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Show this barcode when your ticket is called.',
+                              style: TextStyle(color: GetPrioTheme.ink),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              key: const Key('ticket-details-barcode'),
+                              color: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 12,
+                              ),
+                              child: BarcodeWidget(
+                                data:
+                                    ticket.verificationCode ??
+                                    ticket.lookupCode,
+                                barcode: Barcode.code128(),
+                                height: 72,
+                                drawText: false,
+                                color: GetPrioTheme.ink,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Center(
+                              child: Text(
+                                ticket.verificationCode ?? ticket.lookupCode,
+                                style: const TextStyle(
+                                  color: GetPrioTheme.ink,
+                                  letterSpacing: 2,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if ((ticket.canBeCancelled && widget.onCancel != null) ||
+                          (ticket.status == TicketStatus.served &&
+                              widget.directoryRepository?.social != null))
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (ticket.canBeCancelled &&
+                                  widget.onCancel != null) ...[
+                                const SizedBox(height: 20),
+                                GetPrioActionButton.destructive(
+                                  key: const Key('ticket-details-cancel'),
+                                  onPressed: _isCancelling
+                                      ? null
+                                      : _cancelTicket,
+                                  child: Text(
+                                    _isCancelling
+                                        ? 'Cancelling...'
+                                        : 'Cancel ticket',
+                                  ),
+                                ),
+                              ],
+                              if (ticket.status == TicketStatus.served &&
+                                  widget.directoryRepository?.social !=
+                                      null) ...[
+                                const SizedBox(height: 16),
+                                TicketReviewAction(
+                                  key: ValueKey('review-${ticket.lookupCode}'),
+                                  repository:
+                                      widget.directoryRepository!.social!,
+                                  ticket: ticket,
+                                  prompt:
+                                      widget.ticket.status !=
+                                      TicketStatus.served,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                   children: [
                     const Text('Your queue ticket').h3(),
                     const SizedBox(height: 12),
@@ -5686,53 +5774,6 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                       ),
                     ],
                     const DetailPassDivider(),
-                    const Text('Show this barcode when your ticket is called.'),
-                    const SizedBox(height: 12),
-                    Container(
-                      key: const Key('ticket-details-barcode'),
-                      color: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 12,
-                      ),
-                      child: BarcodeWidget(
-                        data: ticket.verificationCode ?? ticket.lookupCode,
-                        barcode: Barcode.code128(),
-                        height: 72,
-                        drawText: false,
-                        color: GetPrioTheme.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        ticket.verificationCode ?? ticket.lookupCode,
-                        style: const TextStyle(
-                          letterSpacing: 2,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    if (ticket.canBeCancelled && widget.onCancel != null) ...[
-                      const SizedBox(height: 20),
-                      GetPrioActionButton.destructive(
-                        key: const Key('ticket-details-cancel'),
-                        onPressed: _isCancelling ? null : _cancelTicket,
-                        child: Text(
-                          _isCancelling ? 'Cancelling...' : 'Cancel ticket',
-                        ),
-                      ),
-                    ],
-                    if (ticket.status == TicketStatus.served &&
-                        widget.directoryRepository?.social != null) ...[
-                      const SizedBox(height: 16),
-                      TicketReviewAction(
-                        key: ValueKey('review-${ticket.lookupCode}'),
-                        repository: widget.directoryRepository!.social!,
-                        ticket: ticket,
-                        prompt: widget.ticket.status != TicketStatus.served,
-                      ),
-                    ],
                   ],
                 ),
               ],

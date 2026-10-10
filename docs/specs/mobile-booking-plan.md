@@ -274,3 +274,9 @@ The customer reported that inverted dark-mode queue ticket barcodes were unreada
 Verification: all 16 affected ticket-details and appearance tests pass; Flutter analysis is clean. KanbanFlow M28 was updated and visibly verified while preserving In Progress, labels, estimates, history and remaining acceptance work. Screenshot: /tmp/getprio-m28-barcode-revert.png. Physical scanner acceptance remains pending.
 
 Device verification: signed production-configured main Runner Profile build passed signature verification, installed and launched com.getprio.getprioMobile on Zero32.
+
+## White barcode section — 10 October 2026
+
+Expanded the white background to the entire queue-ticket barcode section: instruction, barcode, verification code and surrounding padding. Dark ink text/bars are explicit in all appearance modes. DetailPassCard supports an optional full-width footer clipped to its rounded bottom corners; booking cards retain their existing padding. Ticket cancellation/review actions keep their original order and themed background.
+
+Verification: all 23 affected ticket-details, appearance and booking UI tests pass; Flutter analysis is clean. Signed production-configured main Runner Profile build passed signature verification and installed/launched on both Zero32 and wirelessly connected Zero32 Domain. Physical visual/scanner acceptance remains pending. KanbanFlow M28 updated and visibly verified, preserving history, In Progress, labels, estimates and remaining work. Screenshot: /tmp/getprio-m28-white-barcode-section.png.

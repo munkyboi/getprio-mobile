@@ -26,9 +26,11 @@ class DetailPassCard extends StatelessWidget {
     super.key,
     required this.vendor,
     required this.children,
+    this.footer,
   });
   final VendorSummary vendor;
   final List<Widget> children;
+  final Widget? footer;
   @override
   Widget build(BuildContext context) => Container(
     decoration: BoxDecoration(
@@ -61,12 +63,19 @@ class DetailPassCard extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, footer == null ? 20 : 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: children,
           ),
         ),
+        if (footer != null)
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(24),
+            ),
+            child: footer!,
+          ),
       ],
     ),
   );
