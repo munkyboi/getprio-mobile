@@ -104,6 +104,7 @@ class ServiceSelection extends StatelessWidget {
                       onPressed: () => openDrawerOverlay<void>(
                         context: context,
                         position: OverlayPosition.bottom,
+                        transformBackdrop: true,
                         expands: false,
                         builder: (sheetContext) => SafeArea(
                           top: false,

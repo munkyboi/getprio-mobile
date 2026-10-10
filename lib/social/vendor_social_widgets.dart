@@ -20,7 +20,7 @@ Future<void> showFavoritesSheet(
     context: context,
     position: OverlayPosition.bottom,
     expands: false,
-    transformBackdrop: false,
+    transformBackdrop: true,
     builder: (context) => SocialSheet(
       title: 'Favorites',
       topPadding: GetPrioTheme.bottomSheetTopPadding,
@@ -501,7 +501,7 @@ Future<void> showReviewsSheet(
     context: context,
     position: OverlayPosition.bottom,
     expands: false,
-    transformBackdrop: false,
+    transformBackdrop: true,
     builder: (context) => SocialSheet(
       title: 'Reviews',
       topPadding: GetPrioTheme.bottomSheetTopPadding,

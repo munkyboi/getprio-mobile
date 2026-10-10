@@ -609,7 +609,7 @@ class _JoinPageState extends State<JoinPage>
         draggable: true,
         useSafeArea: false,
         borderRadius: CheckoutBottomSheet.borderRadius,
-        transformBackdrop: false,
+        transformBackdrop: true,
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.78,
         ),

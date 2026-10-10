@@ -118,7 +118,7 @@ Future<void> showAppearanceSheet(BuildContext context) async {
     context: context,
     position: OverlayPosition.bottom,
     expands: false,
-    transformBackdrop: false,
+    transformBackdrop: true,
     builder: (_) => AppearanceSheet(controller: controller),
   ).future;
 }

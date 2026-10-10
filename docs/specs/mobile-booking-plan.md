@@ -300,3 +300,11 @@ Device verification: signed main Runner Profile build with production API config
 Enabled shadcn_flutter's built-in transformBackdrop on the Profile Personal Info drawer, applying the zoom-out effect from the drawer example (https://sunarya-thito.github.io/shadcn_flutter/#/components/drawer). Other drawers retain their current behavior. All 20 Profile/appearance tests pass; analysis is clean. Physical animation/keyboard acceptance remains pending. Include this small visual refinement in the next significant M28 synchronization.
 
 Device verification: signed main Runner Profile build passed signature verification and installed on Zero32 and Zero32 Domain. Launch succeeded on Zero32; Zero32 Domain launch was denied because the device is locked.
+
+## All drawers zoom-out backdrop — 10 October 2026
+
+All 12 app drawer entry points now explicitly enable transformBackdrop, extending the Personal Info effect to Appearance/Profile settings, vendor content/contact, booking, queue joining, favorites, reviews and service descriptions. This supersedes the preceding Personal Info-only scope. Drawer contents, constraints, dismissal and form behavior remain intact.
+
+Verification: all 52 affected Profile, appearance, vendor social, mobile booking, location/join, email, keyboard and navigation tests pass; analysis is clean. Signed production-configured main Runner Profile build passed signature verification. KanbanFlow M28 updated and visibly verified, preserving history, In Progress, labels, estimates and remaining work. Screenshot: /tmp/getprio-m28-all-drawer-zoom.png. Physical animation/keyboard acceptance remains pending.
+
+Device verification: main Runner Profile build installed and launched successfully on Zero32 and Zero32 Domain.

@@ -3449,7 +3449,7 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
       draggable: true,
       useSafeArea: false,
       borderRadius: _VendorContactSheet.borderRadius,
-      transformBackdrop: false,
+      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.82,
       ),
@@ -3721,7 +3721,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
         draggable: false,
         barrierDismissible: false,
         useSafeArea: false,
-        transformBackdrop: false,
+        transformBackdrop: true,
         builder: (_) => BookingSheet(
           repository: widget.bookingRepository!,
           vendor: vendor,
@@ -3768,7 +3768,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
       draggable: true,
       useSafeArea: false,
       borderRadius: _VendorStoreHoursSheet.borderRadius,
-      transformBackdrop: false,
+      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.82,
       ),
@@ -6492,7 +6492,7 @@ class _AccountPageState extends State<AccountPage> {
       draggable: true,
       useSafeArea: false,
       borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: false,
+      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.78,
       ),
@@ -6513,7 +6513,7 @@ class _AccountPageState extends State<AccountPage> {
       context: context,
       position: OverlayPosition.bottom,
       expands: false,
-      transformBackdrop: false,
+      transformBackdrop: true,
       builder: (sheetContext) => SocialSheet(
         key: const Key('profile-approved-vendors-sheet'),
         title: 'Approved Vendors',
@@ -6555,7 +6555,7 @@ class _AccountPageState extends State<AccountPage> {
       draggable: true,
       useSafeArea: false,
       borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: false,
+      transformBackdrop: true,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.8,
       ),
