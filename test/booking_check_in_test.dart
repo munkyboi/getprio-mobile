@@ -219,13 +219,26 @@ void main() {
     expect(find.byKey(const Key('booking-queue-link')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets(
+    'check-in countdown includes days hours and minutes with centered text',
+    (tester) async {
+      final now = scheduled.subtract(
+        const Duration(days: 5, hours: 4, minutes: 30),
+      );
+      await openArrival(tester, ArrivalApi(), now: () => now);
+      final label = find.text('Check-in available in 5days 4hrs 15mins');
+      expect(label, findsOneWidget);
+      expect(tester.widget<Text>(label).textAlign, TextAlign.center);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets('check-in becomes available as foreground clock enters window', (
     tester,
   ) async {
     final api = ArrivalApi();
     var now = scheduled.subtract(const Duration(minutes: 16));
     await openArrival(tester, api, now: () => now);
-    expect(find.text('Check-in available in 1m'), findsOneWidget);
+    expect(find.text('Check-in available in 1min'), findsOneWidget);
     now = scheduled.subtract(const Duration(minutes: 15));
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('I’ve arrived'), findsOneWidget);

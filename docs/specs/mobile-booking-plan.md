@@ -401,3 +401,8 @@ KanbanFlow M28 updated and visibly verified, preserving In Progress/history/labe
 Queue ticket details omit the QR action after canonical customerConfirmedAt is set, and guard against opening the dialog for confirmed tickets. An open QR dialog listens to the shared ticket state and dismisses its own route after server confirmation, restoring application brightness and disposing the token controller. Existing push-triggered refetch and 15-second details polling deliver the confirmation; camera capture alone does not close the dialog. Failed confirmation leaves the dialog usable. The rotating API contract remains unchanged.
 
 Verification: all357 mobile tests pass; analysis is clean; signed MAIN production-configured Profile build succeeds. Regressions cover confirmation closing the dialog/hiding the action, already-confirmed details without a QR action, and automatic dismissal restoring prior brightness while preserving the underlying route. Physical scan-to-dismiss timing acceptance remains pending.
+
+
+## Check-in countdown label — 11 October 2026
+
+Booking details show days, hours and minutes remaining until the15-minute-before-start check-in window, e.g. Check-in available in5days4hrs15mins (with spaces between units in UI). Whole minutes round up, zero units are omitted and singular units use day/hr/min. Button text is centered, including wrapped labels. All6 check-in tests and Flutter analysis pass; signed production-configured MAIN Profile build succeeds. Physical visual acceptance remains pending.

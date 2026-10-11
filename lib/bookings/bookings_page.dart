@@ -601,6 +601,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                           _arriving
                               ? 'Recording arrival...'
                               : item.checkInLabel(_now),
+                          textAlign: TextAlign.center,
                         ),
                       ),
                     ],

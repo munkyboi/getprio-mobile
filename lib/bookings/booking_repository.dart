@@ -77,7 +77,16 @@ class CustomerBooking {
     final opening = start.subtract(const Duration(minutes: 15));
     if (now.isBefore(opening)) {
       final minutes = (opening.difference(now).inMilliseconds / 60000).ceil();
-      return 'Check-in available in ${minutes >= 60 ? '${(minutes / 60).ceil()}h' : '${minutes}m'}';
+      final days = minutes ~/ (24 * 60);
+      final hours = (minutes ~/ 60) % 24;
+      final remainingMinutes = minutes % 60;
+      final parts = [
+        if (days > 0) '$days${days == 1 ? 'day' : 'days'}',
+        if (hours > 0) '$hours${hours == 1 ? 'hr' : 'hrs'}',
+        if (remainingMinutes > 0)
+          '$remainingMinutes${remainingMinutes == 1 ? 'min' : 'mins'}',
+      ];
+      return 'Check-in available in ${parts.join(' ')}';
     }
     if (canCheckIn(now)) return 'I’ve arrived';
     if (now.isAfter(start.add(const Duration(minutes: 15)))) {
