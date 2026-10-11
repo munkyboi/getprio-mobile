@@ -3014,7 +3014,7 @@ class _ExplorePageState extends State<ExplorePage> {
       child: ListView(
         key: const Key('explore-page'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + keyboardInsetOf(context)),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         children: [
           const TabPageHeader(
             title: 'Explore vendors',
@@ -6926,7 +6926,7 @@ class _ProfileSheetContent extends StatelessWidget {
             24,
             GetPrioTheme.bottomSheetTopPadding,
             24,
-            12 + keyboardInsetOf(context),
+            12,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -7018,6 +7018,7 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
           ? 'Personal info'
           : 'Verify your changes',
       child: KeyboardAwareScrollView(
+        reserveKeyboardSpace: false,
         child: switch (_step) {
           _PersonalInfoStep.form => _buildForm(context),
           _PersonalInfoStep.currentEmailCode => _buildEmailCode(

@@ -5,7 +5,7 @@ import 'auth/auth_repository.dart';
 import 'auth/password_utils.dart';
 import 'feedback_toast.dart';
 
-const inputScrollPadding = EdgeInsets.only(top: 24, bottom: 96);
+const inputScrollPadding = EdgeInsets.all(24);
 
 const focusedClearInputFeature = InputFeature.clear(
   visibility: InputFeatureVisibility.and([
@@ -17,8 +17,9 @@ const focusedClearInputFeature = InputFeature.clear(
 
 /// Keeps an input visible when the keyboard changes the available viewport.
 ///
-/// The second frame pass handles the keyboard inset arriving after focus,
-/// which is common on iOS and can otherwise leave lower fields obscured.
+/// Moves only the focused editor by the amount needed to reveal it, with a
+/// 24px margin. Keyboard space belongs to the viewport, never to each field.
+/// The second frame handles the keyboard inset arriving after focus on iOS.
 class KeyboardAwareInput extends StatefulWidget {
   const KeyboardAwareInput({super.key, required this.child});
 
@@ -30,10 +31,7 @@ class KeyboardAwareInput extends StatefulWidget {
 
 class _KeyboardAwareInputState extends State<KeyboardAwareInput>
     with WidgetsBindingObserver {
-  static const _safeGap = 36.0;
-
-  bool _hasFocusedInput = false;
-  double _keyboardInset = 0;
+  static const _safeGap = 24.0;
 
   @override
   void initState() {
@@ -54,23 +52,6 @@ class _KeyboardAwareInputState extends State<KeyboardAwareInput>
       if (!mounted) return;
       final focusedContext = FocusManager.instance.primaryFocus?.context;
       final ownsFocusedInput = _ownsFocusedInput(focusedContext);
-      final viewData = MediaQueryData.fromView(
-        View.of(focusedContext ?? context),
-      );
-      final mediaInset =
-          MediaQuery.maybeOf(focusedContext ?? context)?.viewInsets.bottom ?? 0;
-      final keyboardInset = viewData.viewInsets.bottom > mediaInset
-          ? viewData.viewInsets.bottom
-          : mediaInset;
-      final focusStateChanged =
-          _hasFocusedInput != ownsFocusedInput ||
-          _keyboardInset != keyboardInset;
-      if (focusStateChanged) {
-        setState(() {
-          _hasFocusedInput = ownsFocusedInput;
-          _keyboardInset = keyboardInset;
-        });
-      }
       if (ownsFocusedInput && focusedContext != null) {
         _scheduleEnsureVisible(focusedContext);
       }
@@ -111,7 +92,12 @@ class _KeyboardAwareInputState extends State<KeyboardAwareInput>
   }
 
   void _ensureVisible(BuildContext focusedContext) {
-    if (!mounted || !focusedContext.mounted) return;
+    if (!mounted ||
+        !focusedContext.mounted ||
+        FocusManager.instance.primaryFocus?.context != focusedContext ||
+        !_ownsFocusedInput(focusedContext)) {
+      return;
+    }
     final renderObject = focusedContext.findRenderObject();
     final scrollable = Scrollable.maybeOf(context);
     if (renderObject is! RenderBox ||
@@ -140,6 +126,9 @@ class _KeyboardAwareInputState extends State<KeyboardAwareInput>
     final visibleBottom =
         (viewportBottom < keyboardTop ? viewportBottom : keyboardTop) -
         _safeGap;
+    // A tall textarea cannot fit in the remaining viewport. Let EditableText
+    // reveal its caret rather than alternating between its top and bottom.
+    if (renderObject.size.height > visibleBottom - visibleTop) return;
     final scrollDelta = fieldBottom > visibleBottom
         ? fieldBottom - visibleBottom
         : fieldTop < visibleTop
@@ -168,13 +157,7 @@ class _KeyboardAwareInputState extends State<KeyboardAwareInput>
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = _hasFocusedInput && _keyboardInset > 0
-        ? (_keyboardInset * 2) + _safeGap
-        : 0.0;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottomPadding),
-      child: widget.child,
-    );
+    return widget.child;
   }
 }
 

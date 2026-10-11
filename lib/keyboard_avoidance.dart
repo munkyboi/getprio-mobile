@@ -9,6 +9,16 @@ double keyboardInsetOf(BuildContext context) {
   return MediaQueryData.fromView(View.of(context)).viewInsets.bottom;
 }
 
+/// Marks a drawer whose wrapper already keeps content above the keyboard.
+class KeyboardResizedViewport extends InheritedWidget {
+  const KeyboardResizedViewport({super.key, required super.child});
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<KeyboardResizedViewport>() !=
+      null;
+  @override
+  bool updateShouldNotify(KeyboardResizedViewport oldWidget) => false;
+}
+
 /// A scroll view that reserves space for the onscreen keyboard.
 ///
 /// This is especially important for forms rendered in overlays and modal
@@ -70,7 +80,8 @@ class _KeyboardAwareScrollViewState extends State<KeyboardAwareScrollView>
   @override
   Widget build(BuildContext context) {
     final basePadding = widget.padding ?? EdgeInsets.zero;
-    final keyboardInset = widget.reserveKeyboardSpace
+    final keyboardInset =
+        widget.reserveKeyboardSpace && !KeyboardResizedViewport.of(context)
         ? keyboardInsetOf(context)
         : 0.0;
     final effectivePadding = widget.scrollDirection == Axis.vertical
@@ -154,7 +165,9 @@ class _KeyboardAwareFieldState extends State<KeyboardAwareField> {
 
   void _ensureVisible() {
     final fieldContext = _fieldKey.currentContext;
-    if (fieldContext == null || !fieldContext.mounted) return;
+    if (!_focusNode.hasFocus || fieldContext == null || !fieldContext.mounted) {
+      return;
+    }
     final fieldRenderObject = fieldContext.findRenderObject();
     final scrollable = Scrollable.maybeOf(fieldContext);
     if (fieldRenderObject is! RenderBox ||

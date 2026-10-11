@@ -828,7 +828,7 @@ class _VendorRatingFormState extends State<VendorRatingForm> {
                   maxLines: 5,
                   maxLength: 500,
                   features: const [focusedClearInputFeature],
-                  scrollPadding: const EdgeInsets.only(top: 24, bottom: 96),
+                  scrollPadding: inputScrollPadding,
                   inputFormatters: [LengthLimitingTextInputFormatter(500)],
                   placeholder: const Text('Share your experience (optional)'),
                   onChanged: (_) => setState(() {}),

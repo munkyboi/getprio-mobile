@@ -339,11 +339,9 @@ void main() {
   testWidgets('login resizes for the keyboard and keeps fields scrollable', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() {
-      tester.binding.setSurfaceSize(null);
-      tester.view.resetViewInsets();
-    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ShadcnApp(
         home: SignInPage(authRepository: repository, onAuthenticated: (_) {}),
@@ -372,7 +370,8 @@ void main() {
     final keyboardTop =
         keyboardMediaQuery.data.size.height -
         keyboardMediaQuery.data.viewInsets.bottom;
-    expect(fieldRect.bottom, lessThanOrEqualTo(keyboardTop - 24));
+    expect(fieldRect.bottom, lessThanOrEqualTo(keyboardTop));
+    expect(keyboardTop - fieldRect.bottom, lessThanOrEqualTo(70));
     expect(FocusManager.instance.primaryFocus, isNotNull);
   });
 

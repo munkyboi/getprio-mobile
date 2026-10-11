@@ -322,12 +322,9 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                 ),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      4,
-                      20,
-                      20 + MediaQuery.viewInsetsOf(context).bottom,
-                    ),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [

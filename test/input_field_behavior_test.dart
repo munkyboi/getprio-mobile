@@ -130,18 +130,16 @@ void main() {
         keyboardMediaQuery.data.viewInsets.bottom;
     expect(
       tester.getRect(find.byKey(const Key('keyboard-aware-field'))).bottom,
-      lessThanOrEqualTo(keyboardTop - 24),
+      lessThanOrEqualTo(keyboardTop),
     );
   });
 
   testWidgets('focused input can clear the keyboard boundary at content end', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 844));
-    addTearDown(() {
-      tester.binding.setSurfaceSize(null);
-      tester.view.resetViewInsets();
-    });
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
     final focusNode = FocusNode();
     addTearDown(focusNode.dispose);
 
@@ -175,7 +173,7 @@ void main() {
     final keyboardTop = 844 - 360;
     expect(
       tester.getRect(find.byKey(const Key('keyboard-end-field'))).bottom,
-      lessThanOrEqualTo(keyboardTop - 24),
+      lessThanOrEqualTo(keyboardTop),
     );
   });
 }

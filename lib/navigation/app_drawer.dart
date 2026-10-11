@@ -1,5 +1,7 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
+import '../keyboard_avoidance.dart';
+
 /// Shared drawer presentation: zoomed backdrop and 8px below the grabber.
 DrawerOverlayCompleter<T?> openAppDrawer<T>({
   required BuildContext context,
@@ -35,7 +37,15 @@ DrawerOverlayCompleter<T?> openAppDrawer<T>({
       surfaceBlur: theme?.surfaceBlur,
       barrierColor: theme?.barrierColor,
       gapAfterDragger: 8,
-      child: Builder(builder: builder),
+      child: position == OverlayPosition.bottom
+          ? KeyboardResizedViewport(
+              child: MediaQuery.removeViewInsets(
+                context: context,
+                removeBottom: true,
+                child: Builder(builder: builder),
+              ),
+            )
+          : Builder(builder: builder),
     ),
   );
 }

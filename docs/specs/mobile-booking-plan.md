@@ -411,3 +411,8 @@ Booking details show days, hours and minutes remaining until the15-minute-before
 ## Booking card cut-outs — 11 October 2026
 
 Booking details enable the shared DetailPassCard ticket cut-outs. Each dashed divider has transparent semicircular notches on both card edges, matching queue ticket details in light/dark appearance. All17 affected booking presentation, live refresh, check-in and payment tests pass; analysis clean. Physical visual acceptance remains pending.
+
+
+## Global keyboard focus and scrolling — 11 October 2026
+
+App-wide touch-outside unfocus covers text/password/textarea/OTP editors without clearing values. Removed twice-keyboard-height per-field spacing, reduced shared scroll margin from96px to24px, removed duplicate Explore/Profile/booking keyboard padding, and made bottom drawer content consume the keyboard inset already reserved by DrawerWrapper. Focus correction is minimal, ignores blurred editors, and leaves tall textarea caret visibility to Flutter. Source audit: keyboard-focus-audit.md. All365 tests pass; analysis clean; signed MAIN production-configured Profile build succeeds. Physical interaction review of every screen remains pending.

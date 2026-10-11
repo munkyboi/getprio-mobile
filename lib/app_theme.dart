@@ -79,38 +79,49 @@ class GetPrioTheme {
 
   static Widget wrap(Widget child) => Builder(
     builder: (context) {
-      return ComponentTheme<CardTheme>(
-        data: CardTheme(
-          padding: const EdgeInsets.all(20),
-          borderRadius: BorderRadius.circular(20),
-          borderColor: colors(context).line,
-          borderWidth: 1,
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x145B422A),
-              blurRadius: 24,
-              offset: Offset(0, 6),
-            ),
-          ],
-        ),
-        child: ComponentTheme<TextFieldTheme>(
-          data: TextFieldTheme(
-            borderRadius: BorderRadius.circular(16),
-            filled: true,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      return Actions(
+        actions: {
+          EditableTextTapOutsideIntent:
+              CallbackAction<EditableTextTapOutsideIntent>(
+                onInvoke: (intent) {
+                  intent.focusNode.unfocus();
+                  return null;
+                },
+              ),
+        },
+        child: ComponentTheme<CardTheme>(
+          data: CardTheme(
+            padding: const EdgeInsets.all(20),
+            borderRadius: BorderRadius.circular(20),
+            borderColor: colors(context).line,
+            borderWidth: 1,
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x145B422A),
+                blurRadius: 24,
+                offset: Offset(0, 6),
+              ),
+            ],
           ),
-          child: ComponentTheme<PrimaryButtonTheme>(
-            data: PrimaryButtonTheme(
-              decoration: _buttonDecoration(
-                radius: 16,
-                shadow: const [primaryActionShadow],
-              ),
+          child: ComponentTheme<TextFieldTheme>(
+            data: TextFieldTheme(
+              borderRadius: BorderRadius.circular(16),
+              filled: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
-            child: ComponentTheme<OutlineButtonTheme>(
-              data: OutlineButtonTheme(
-                decoration: _buttonDecoration(radius: 16),
+            child: ComponentTheme<PrimaryButtonTheme>(
+              data: PrimaryButtonTheme(
+                decoration: _buttonDecoration(
+                  radius: 16,
+                  shadow: const [primaryActionShadow],
+                ),
               ),
-              child: child,
+              child: ComponentTheme<OutlineButtonTheme>(
+                data: OutlineButtonTheme(
+                  decoration: _buttonDecoration(radius: 16),
+                ),
+                child: child,
+              ),
             ),
           ),
         ),
