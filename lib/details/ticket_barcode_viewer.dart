@@ -36,7 +36,7 @@ Future<void> showTicketBarcode(
 }) => showGeneralDialog<void>(
   context: context,
   barrierDismissible: true,
-  barrierLabel: 'Close barcode',
+  barrierLabel: 'Close QR code',
   barrierColor: Colors.black.withValues(alpha: .35),
   pageBuilder: (_, _, _) => TicketBarcodeViewer(code: code, state: state),
 );
@@ -67,11 +67,34 @@ class _TicketBarcodeViewerState extends State<TicketBarcodeViewer>
   void initState() {
     super.initState();
     _brightness = widget.brightness ?? DeviceBarcodeBrightness();
+    widget.state?.addListener(_closeAfterConfirmation);
+    _closeAfterConfirmation();
     WidgetsBinding.instance.addObserver(this);
     if (WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
       _updateBrightness(true);
     }
+  }
+
+  bool _closingAfterConfirmation = false;
+
+  void _closeAfterConfirmation() {
+    if (!mounted ||
+        _closingAfterConfirmation ||
+        widget.state?.arrivalConfirmed != true) {
+      return;
+    }
+    _closingAfterConfirmation = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route == null) return;
+      if (route.isCurrent) {
+        Navigator.of(context).pop();
+      } else {
+        route.navigator?.removeRoute(route);
+      }
+    });
   }
 
   // Serialize changes so closing/backgrounding during a native read cannot
@@ -107,6 +130,7 @@ class _TicketBarcodeViewerState extends State<TicketBarcodeViewer>
 
   @override
   void dispose() {
+    widget.state?.removeListener(_closeAfterConfirmation);
     WidgetsBinding.instance.removeObserver(this);
     _updateBrightness(false);
     super.dispose();

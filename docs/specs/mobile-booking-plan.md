@@ -394,3 +394,10 @@ Queue ticket cards use optional segmented rendering around DetailPassDivider: tr
 Verification: all356 mobile tests pass; Flutter analysis is clean. A regression checks no token requests during three minutes on the ticket screen, one request on dialog open, no renewal after close and fresh issuance on reopening. Existing tests cover dialog confirmation updates, narrow light/dark QR rendering and brightness restoration/races. Synthetic390px dark ticket and light dialog previews were visually checked; Apple Vision decoded the smooth logo-overlaid QR to the exact34-character mock token. Preview screenshots use Flutter test fonts and are not physical device UI evidence. Signed production-configured MAIN Runner Profile build passed signature verification, installed and launched on Zero32 and Zero32 Domain. Live camera/brightness/visual acceptance remains pending. API/scanner contract is unchanged; coordinating thread has verified#369/#370 deployed.
 
 KanbanFlow M28 updated and visibly verified, preserving In Progress/history/labels/estimates. Screenshot: /tmp/getprio-m28-pretty-dialog.png.
+
+
+## Hide arrival QR after confirmation — 11 October 2026
+
+Queue ticket details omit the QR action after canonical customerConfirmedAt is set, and guard against opening the dialog for confirmed tickets. An open QR dialog listens to the shared ticket state and dismisses its own route after server confirmation, restoring application brightness and disposing the token controller. Existing push-triggered refetch and 15-second details polling deliver the confirmation; camera capture alone does not close the dialog. Failed confirmation leaves the dialog usable. The rotating API contract remains unchanged.
+
+Verification: all357 mobile tests pass; analysis is clean; signed MAIN production-configured Profile build succeeds. Regressions cover confirmation closing the dialog/hiding the action, already-confirmed details without a QR action, and automatic dismissal restoring prior brightness while preserving the underlying route. Physical scan-to-dismiss timing acceptance remains pending.

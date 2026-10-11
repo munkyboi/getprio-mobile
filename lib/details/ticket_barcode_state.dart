@@ -59,6 +59,7 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
   int _generation = 0;
   DateTime? _retryAt;
   bool get loading => _loading;
+  bool get arrivalConfirmed => _ticket.customerConfirmedAt != null;
   bool get rotating =>
       !sandbox &&
       _ticket.isActive &&

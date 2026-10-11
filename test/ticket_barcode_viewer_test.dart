@@ -28,7 +28,11 @@ class TestBrightness implements BarcodeBrightness {
   Future<void> reset() async => resets++;
 }
 
-Future<void> openViewer(WidgetTester tester, TestBrightness brightness) async {
+Future<void> openViewer(
+  WidgetTester tester,
+  TestBrightness brightness, {
+  TicketBarcodeState? state,
+}) async {
   tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   await tester.pumpWidget(
     ShadcnApp(
@@ -41,8 +45,11 @@ Future<void> openViewer(WidgetTester tester, TestBrightness brightness) async {
             context: context,
             barrierDismissible: true,
             barrierLabel: 'Close barcode',
-            pageBuilder: (_, _, _) =>
-                TicketBarcodeViewer(code: 'VERIFY123', brightness: brightness),
+            pageBuilder: (_, _, _) => TicketBarcodeViewer(
+              code: 'VERIFY123',
+              brightness: brightness,
+              state: state,
+            ),
           ),
           child: const Center(child: Text('Open')),
         ),
@@ -54,6 +61,40 @@ Future<void> openViewer(WidgetTester tester, TestBrightness brightness) async {
 }
 
 void main() {
+  testWidgets(
+    'arrival confirmation closes only QR route and restores brightness',
+    (tester) async {
+      final brightness = TestBrightness()..existingOverride = true;
+      final state = TicketBarcodeState(
+        ticket: QueueTicket.fromJson({
+          'id': '1',
+          'lookupCode': 'REFERENCE',
+          'status': 'called',
+        }),
+        load: (_) async => TicketBarcodeToken(
+          code: 'QB0123456789ABCDEF0123456789ABCDEF',
+          serverNow: DateTime.now().toUtc(),
+          expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 2)),
+        ),
+      );
+      await openViewer(tester, brightness, state: state);
+      expect(brightness.changes, [1]);
+      state.updateTicket(
+        QueueTicket.fromJson({
+          'id': '1',
+          'lookupCode': 'REFERENCE',
+          'status': 'called',
+          'customerConfirmedAt': '2026-10-11T00:00:00Z',
+        }),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+      expect(find.text('Open'), findsOneWidget);
+      expect(brightness.changes, [1, .35]);
+      state.dispose();
+    },
+  );
+
   testWidgets('card and enlarged viewer rotate and expire together', (
     tester,
   ) async {

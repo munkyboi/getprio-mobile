@@ -10,7 +10,7 @@ import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
-  testWidgets('confirmation while barcode modal is open updates both views', (
+  testWidgets('arrival confirmation closes QR dialog and hides its button', (
     tester,
   ) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -57,12 +57,8 @@ void main() {
     };
     await tester.pump(const Duration(seconds: 15));
     await tester.pumpAndSettle();
-    expect(
-      tester.widget<BrandedTicketQr>(find.byType(BrandedTicketQr)).code,
-      'REFERENCE',
-    );
-    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
     expect(find.byKey(const Key('ticket-barcode-countdown')), findsNothing);
     expect(find.byType(BrandedTicketQr), findsNothing);
   });
@@ -507,7 +503,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('Your arrival was confirmed'), findsOneWidget);
-    expect(find.byKey(const Key('ticket-qr-fab')), findsOneWidget);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
   });
 
   testWidgets('refreshes open ticket details when the repository signals', (

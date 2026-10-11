@@ -5540,7 +5540,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   Future<void> _openQr(QueueTicket ticket) async {
-    if (_barcodeModalOpen) return;
+    if (_barcodeModalOpen || ticket.customerConfirmedAt != null) return;
     final barcode = TicketBarcodeState(
       ticket: ticket,
       sandbox: widget.sandbox,
@@ -5762,45 +5762,46 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                   ],
                 ),
               ),
-              Positioned(
-                right: 20,
-                bottom: 20,
-                child: SafeArea(
-                  top: false,
-                  child: Semantics(
-                    label: 'Show ticket QR code',
-                    button: true,
-                    child: GestureDetector(
-                      key: const Key('ticket-qr-fab'),
-                      onTap: () => _openQr(ticket),
-                      child: Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: GetPrioTheme.orange,
-                            width: 2,
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x44000000),
-                              blurRadius: 14,
-                              offset: Offset(0, 4),
+              if (ticket.customerConfirmedAt == null)
+                Positioned(
+                  right: 20,
+                  bottom: 20,
+                  child: SafeArea(
+                    top: false,
+                    child: Semantics(
+                      label: 'Show ticket QR code',
+                      button: true,
+                      child: GestureDetector(
+                        key: const Key('ticket-qr-fab'),
+                        onTap: () => _openQr(ticket),
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: GetPrioTheme.orange,
+                              width: 2,
                             ),
-                          ],
-                        ),
-                        child: const Icon(
-                          LucideIcons.qrCode,
-                          color: GetPrioTheme.ink,
-                          size: 28,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x44000000),
+                                blurRadius: 14,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            LucideIcons.qrCode,
+                            color: GetPrioTheme.ink,
+                            size: 28,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
             ],
           );
         },
