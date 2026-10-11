@@ -274,4 +274,27 @@ void main() {
     expect(state.code, isNull);
     state.dispose();
   });
+  testWidgets('offline refresh retains loaded credential only until expiry', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026);
+    var offline = false;
+    final state = TicketBarcodeState(
+      ticket: ticket(),
+      now: () => now,
+      load: (_) async {
+        if (offline) throw StateError('offline');
+        return token(now, 'VALID');
+      },
+    );
+    await tester.pump();
+    offline = true;
+    now = now.add(const Duration(seconds: 30));
+    await state.refresh();
+    expect(state.code, 'VALID');
+    expect(state.remaining, const Duration(seconds: 90));
+    now = now.add(const Duration(seconds: 90));
+    expect(state.code, isNull);
+    state.dispose();
+  });
 }

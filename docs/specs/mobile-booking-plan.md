@@ -366,3 +366,11 @@ Follow-up to API/scanner PR #369 review: the shared mobile controller now keeps 
 Verification: all 28 affected API/state/viewer/details tests pass; Flutter analysis is clean. Four new regressions cover sleep with paused monotonic time, request latency during sleep, backward clock change with an existing token and backward change during issuance. Signed production-configured MAIN Runner Profile build passed. Backend PR #369 is under review and remains unmerged/undeployed; physical live scan and real device sleep acceptance remain pending.
 
 Clock follow-up device proof: signed MAIN Runner Profile build passed signature verification, installed and launched on Zero32 and Zero32 Domain. KanbanFlow M28 updated with the dual-clock guards and verification, preserving In Progress/history/labels/estimates. Screenshot: /tmp/getprio-m28-barcode-sleep.png.
+
+## Rotating credential scan sizing and offline validity — 11 October 2026
+
+The 34-character rotating payload is rendered as a compact plain black-on-white QR rather than a horizontally compressed Code128. Ticket card QR is 180px square with 24px white quiet padding; enlarged modal targets 240px square with 32px quiet padding and shrinks uniformly to its available width. Both continue using one token/countdown/deadline state. Existing non-rotating confirmed/history/Sandbox references retain Code128. The vendor scanner in API/scanner PR #369 supports QR with the same QB token payload; POST contract is unchanged.
+
+A loaded still-valid token remains visible after an offline refresh fails, until its conservative expiry. Expired tokens remain hidden without a static fallback; pending-response lifecycle guards, pause/resume refetch and retry remain. Added an explicit offline validity regression and a 320px light/dark QR layout test using the actual 34-character payload. All 30 affected API/state/viewer/details tests pass; Flutter analysis is clean. Physical camera scan/quiet-zone acceptance remains pending alongside backend merge/deployment.
+
+QR follow-up device proof: signed MAIN production-configured Runner Profile build passed signature verification, installed and launched on Zero32 and Zero32 Domain. KanbanFlow M28 updated with QR sizing/offline verification, preserving history, In Progress, labels and estimates. Screenshot: /tmp/getprio-m28-barcode-qr.png.

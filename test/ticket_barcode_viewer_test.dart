@@ -121,6 +121,72 @@ void main() {
     state.dispose();
   });
 
+  testWidgets('rotating QR stays square with quiet space on narrow phones', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final now = DateTime.utc(2026);
+    final state = TicketBarcodeState(
+      ticket: QueueTicket.fromJson({
+        'id': '1',
+        'lookupCode': 'REF',
+        'status': 'waiting',
+      }),
+      now: () => now,
+      load: (_) async => TicketBarcodeToken(
+        code: 'QB0123456789ABCDEF0123456789ABCDEF',
+        serverNow: now,
+        expiresAt: now.add(const Duration(minutes: 2)),
+      ),
+    );
+    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+      await tester.pumpWidget(
+        ShadcnApp(
+          theme: GetPrioTheme.light(),
+          darkTheme: GetPrioTheme.dark(),
+          themeMode: mode,
+          home: Scaffold(
+            child: Column(
+              children: [
+                TicketBarcodeContent(state: state),
+                Expanded(
+                  child: TicketBarcodeViewer(
+                    code: '',
+                    state: state,
+                    brightness: TestBrightness(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final widgets = tester.widgetList<BarcodeWidget>(
+        find.byType(BarcodeWidget),
+      );
+      expect(widgets.length, 2);
+      for (final widget in widgets) {
+        expect(widget.barcode.name, 'QR-Code');
+        expect(widget.width, widget.height);
+        expect(widget.width, greaterThanOrEqualTo(180));
+        expect(widget.padding, isNotNull);
+        expect(widget.color, Colors.black);
+        expect(widget.backgroundColor, Colors.white);
+        expect(
+          String.fromCharCodes(widget.data),
+          'QB0123456789ABCDEF0123456789ABCDEF',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    state.dispose();
+  });
+
   testWidgets(
     'large dark-on-white barcode blurs backdrop and restores on close',
     (tester) async {

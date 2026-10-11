@@ -234,14 +234,41 @@ class TicketBarcodeContent extends StatelessWidget {
                     horizontal: 8,
                     vertical: 12,
                   ),
-                  child: BarcodeWidget(
-                    key: enlarged ? const Key('ticket-barcode-enlarged') : null,
-                    data: code,
-                    barcode: Barcode.code128(),
-                    height: enlarged ? 160 : 72,
-                    drawText: false,
-                    color: GetPrioTheme.ink,
-                    backgroundColor: Colors.white,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (state.rotating) {
+                        final size = constraints.maxWidth.clamp(
+                          0.0,
+                          enlarged ? 240.0 : 180.0,
+                        );
+                        return Center(
+                          child: BarcodeWidget(
+                            key: enlarged
+                                ? const Key('ticket-barcode-enlarged')
+                                : null,
+                            data: code,
+                            barcode: Barcode.qrCode(),
+                            width: size,
+                            height: size,
+                            padding: EdgeInsets.all(enlarged ? 32 : 24),
+                            drawText: false,
+                            color: Colors.black,
+                            backgroundColor: Colors.white,
+                          ),
+                        );
+                      }
+                      return BarcodeWidget(
+                        key: enlarged
+                            ? const Key('ticket-barcode-enlarged')
+                            : null,
+                        data: code,
+                        barcode: Barcode.code128(),
+                        height: enlarged ? 160 : 72,
+                        drawText: false,
+                        color: GetPrioTheme.ink,
+                        backgroundColor: Colors.white,
+                      );
+                    },
                   ),
                 ),
               ),
