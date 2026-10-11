@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
+import 'package:getprio_mobile/details/ticket_barcode_state.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
@@ -9,6 +10,81 @@ import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  testWidgets('confirmation while barcode modal is open updates both views', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final ticket = QueueTicket.fromJson({
+      'id': 'active-1',
+      'lookupCode': 'REFERENCE',
+      'status': 'called',
+      'tenantSlug': 'city-clinic',
+    });
+    final queueApi = FakeQueueApi(
+      snapshot: {
+        'focusTicket': {
+          'id': 'active-1',
+          'lookupCode': 'REFERENCE',
+          'status': 'called',
+        },
+      },
+    );
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: ticket,
+          ticketRepository: QueueTicketRepository(FakeAccountQueueApi()),
+          queueRepository: QueueRepository(queueApi),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('ticket-details-barcode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ticket-details-barcode')));
+    await tester.pumpAndSettle();
+    expect(
+      String.fromCharCodes(
+        tester
+            .widget<BarcodeWidget>(
+              find.byKey(const Key('ticket-barcode-enlarged')),
+            )
+            .data,
+      ),
+      'QB0123456789ABCDEF0123456789ABCDEF',
+    );
+    queueApi.snapshot = {
+      'focusTicket': {
+        'id': 'active-1',
+        'lookupCode': 'REFERENCE',
+        'status': 'called',
+        'customerConfirmedAt': '2026-10-11T00:00:00Z',
+      },
+    };
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(
+      String.fromCharCodes(
+        tester
+            .widget<BarcodeWidget>(
+              find.byKey(const Key('ticket-barcode-enlarged')),
+            )
+            .data,
+      ),
+      'REFERENCE',
+    );
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-countdown')), findsNothing);
+    final inline = tester.widget<BarcodeWidget>(
+      find.descendant(
+        of: find.byKey(const Key('ticket-details-barcode')),
+        matching: find.byType(BarcodeWidget),
+      ),
+    );
+    expect(String.fromCharCodes(inline.data), 'REFERENCE');
+  });
+
   testWidgets('polls service transitions without showing the called alert', (
     tester,
   ) async {
@@ -159,7 +235,7 @@ void main() {
     expect(find.text('Queue length'), findsOneWidget);
     expect(find.text('4 waiting'), findsOneWidget);
     expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
-    expect(find.text('A0C18AF'), findsOneWidget);
+    expect(find.text('QB0123456789ABCDEF0123456789ABCDEF'), findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('ticket-details-barcode')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('ticket-details-barcode')));
@@ -167,7 +243,10 @@ void main() {
     final enlarged = tester.widget<BarcodeWidget>(
       find.byKey(const Key('ticket-barcode-enlarged')),
     );
-    expect(String.fromCharCodes(enlarged.data), 'A0C18AF');
+    expect(
+      String.fromCharCodes(enlarged.data),
+      'QB0123456789ABCDEF0123456789ABCDEF',
+    );
     await tester.tap(find.byKey(const Key('ticket-barcode-close')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
@@ -356,7 +435,11 @@ void main() {
         ),
       );
       expect(find.byKey(const Key('ticket-details-card')), findsOneWidget);
-      expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
+      expect(find.byKey(const Key('ticket-details-barcode')), findsNothing);
+      expect(
+        find.byKey(const Key('ticket-barcode-unavailable')),
+        findsOneWidget,
+      );
     },
   );
   testWidgets('shows vendor confirmation when a ticket has been called', (
@@ -484,6 +567,7 @@ void main() {
     await tester.pumpWidget(
       ShadcnApp(
         home: TicketDetailsPage(
+          sandbox: true,
           ticket: QueueTicket.fromJson({
             'id': 'developer-ticket-1',
             'lookupCode': 'QUEUE1-0019',
@@ -614,7 +698,17 @@ class _TicketCoverDirectoryApi implements DirectoryApi {
   }) async => const {'vendors': []};
 }
 
-class FakeAccountQueueApi implements AccountQueueApi {
+class FakeAccountQueueApi implements AccountQueueApi, TicketBarcodeApi {
+  @override
+  Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) async {
+    final now = DateTime.now().toUtc();
+    return TicketBarcodeToken(
+      code: 'QB0123456789ABCDEF0123456789ABCDEF',
+      expiresAt: now.add(const Duration(minutes: 2)),
+      serverNow: now,
+    );
+  }
+
   @override
   Future<Map<String, dynamic>> loadHistory({
     required int page,

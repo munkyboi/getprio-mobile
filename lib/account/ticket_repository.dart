@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../queue/auth_queue_api.dart';
+import '../details/ticket_barcode_state.dart';
 import '../queue/queue_models.dart';
 
 abstract interface class AccountQueueApi {
@@ -10,6 +11,10 @@ abstract interface class AccountQueueApi {
     required int page,
     required int limit,
   });
+}
+
+abstract interface class TicketBarcodeApi {
+  Future<TicketBarcodeToken> loadTicketBarcode(String ticketId);
 }
 
 abstract interface class TicketInvitationApi {
@@ -51,6 +56,13 @@ class QueueTicketRepository {
   QueueTicketRepository(this.api);
 
   final AccountQueueApi api;
+  Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) {
+    if (api is! TicketBarcodeApi) {
+      return Future.error(StateError('Ticket barcode API unavailable'));
+    }
+    return (api as TicketBarcodeApi).loadTicketBarcode(ticketId);
+  }
+
   final ticketStats = ValueNotifier<CustomerTicketStats?>(null);
   final refreshVersion = ValueNotifier<int>(0);
   final servedTicket = ValueNotifier<QueueTicket?>(null);
@@ -201,11 +213,39 @@ Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
   };
 }
 
-class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
+class RestAccountQueueApi
+    implements AccountQueueApi, TicketInvitationApi, TicketBarcodeApi {
   RestAccountQueueApi(this.client, {this.sandbox = false});
 
   final AuthenticatedApiClient client;
   final bool sandbox;
+
+  @override
+  Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) async {
+    if (sandbox) throw StateError('Sandbox rotating barcodes are unsupported');
+    final raw = await client.get(
+      '/api/account/queue/tickets/${Uri.encodeComponent(ticketId)}/barcode',
+      additionalHeaders: const {'Cache-Control': 'no-store'},
+    );
+    final code = raw['barcodeToken'];
+    final issued = DateTime.tryParse(raw['issuedAt']?.toString() ?? '');
+    final expires = DateTime.tryParse(raw['expiresAt']?.toString() ?? '');
+    final server = DateTime.tryParse(raw['serverNow']?.toString() ?? '');
+    if (code is! String ||
+        !RegExp(r'^QB[A-F0-9]{32}$').hasMatch(code) ||
+        issued == null ||
+        expires == null ||
+        server == null ||
+        !expires.isAfter(issued) ||
+        expires.difference(issued) > const Duration(minutes: 2)) {
+      throw StateError('Invalid ticket barcode response');
+    }
+    return TicketBarcodeToken(
+      code: code,
+      expiresAt: expires,
+      serverNow: server,
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> loadOverview() async {

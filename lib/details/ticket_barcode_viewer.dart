@@ -6,6 +6,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
+import 'ticket_barcode_state.dart';
 
 abstract interface class BarcodeBrightness {
   Future<double> get current;
@@ -28,18 +29,27 @@ class DeviceBarcodeBrightness implements BarcodeBrightness {
       ScreenBrightness.instance.resetApplicationScreenBrightness();
 }
 
-Future<void> showTicketBarcode(BuildContext context, String code) =>
-    showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close barcode',
-      barrierColor: Colors.black.withValues(alpha: .35),
-      pageBuilder: (_, _, _) => TicketBarcodeViewer(code: code),
-    );
+Future<void> showTicketBarcode(
+  BuildContext context,
+  String code, {
+  TicketBarcodeState? state,
+}) => showGeneralDialog<void>(
+  context: context,
+  barrierDismissible: true,
+  barrierLabel: 'Close barcode',
+  barrierColor: Colors.black.withValues(alpha: .35),
+  pageBuilder: (_, _, _) => TicketBarcodeViewer(code: code, state: state),
+);
 
 class TicketBarcodeViewer extends StatefulWidget {
-  const TicketBarcodeViewer({super.key, required this.code, this.brightness});
+  const TicketBarcodeViewer({
+    super.key,
+    required this.code,
+    this.state,
+    this.brightness,
+  });
   final String code;
+  final TicketBarcodeState? state;
   final BarcodeBrightness? brightness;
   @override
   State<TicketBarcodeViewer> createState() => _TicketBarcodeViewerState();
@@ -156,26 +166,30 @@ class _TicketBarcodeViewerState extends State<TicketBarcodeViewer>
                     ],
                   ),
                   const SizedBox(height: 20),
-                  BarcodeWidget(
-                    key: const Key('ticket-barcode-enlarged'),
-                    data: widget.code,
-                    barcode: Barcode.code128(),
-                    height: 160,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    drawText: false,
-                    color: GetPrioTheme.ink,
-                    backgroundColor: Colors.white,
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    widget.code,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
+                  if (widget.state != null)
+                    TicketBarcodeContent(state: widget.state!, enlarged: true)
+                  else ...[
+                    BarcodeWidget(
+                      key: const Key('ticket-barcode-enlarged'),
+                      data: widget.code,
+                      barcode: Barcode.code128(),
+                      height: 160,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      drawText: false,
                       color: GetPrioTheme.ink,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2,
+                      backgroundColor: Colors.white,
                     ),
-                  ),
+                    const SizedBox(height: 20),
+                    Text(
+                      widget.code,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: GetPrioTheme.ink,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -183,5 +197,97 @@ class _TicketBarcodeViewerState extends State<TicketBarcodeViewer>
         ),
       ),
     ],
+  );
+}
+
+/// Shared render path; no independent token or timer in the enlarged modal.
+class TicketBarcodeContent extends StatelessWidget {
+  const TicketBarcodeContent({
+    super.key,
+    required this.state,
+    this.enlarged = false,
+    this.onTap,
+  });
+  final TicketBarcodeState state;
+  final bool enlarged;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: state,
+    builder: (context, _) {
+      final code = state.code;
+      final seconds = state.remaining.inSeconds.clamp(0, 120);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (code != null && code.isNotEmpty) ...[
+            Semantics(
+              label: 'Enlarge ticket barcode',
+              button: !enlarged,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onTap,
+                child: Container(
+                  key: enlarged ? null : const Key('ticket-details-barcode'),
+                  color: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
+                  child: BarcodeWidget(
+                    key: enlarged ? const Key('ticket-barcode-enlarged') : null,
+                    data: code,
+                    barcode: Barcode.code128(),
+                    height: enlarged ? 160 : 72,
+                    drawText: false,
+                    color: GetPrioTheme.ink,
+                    backgroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              code,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: GetPrioTheme.ink,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1,
+              ),
+            ),
+            if (state.rotating) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Refreshes in ${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}',
+                key: const Key('ticket-barcode-countdown'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: GetPrioTheme.ink),
+              ),
+            ],
+          ] else ...[
+            Text(
+              state.loading
+                  ? 'Refreshing barcode…'
+                  : 'Barcode unavailable. Refresh to show a valid barcode.',
+              key: const Key('ticket-barcode-unavailable'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: GetPrioTheme.ink),
+            ),
+            if (!state.loading)
+              Center(
+                child: TextButton(
+                  key: const Key('ticket-barcode-retry'),
+                  onPressed: () => unawaited(state.refresh()),
+                  child: const Text(
+                    'Retry',
+                    style: TextStyle(color: GetPrioTheme.ink),
+                  ),
+                ),
+              ),
+          ],
+        ],
+      );
+    },
   );
 }

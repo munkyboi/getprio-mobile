@@ -7,6 +7,7 @@ import 'navigation/tab_page_header.dart';
 import 'directory/vendor_profile_hero.dart';
 import 'details/detail_pass.dart';
 import 'details/ticket_barcode_viewer.dart';
+import 'details/ticket_barcode_state.dart';
 import 'queue/active_ticket_carousel.dart';
 import 'directory/expandable_vendor_description.dart';
 import 'social/vendor_social_widgets.dart';
@@ -5352,6 +5353,8 @@ class TicketDetailsPage extends StatefulWidget {
 
 class _TicketDetailsPageState extends State<TicketDetailsPage> {
   late Future<_TicketDetailsData> _details;
+  late final TicketBarcodeState _barcode;
+  bool _barcodeModalOpen = false;
   QueueTicket? _displayedTicket;
   bool _isCancelling = false;
   Timer? _statusPoll;
@@ -5361,6 +5364,13 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   @override
   void initState() {
     super.initState();
+    _barcode = TicketBarcodeState(
+      ticket: widget.ticket,
+      sandbox: widget.sandbox,
+      load: (id) =>
+          widget.ticketRepository?.loadTicketBarcode(id) ??
+          Future.error(StateError('Ticket barcode API unavailable')),
+    );
     _details = _loadDetails();
     _statusPoll = Timer.periodic(
       const Duration(seconds: 15),
@@ -5374,6 +5384,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   @override
   void dispose() {
     _statusPoll?.cancel();
+    _barcode.dispose();
     widget.ticketRepository?.refreshVersion.removeListener(
       _handleTicketRepositoryRefresh,
     );
@@ -5393,7 +5404,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
         !mounted ||
         _isCancelling ||
         WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
-        ModalRoute.of(context)?.isCurrent != true ||
+        (ModalRoute.of(context)?.isCurrent != true && !_barcodeModalOpen) ||
         (widget.queueRepository == null && widget.ticketRepository == null)) {
       return;
     }
@@ -5415,7 +5426,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   Future<_TicketDetailsData> _loadDetails({bool refreshTicket = false}) async {
-    _detailsRevision++;
+    final revision = ++_detailsRevision;
     var ticket = widget.ticket;
     if (refreshTicket) {
       final ticketRepository = widget.ticketRepository;
@@ -5435,6 +5446,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     final repository = widget.queueRepository;
     final tenantSlug = ticket.tenantSlug;
     if (repository == null || tenantSlug == null || ticket.lookupCode.isEmpty) {
+      if (mounted && revision == _detailsRevision) {
+        _barcode.updateTicket(_displayedTicket ?? ticket);
+      }
       return _TicketDetailsData(ticket: ticket, vendor: vendor);
     }
 
@@ -5451,6 +5465,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
           locationSlug: ticket.locationSlug,
         ) ??
         ticket;
+    if (mounted && revision == _detailsRevision) {
+      _barcode.updateTicket(_displayedTicket ?? snapshotTicket);
+    }
     return _TicketDetailsData(
       ticket: snapshotTicket,
       snapshot: snapshot,
@@ -5524,6 +5541,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
         _displayedTicket = cancelled ?? _displayedTicket;
         _isCancelling = false;
       });
+      _barcode.updateTicket(_displayedTicket ?? widget.ticket);
     } catch (_) {
       if (mounted) setState(() => _isCancelling = false);
     }
@@ -5585,44 +5603,20 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                               style: TextStyle(color: GetPrioTheme.ink),
                             ),
                             const SizedBox(height: 12),
-                            Semantics(
-                              label: 'Enlarge ticket barcode',
-                              button: true,
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => showTicketBarcode(
-                                  context,
-                                  ticket.verificationCode ?? ticket.lookupCode,
-                                ),
-                                child: Container(
-                                  key: const Key('ticket-details-barcode'),
-                                  color: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 12,
-                                  ),
-                                  child: BarcodeWidget(
-                                    data:
-                                        ticket.verificationCode ??
-                                        ticket.lookupCode,
-                                    barcode: Barcode.code128(),
-                                    height: 72,
-                                    drawText: false,
-                                    color: GetPrioTheme.ink,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Center(
-                              child: Text(
-                                ticket.verificationCode ?? ticket.lookupCode,
-                                style: const TextStyle(
-                                  color: GetPrioTheme.ink,
-                                  letterSpacing: 2,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                            TicketBarcodeContent(
+                              state: _barcode,
+                              onTap: () async {
+                                _barcodeModalOpen = true;
+                                try {
+                                  await showTicketBarcode(
+                                    context,
+                                    _barcode.code ?? '',
+                                    state: _barcode,
+                                  );
+                                } finally {
+                                  _barcodeModalOpen = false;
+                                }
+                              },
                             ),
                           ],
                         ),

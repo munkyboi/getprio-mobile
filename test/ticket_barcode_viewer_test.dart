@@ -5,6 +5,8 @@ import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/app_theme.dart';
 import 'package:getprio_mobile/details/ticket_barcode_viewer.dart';
+import 'package:getprio_mobile/details/ticket_barcode_state.dart';
+import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 class TestBrightness implements BarcodeBrightness {
@@ -53,6 +55,72 @@ Future<void> openViewer(WidgetTester tester, TestBrightness brightness) async {
 }
 
 void main() {
+  testWidgets('card and enlarged viewer rotate and expire together', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026);
+    var calls = 0;
+    var fail = false;
+    final state = TicketBarcodeState(
+      ticket: QueueTicket.fromJson({
+        'id': '1',
+        'lookupCode': 'REFERENCE',
+        'status': 'waiting',
+      }),
+      now: () => now,
+      load: (_) async {
+        calls++;
+        if (fail) throw StateError('offline');
+        return TicketBarcodeToken(
+          code: 'TOKEN$calls',
+          serverNow: now,
+          expiresAt: now.add(const Duration(minutes: 2)),
+        );
+      },
+    );
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: Scaffold(
+          child: Column(
+            children: [
+              TicketBarcodeContent(state: state),
+              Expanded(
+                child: TicketBarcodeViewer(
+                  code: 'UNUSED',
+                  state: state,
+                  brightness: TestBrightness(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<BarcodeWidget>(
+            find.byKey(const Key('ticket-barcode-enlarged')),
+          )
+          .data,
+      'TOKEN1'.codeUnits,
+    );
+    expect(find.text('TOKEN1'), findsNWidgets(2));
+    now = now.add(const Duration(minutes: 2));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('TOKEN2'), findsNWidgets(2));
+    expect(find.text('TOKEN1'), findsNothing);
+    fail = true;
+    now = now.add(const Duration(minutes: 2));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.byType(BarcodeWidget), findsNothing);
+    expect(find.byKey(const Key('ticket-barcode-retry')), findsNWidgets(2));
+    await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    state.dispose();
+  });
+
   testWidgets(
     'large dark-on-white barcode blurs backdrop and restores on close',
     (tester) async {
