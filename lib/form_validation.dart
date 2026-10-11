@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import 'app_theme.dart';
@@ -19,7 +21,7 @@ const focusedClearInputFeature = InputFeature.clear(
 ///
 /// Moves only the focused editor by the amount needed to reveal it, with a
 /// 24px margin. Keyboard space belongs to the viewport, never to each field.
-/// The second frame handles the keyboard inset arriving after focus on iOS.
+/// A settling retry handles native keyboard animations and late drawer layout.
 class KeyboardAwareInput extends StatefulWidget {
   const KeyboardAwareInput({super.key, required this.child});
 
@@ -32,6 +34,8 @@ class KeyboardAwareInput extends StatefulWidget {
 class _KeyboardAwareInputState extends State<KeyboardAwareInput>
     with WidgetsBindingObserver {
   static const _safeGap = 24.0;
+  Timer? _settlingTimer;
+  bool _visibilityScheduled = false;
 
   @override
   void initState() {
@@ -41,21 +45,30 @@ class _KeyboardAwareInputState extends State<KeyboardAwareInput>
   }
 
   @override
-  void didChangeMetrics() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _handleFocusChange();
+  void didChangeMetrics() => _handleFocusChange();
+
+  void _handleFocusChange() {
+    _settlingTimer?.cancel();
+    _queueVisibilityCheck();
+    // iOS may finish its keyboard/overlay layout after the focus frame.
+    // Request a frame explicitly: post-frame callbacks alone do not do that.
+    _settlingTimer = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) _queueVisibilityCheck();
     });
   }
 
-  void _handleFocusChange() {
+  void _queueVisibilityCheck() {
+    if (_visibilityScheduled || !mounted) return;
+    _visibilityScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _visibilityScheduled = false;
       if (!mounted) return;
       final focusedContext = FocusManager.instance.primaryFocus?.context;
-      final ownsFocusedInput = _ownsFocusedInput(focusedContext);
-      if (ownsFocusedInput && focusedContext != null) {
-        _scheduleEnsureVisible(focusedContext);
+      if (focusedContext != null && _ownsFocusedInput(focusedContext)) {
+        _ensureVisible(focusedContext);
       }
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   bool _ownsFocusedInput(BuildContext? focusedContext) {
@@ -71,24 +84,11 @@ class _KeyboardAwareInputState extends State<KeyboardAwareInput>
     return ownsFocusedInput;
   }
 
-  void _scheduleEnsureVisible(BuildContext focusedContext) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ensureVisible(focusedContext);
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _ensureVisible(focusedContext),
-      );
-    });
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Register for keyboard inset changes. The inset often arrives after the
-    // focus notification, especially on iOS.
-    View.of(context);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _handleFocusChange();
-    });
+    MediaQuery.maybeOf(context);
+    _handleFocusChange();
   }
 
   void _ensureVisible(BuildContext focusedContext) {
@@ -150,6 +150,7 @@ class _KeyboardAwareInputState extends State<KeyboardAwareInput>
 
   @override
   void dispose() {
+    _settlingTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     FocusManager.instance.removeListener(_handleFocusChange);
     super.dispose();

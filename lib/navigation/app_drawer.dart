@@ -28,7 +28,11 @@ DrawerOverlayCompleter<T?> openAppDrawer<T>({
       draggable: draggable,
       extraSize: extraSize,
       size: size,
-      padding: padding,
+      // shadcn only supplies keyboard padding when useSafeArea is true.
+      // Keyboard avoidance must remain enabled for our full-width drawers.
+      padding: position == OverlayPosition.bottom && !useSafeArea
+          ? padding.copyWith(bottom: keyboardInsetOf(context))
+          : padding,
       stackIndex: stackIndex,
       borderRadius: borderRadius,
       showDragHandle: theme?.showDragHandle ?? true,
