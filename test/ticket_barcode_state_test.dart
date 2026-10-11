@@ -184,4 +184,94 @@ void main() {
       state.dispose();
     },
   );
+  testWidgets('OS sleep expires shared state even if monotonic time pauses', (
+    tester,
+  ) async {
+    var monotonic = DateTime.utc(2026);
+    var wall = monotonic;
+    final pending = Completer<TicketBarcodeToken>();
+    var calls = 0;
+    final state = TicketBarcodeState(
+      ticket: ticket(),
+      now: () => monotonic,
+      wallNow: () => wall,
+      load: (_) =>
+          ++calls == 1 ? Future.value(token(wall, 'FIRST')) : pending.future,
+    );
+    await tester.pump();
+    wall = wall.add(const Duration(minutes: 3));
+    expect(state.code, isNull);
+    await tester.pump(const Duration(seconds: 1));
+    expect(state.loading, isTrue);
+    expect(state.code, isNull);
+    pending.complete(token(wall, 'NEW'));
+    await tester.pump();
+    expect(state.code, 'NEW');
+    state.dispose();
+  });
+
+  testWidgets('request latency uses wall time during paused monotonic sleep', (
+    tester,
+  ) async {
+    final monotonic = DateTime.utc(2026);
+    var wall = monotonic;
+    final pending = Completer<TicketBarcodeToken>();
+    final state = TicketBarcodeState(
+      ticket: ticket(),
+      now: () => monotonic,
+      wallNow: () => wall,
+      load: (_) => pending.future,
+    );
+    wall = wall.add(const Duration(seconds: 30));
+    pending.complete(token(monotonic, 'TOKEN'));
+    await tester.pump();
+    expect(state.remaining, const Duration(seconds: 90));
+    wall = wall.add(const Duration(seconds: 90));
+    expect(state.code, isNull);
+    state.dispose();
+  });
+
+  testWidgets('backward wall clock hides credential until new issuance', (
+    tester,
+  ) async {
+    final monotonic = DateTime.utc(2026);
+    var wall = monotonic;
+    final pending = Completer<TicketBarcodeToken>();
+    var calls = 0;
+    final state = TicketBarcodeState(
+      ticket: ticket(),
+      now: () => monotonic,
+      wallNow: () => wall,
+      load: (_) =>
+          ++calls == 1 ? Future.value(token(wall, 'OLD')) : pending.future,
+    );
+    await tester.pump();
+    wall = wall.subtract(const Duration(seconds: 30));
+    expect(state.code, isNull);
+    await tester.pump(const Duration(seconds: 1));
+    expect(state.code, isNull);
+    pending.complete(token(wall, 'NEW'));
+    await tester.pump();
+    expect(state.code, 'NEW');
+    state.dispose();
+  });
+
+  testWidgets('backward clock during issuance rejects late credential', (
+    tester,
+  ) async {
+    final monotonic = DateTime.utc(2026);
+    var wall = monotonic;
+    final pending = Completer<TicketBarcodeToken>();
+    final state = TicketBarcodeState(
+      ticket: ticket(),
+      now: () => monotonic,
+      wallNow: () => wall,
+      load: (_) => pending.future,
+    );
+    wall = wall.subtract(const Duration(seconds: 30));
+    pending.complete(token(monotonic, 'OLD'));
+    await tester.pump();
+    expect(state.code, isNull);
+    state.dispose();
+  });
 }

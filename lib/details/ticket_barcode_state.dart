@@ -26,12 +26,14 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
     required this.load,
     this.sandbox = false,
     DateTime Function()? now,
+    DateTime Function()? wallNow,
     // Keep the public named argument independent of the private state field.
     // ignore: prefer_initializing_formals
   }) : _ticket = ticket {
     final origin = DateTime.now().toUtc();
     final elapsed = Stopwatch()..start();
     _now = now ?? () => origin.add(elapsed.elapsed);
+    _wallNow = wallNow ?? now ?? () => DateTime.now().toUtc();
     WidgetsBinding.instance.addObserver(this);
     _foreground =
         WidgetsBinding.instance.lifecycleState == null ||
@@ -43,6 +45,10 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
   final TicketBarcodeLoader load;
   final bool sandbox;
   late final DateTime Function() _now;
+  late final DateTime Function() _wallNow;
+  DateTime? _wallDeadline;
+  DateTime? _lastWall;
+  bool _clockInvalid = false;
   late bool _foreground;
   QueueTicket _ticket;
   Timer? _timer;
@@ -61,8 +67,25 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
       _ticket.serviceEndedAt == null &&
       !_ticket.isServiceCompleted &&
       !_ticket.isServiceInterrupted;
-  Duration get remaining =>
-      _deadline == null ? Duration.zero : _deadline!.difference(_now());
+  DateTime _readWall() {
+    final wall = _wallNow();
+    if (_lastWall != null && wall.isBefore(_lastWall!)) _clockInvalid = true;
+    _lastWall = wall;
+    return wall;
+  }
+
+  Duration get remaining {
+    final wall = _readWall();
+    if (_clockInvalid || _deadline == null || _wallDeadline == null) {
+      return Duration.zero;
+    }
+    // The shorter clock wins: wall time covers OS sleep if the monotonic clock
+    // pauses; monotonic time prevents a wall-clock change extending validity.
+    final monotonic = _deadline!.difference(_now());
+    final wallRemaining = _wallDeadline!.difference(wall);
+    return monotonic < wallRemaining ? monotonic : wallRemaining;
+  }
+
   String? get code => rotating
       ? (_foreground && remaining > Duration.zero ? _token?.code : null)
       : (_ticket.verificationCode ?? _ticket.lookupCode);
@@ -86,6 +109,13 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed || _loading || !rotating || !_foreground) return;
     final generation = _generation;
     final requestedAt = _now();
+    final requestedWall = _readWall();
+    if (_clockInvalid) {
+      _token = null;
+      _deadline = null;
+      _wallDeadline = null;
+    }
+    _clockInvalid = false;
     _loading = true;
     notifyListeners();
     try {
@@ -96,14 +126,23 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
       // Server-relative lifetime avoids device clock skew. Subtract the full
       // round trip conservatively; the server still enforces exact expiration.
       final ttl = token.expiresAt.difference(token.serverNow);
-      final usable = ttl - _now().difference(requestedAt);
-      if (token.code.isEmpty ||
+      final receivedAt = _now();
+      final receivedWall = _readWall();
+      final monotonicLatency = receivedAt.difference(requestedAt);
+      final wallLatency = receivedWall.difference(requestedWall);
+      final latency = monotonicLatency > wallLatency
+          ? monotonicLatency
+          : wallLatency;
+      final usable = ttl - latency;
+      if (_clockInvalid ||
+          token.code.isEmpty ||
           ttl > const Duration(minutes: 2) ||
           usable <= Duration.zero) {
         throw StateError('Invalid barcode lifetime');
       }
       _token = token;
-      _deadline = _now().add(usable);
+      _deadline = receivedAt.add(usable);
+      _wallDeadline = receivedWall.add(usable);
       _retryAt = null;
     } catch (_) {
       if (_disposed || generation != _generation) return;
