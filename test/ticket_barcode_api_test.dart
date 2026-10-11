@@ -10,7 +10,7 @@ import 'package:http/testing.dart';
 import 'queue_repository_test.dart' show FakeAuthApiForTransport;
 
 void main() {
-  test('loads versioned owner barcode with bearer auth and no-store', () async {
+  test('issues versioned owner barcode via authenticated POST', () async {
     final auth = AuthRepository(
       api: FakeAuthApiForTransport(),
       tokenStore: MemoryTokenStore(),
@@ -21,6 +21,9 @@ void main() {
         baseUrl: 'https://api.example.test',
         authRepository: auth,
         client: MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(jsonDecode(request.body), isEmpty);
+          expect(request.headers['content-type'], contains('application/json'));
           expect(
             request.url.path,
             '/api/v1/account/queue/tickets/ticket-1/barcode',

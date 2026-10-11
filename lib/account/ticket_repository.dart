@@ -223,8 +223,9 @@ class RestAccountQueueApi
   @override
   Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) async {
     if (sandbox) throw StateError('Sandbox rotating barcodes are unsupported');
-    final raw = await client.get(
+    final raw = await client.post(
       '/api/account/queue/tickets/${Uri.encodeComponent(ticketId)}/barcode',
+      const {},
       additionalHeaders: const {'Cache-Control': 'no-store'},
     );
     final code = raw['barcodeToken'];
