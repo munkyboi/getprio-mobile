@@ -184,7 +184,8 @@ void main() {
     expect(find.byKey(const Key('ticket-details-card')), findsOneWidget);
     // No account barcode API was supplied: never show a legacy fallback.
     expect(find.byKey(const Key('ticket-details-barcode')), findsNothing);
-    expect(find.byKey(const Key('ticket-barcode-unavailable')), findsOneWidget);
+    expect(find.byKey(const Key('ticket-barcode-unavailable')), findsNothing);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsOneWidget);
     expect(find.byKey(const Key('ticket-details-cancel')), findsOneWidget);
     await tester.fling(
       find.byKey(const Key('ticket-details-page')),

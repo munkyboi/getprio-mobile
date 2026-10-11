@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:barcode_widget/barcode_widget.dart';
+import 'package:getprio_mobile/details/ticket_barcode_viewer.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
 import 'package:getprio_mobile/details/ticket_barcode_state.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
@@ -39,18 +39,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('ticket-details-barcode')));
+    await tester.ensureVisible(find.byKey(const Key('ticket-qr-fab')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('ticket-details-barcode')));
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
     await tester.pumpAndSettle();
     expect(
-      String.fromCharCodes(
-        tester
-            .widget<BarcodeWidget>(
-              find.byKey(const Key('ticket-barcode-enlarged')),
-            )
-            .data,
-      ),
+      tester.widget<BrandedTicketQr>(find.byType(BrandedTicketQr)).code,
       'QB0123456789ABCDEF0123456789ABCDEF',
     );
     queueApi.snapshot = {
@@ -64,25 +58,52 @@ void main() {
     await tester.pump(const Duration(seconds: 15));
     await tester.pumpAndSettle();
     expect(
-      String.fromCharCodes(
-        tester
-            .widget<BarcodeWidget>(
-              find.byKey(const Key('ticket-barcode-enlarged')),
-            )
-            .data,
-      ),
+      tester.widget<BrandedTicketQr>(find.byType(BrandedTicketQr)).code,
       'REFERENCE',
     );
     await tester.tap(find.byKey(const Key('ticket-barcode-close')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ticket-barcode-countdown')), findsNothing);
-    final inline = tester.widget<BarcodeWidget>(
-      find.descendant(
-        of: find.byKey(const Key('ticket-details-barcode')),
-        matching: find.byType(BarcodeWidget),
+    expect(find.byType(BrandedTicketQr), findsNothing);
+  });
+
+  testWidgets('QR issuance exists only while floating-button dialog is open', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final api = FakeAccountQueueApi();
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson({
+            'id': 'active-1',
+            'lookupCode': 'REF',
+            'status': 'waiting',
+          }),
+          ticketRepository: QueueTicketRepository(api),
+        ),
       ),
     );
-    expect(String.fromCharCodes(inline.data), 'REFERENCE');
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 3));
+    expect(api.barcodeCalls, 0);
+    expect(
+      find.byKey(const Key('ticket-details-barcode-section')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('ticket-cutout-1')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    expect(api.barcodeCalls, 1);
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 3));
+    expect(api.barcodeCalls, 1);
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    expect(api.barcodeCalls, 2);
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('polls service transitions without showing the called alert', (
@@ -234,19 +255,19 @@ void main() {
     expect(find.text('10 min'), findsWidgets);
     expect(find.text('Queue length'), findsOneWidget);
     expect(find.text('4 waiting'), findsOneWidget);
-    expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
-    expect(find.text('QB0123456789ABCDEF0123456789ABCDEF'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('ticket-details-barcode')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('ticket-details-barcode')));
-    await tester.pumpAndSettle();
-    final enlarged = tester.widget<BarcodeWidget>(
-      find.byKey(const Key('ticket-barcode-enlarged')),
-    );
+    expect(find.byKey(const Key('ticket-qr-fab')), findsOneWidget);
     expect(
-      String.fromCharCodes(enlarged.data),
-      'QB0123456789ABCDEF0123456789ABCDEF',
+      find.byKey(const Key('ticket-details-barcode-section')),
+      findsNothing,
     );
+    await tester.ensureVisible(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    final enlarged = tester.widget<BrandedTicketQr>(
+      find.byType(BrandedTicketQr),
+    );
+    expect(enlarged.code, 'QB0123456789ABCDEF0123456789ABCDEF');
     await tester.tap(find.byKey(const Key('ticket-barcode-close')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
@@ -435,11 +456,8 @@ void main() {
         ),
       );
       expect(find.byKey(const Key('ticket-details-card')), findsOneWidget);
-      expect(find.byKey(const Key('ticket-details-barcode')), findsNothing);
-      expect(
-        find.byKey(const Key('ticket-barcode-unavailable')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const Key('ticket-qr-fab')), findsOneWidget);
+      expect(find.byKey(const Key('ticket-barcode-unavailable')), findsNothing);
     },
   );
   testWidgets('shows vendor confirmation when a ticket has been called', (
@@ -489,7 +507,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('Your arrival was confirmed'), findsOneWidget);
-    expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsOneWidget);
   });
 
   testWidgets('refreshes open ticket details when the repository signals', (
@@ -584,14 +602,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('WAITING'), findsOneWidget);
-    final barcode = tester.widget<BarcodeWidget>(
-      find.descendant(
-        of: find.byKey(const Key('ticket-details-barcode')),
-        matching: find.byType(BarcodeWidget),
-      ),
-    );
-    expect(String.fromCharCodes(barcode.data), 'VERIFY-0019');
-    expect(find.text('VERIFY-0019'), findsOneWidget);
+    expect(find.byType(BrandedTicketQr), findsNothing);
 
     api.status = 'called';
     ticketRepository.requestRefresh();
@@ -699,8 +710,10 @@ class _TicketCoverDirectoryApi implements DirectoryApi {
 }
 
 class FakeAccountQueueApi implements AccountQueueApi, TicketBarcodeApi {
+  int barcodeCalls = 0;
   @override
   Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) async {
+    barcodeCalls++;
     final now = DateTime.now().toUtc();
     return TicketBarcodeToken(
       code: 'QB0123456789ABCDEF0123456789ABCDEF',

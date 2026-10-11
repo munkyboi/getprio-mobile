@@ -1,7 +1,6 @@
 import 'dart:async';
-import 'dart:ui' show ImageFilter;
 
-import 'package:barcode_widget/barcode_widget.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/app_theme.dart';
 import 'package:getprio_mobile/details/ticket_barcode_viewer.dart';
@@ -98,12 +97,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      tester
-          .widget<BarcodeWidget>(
-            find.byKey(const Key('ticket-barcode-enlarged')),
-          )
-          .data,
-      'TOKEN1'.codeUnits,
+      tester.widget<BrandedTicketQr>(find.byType(BrandedTicketQr).last).code,
+      'TOKEN1',
     );
     expect(find.text('TOKEN1'), findsNWidgets(2));
     now = now.add(const Duration(minutes: 2));
@@ -115,7 +110,7 @@ void main() {
     now = now.add(const Duration(minutes: 2));
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
-    expect(find.byType(BarcodeWidget), findsNothing);
+    expect(find.byType(PrettyQrView), findsNothing);
     expect(find.byKey(const Key('ticket-barcode-retry')), findsNWidgets(2));
     await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
     state.dispose();
@@ -165,22 +160,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final widgets = tester.widgetList<BarcodeWidget>(
-        find.byType(BarcodeWidget),
-      );
-      expect(widgets.length, 2);
+      expect(find.byType(PrettyQrView), findsNWidgets(2));
       expect(find.byKey(const Key('ticket-qr-brand')), findsNWidgets(2));
-      for (final widget in widgets) {
-        expect(widget.barcode.name, 'QR-Code');
-        expect(widget.width, widget.height);
-        expect(widget.width, greaterThanOrEqualTo(180));
-        expect(widget.padding, isNotNull);
-        expect(widget.color, Colors.black);
-        expect(widget.backgroundColor, Colors.white);
-        expect(
-          String.fromCharCodes(widget.data),
-          'QB0123456789ABCDEF0123456789ABCDEF',
-        );
+      for (final widget in tester.widgetList<BrandedTicketQr>(
+        find.byType(BrandedTicketQr),
+      )) {
+        expect(widget.code, 'QB0123456789ABCDEF0123456789ABCDEF');
       }
       expect(tester.takeException(), isNull);
     }
@@ -188,31 +173,29 @@ void main() {
     state.dispose();
   });
 
-  testWidgets(
-    'large dark-on-white barcode blurs backdrop and restores on close',
-    (tester) async {
-      final brightness = TestBrightness();
-      await openViewer(tester, brightness);
-      expect(brightness.changes, [1]);
-      final barcode = tester.widget<BarcodeWidget>(
-        find.byKey(const Key('ticket-barcode-enlarged')),
-      );
-      expect(String.fromCharCodes(barcode.data), 'VERIFY123');
-      expect(barcode.height, 240);
-      expect(barcode.barcode.name, 'QR-Code');
-      expect(find.byKey(const Key('ticket-qr-brand')), findsOneWidget);
-      expect(barcode.color, Colors.black);
-      expect(barcode.backgroundColor, Colors.white);
-      expect(
-        tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter,
-        isA<ImageFilter>(),
-      );
-      await tester.tap(find.byKey(const Key('ticket-barcode-close')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
-      expect(brightness.resets, 1);
-    },
-  );
+  testWidgets('large light QR dialog restores brightness on close', (
+    tester,
+  ) async {
+    final brightness = TestBrightness();
+    await openViewer(tester, brightness);
+    expect(brightness.changes, [1]);
+    expect(
+      tester.widget<BrandedTicketQr>(find.byType(BrandedTicketQr)).code,
+      'VERIFY123',
+    );
+    expect(find.byType(PrettyQrView), findsOneWidget);
+    expect(find.byKey(const Key('ticket-qr-brand')), findsOneWidget);
+    expect(
+      tester
+          .widget<ColoredBox>(find.byKey(const Key('ticket-barcode-modal')))
+          .color,
+      Colors.white,
+    );
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+    expect(brightness.resets, 1);
+  });
 
   testWidgets('background restores existing override and resume boosts again', (
     tester,
@@ -225,7 +208,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(brightness.changes, [1, .35, 1]);
-    await tester.tapAt(const Offset(5, 5));
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
     expect(brightness.changes, [1, .35, 1, .35]);
@@ -252,7 +235,10 @@ void main() {
   ) async {
     final brightness = TestBrightness()..fail = true;
     await openViewer(tester, brightness);
-    expect(find.text('VERIFY123'), findsOneWidget);
+    expect(
+      tester.widget<BrandedTicketQr>(find.byType(BrandedTicketQr)).code,
+      'VERIFY123',
+    );
     expect(tester.takeException(), isNull);
     await tester.tap(find.byKey(const Key('ticket-barcode-close')));
     await tester.pumpAndSettle();

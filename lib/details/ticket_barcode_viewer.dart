@@ -1,7 +1,6 @@
 import 'dart:async';
-import 'dart:ui' show ImageFilter;
 
-import 'package:barcode_widget/barcode_widget.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
@@ -114,81 +113,72 @@ class _TicketBarcodeViewerState extends State<TicketBarcodeViewer>
   }
 
   @override
-  Widget build(BuildContext context) => Stack(
-    children: [
-      Positioned.fill(
-        child: IgnorePointer(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: const SizedBox.expand(),
-          ),
-        ),
-      ),
-      SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Container(
-              key: const Key('ticket-barcode-modal'),
-              constraints: const BoxConstraints(maxWidth: 640),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) => Theme(
+    data: GetPrioTheme.light(),
+    child: ColoredBox(
+      key: const Key('ticket-barcode-modal'),
+      color: Colors.white,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 8, 0),
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Your ticket barcode',
-                          style: TextStyle(
-                            color: GetPrioTheme.ink,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Semantics(
-                        label: 'Close barcode',
-                        button: true,
-                        child: GestureDetector(
-                          key: const Key('ticket-barcode-close'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => Navigator.of(context).pop(),
-                          child: const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Icon(LucideIcons.x, color: GetPrioTheme.ink),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  if (widget.state != null)
-                    TicketBarcodeContent(state: widget.state!, enlarged: true)
-                  else ...[
-                    BrandedTicketQr(code: widget.code, enlarged: true),
-                    const SizedBox(height: 20),
-                    Text(
-                      widget.code,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
+                  const Expanded(
+                    child: Text(
+                      'Ticket QR code',
+                      style: TextStyle(
                         color: GetPrioTheme.ink,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 2,
                       ),
                     ),
-                  ],
+                  ),
+                  Semantics(
+                    label: 'Close QR code',
+                    button: true,
+                    child: GestureDetector(
+                      key: const Key('ticket-barcode-close'),
+                      onTap: () => Navigator.of(context).pop(),
+                      child: const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Icon(LucideIcons.x, color: GetPrioTheme.ink),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
+            Expanded(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 24,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: widget.state != null
+                        ? TicketBarcodeContent(
+                            state: widget.state!,
+                            enlarged: true,
+                          )
+                        : BrandedTicketQr(code: widget.code, enlarged: true),
+                  ),
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Text(
+                'Show this QR code to the vendor.',
+                style: TextStyle(color: GetPrioTheme.ink),
+              ),
+            ),
+          ],
         ),
       ),
-    ],
+    ),
   );
 }
 
@@ -281,44 +271,36 @@ class BrandedTicketQr extends StatelessWidget {
   const BrandedTicketQr({super.key, required this.code, this.enlarged = false});
   final String code;
   final bool enlarged;
-
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final size = constraints.maxWidth.clamp(0.0, enlarged ? 240.0 : 180.0);
-      final quiet = enlarged ? 32.0 : 24.0;
-      final logoSize = (size - quiet * 2) * .18;
+      final size = constraints.maxWidth.clamp(0.0, enlarged ? 560.0 : 180.0);
       return Center(
-        child: Container(
-          foregroundDecoration: BoxDecoration(
-            border: Border.all(color: GetPrioTheme.orange, width: 2),
-            borderRadius: BorderRadius.circular(16),
-          ),
+        child: SizedBox(
+          width: size,
+          height: size,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              BarcodeWidget(
+              PrettyQrView.data(
                 key: enlarged ? const Key('ticket-barcode-enlarged') : null,
                 data: code,
-                barcode: Barcode.qrCode(
-                  errorCorrectLevel: BarcodeQRCorrectionLevel.high,
+                errorCorrectLevel: QrErrorCorrectLevel.H,
+                decoration: const PrettyQrDecoration(
+                  shape: PrettyQrSmoothSymbol(color: Colors.black),
+                  background: Colors.white,
+                  quietZone: PrettyQrQuietZone.standard,
                 ),
-                width: size,
-                height: size,
-                padding: EdgeInsets.all(quiet),
-                drawText: false,
-                color: Colors.black,
-                backgroundColor: Colors.white,
               ),
               IgnorePointer(
                 child: Container(
                   key: const Key('ticket-qr-brand'),
-                  width: logoSize,
-                  height: logoSize,
-                  padding: const EdgeInsets.all(3),
+                  width: size * .14,
+                  height: size * .14,
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: SvgPicture.asset(
                     'assets/branding/logo.svg',
