@@ -169,6 +169,7 @@ void main() {
         find.byType(BarcodeWidget),
       );
       expect(widgets.length, 2);
+      expect(find.byKey(const Key('ticket-qr-brand')), findsNWidgets(2));
       for (final widget in widgets) {
         expect(widget.barcode.name, 'QR-Code');
         expect(widget.width, widget.height);
@@ -197,8 +198,10 @@ void main() {
         find.byKey(const Key('ticket-barcode-enlarged')),
       );
       expect(String.fromCharCodes(barcode.data), 'VERIFY123');
-      expect(barcode.height, 160);
-      expect(barcode.color, GetPrioTheme.ink);
+      expect(barcode.height, 240);
+      expect(barcode.barcode.name, 'QR-Code');
+      expect(find.byKey(const Key('ticket-qr-brand')), findsOneWidget);
+      expect(barcode.color, Colors.black);
       expect(barcode.backgroundColor, Colors.white);
       expect(
         tester.widget<BackdropFilter>(find.byType(BackdropFilter)).filter,
