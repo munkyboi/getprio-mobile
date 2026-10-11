@@ -406,3 +406,8 @@ Verification: all357 mobile tests pass; analysis is clean; signed MAIN productio
 ## Check-in countdown label — 11 October 2026
 
 Booking details show days, hours and minutes remaining until the15-minute-before-start check-in window, e.g. Check-in available in5days4hrs15mins (with spaces between units in UI). Whole minutes round up, zero units are omitted and singular units use day/hr/min. Button text is centered, including wrapped labels. All6 check-in tests and Flutter analysis pass; signed production-configured MAIN Profile build succeeds. Physical visual acceptance remains pending.
+
+
+## Booking card cut-outs — 11 October 2026
+
+Booking details enable the shared DetailPassCard ticket cut-outs. Each dashed divider has transparent semicircular notches on both card edges, matching queue ticket details in light/dark appearance. All17 affected booking presentation, live refresh, check-in and payment tests pass; analysis clean. Physical visual acceptance remains pending.

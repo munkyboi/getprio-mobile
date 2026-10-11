@@ -498,6 +498,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                 DetailPassCard(
                   key: const Key('booking-details-card'),
                   vendor: vendor,
+                  ticketCutouts: true,
                   children: [
                     Text(
                       item.reference.isEmpty
