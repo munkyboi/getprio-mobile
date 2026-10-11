@@ -18,7 +18,8 @@ import 'package:flutter/material.dart' show Icons;
 import 'dart:async';
 import 'dart:math';
 
-import 'package:barcode_widget/barcode_widget.dart';
+import 'branded_qr_code.dart';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'
     show FirebaseMessaging;
@@ -7804,14 +7805,10 @@ class _SecurityPageState extends State<SecurityPage>
                       child: Semantics(
                         image: true,
                         label: 'MFA setup QR code',
-                        child: BarcodeWidget(
+                        child: BrandedQrCode(
                           key: const Key('mfa-enrollment-qr'),
                           data: _enrollment!.otpauthUri.toString(),
-                          barcode: Barcode.qrCode(),
-                          backgroundColor: Colors.white,
-                          drawText: false,
-                          width: 220,
-                          height: 220,
+                          brandKey: const Key('mfa-qr-brand'),
                         ),
                       ),
                     ),

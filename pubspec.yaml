@@ -30,7 +30,6 @@ environment:
 dependencies:
   app_links: ^7.2.1
   async: ^2.13.1
-  barcode_widget: ^2.0.4
   cached_network_image: ^3.4.1
   crypto: ^3.0.7
   firebase_core: ^4.14.0

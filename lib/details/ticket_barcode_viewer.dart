@@ -1,11 +1,10 @@
 import 'dart:async';
 
-import 'package:pretty_qr_code/pretty_qr_code.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
+import '../branded_qr_code.dart';
 import 'ticket_barcode_state.dart';
 
 abstract interface class BarcodeBrightness {
@@ -296,46 +295,10 @@ class BrandedTicketQr extends StatelessWidget {
   final String code;
   final bool enlarged;
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final size = constraints.maxWidth.clamp(0.0, enlarged ? 560.0 : 180.0);
-      return Center(
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              PrettyQrView.data(
-                key: enlarged ? const Key('ticket-barcode-enlarged') : null,
-                data: code,
-                errorCorrectLevel: QrErrorCorrectLevel.H,
-                decoration: const PrettyQrDecoration(
-                  shape: PrettyQrSmoothSymbol(color: Colors.black),
-                  background: Colors.white,
-                  quietZone: PrettyQrQuietZone.standard,
-                ),
-              ),
-              IgnorePointer(
-                child: Container(
-                  key: const Key('ticket-qr-brand'),
-                  width: size * .14,
-                  height: size * .14,
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: SvgPicture.asset(
-                    'assets/branding/logo.svg',
-                    semanticsLabel: 'GetPrio',
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
+  Widget build(BuildContext context) => BrandedQrCode(
+    data: code,
+    maxSize: enlarged ? 560 : 180,
+    qrKey: enlarged ? const Key('ticket-barcode-enlarged') : null,
+    brandKey: const Key('ticket-qr-brand'),
   );
 }

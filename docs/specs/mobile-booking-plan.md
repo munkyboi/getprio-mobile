@@ -416,3 +416,8 @@ Booking details enable the shared DetailPassCard ticket cut-outs. Each dashed di
 ## Global keyboard focus and scrolling — 11 October 2026
 
 App-wide touch-outside unfocus covers text/password/textarea/OTP editors without clearing values. Removed twice-keyboard-height per-field spacing, reduced shared scroll margin from96px to24px, removed duplicate Explore/Profile/booking keyboard padding, and made bottom drawer content consume the keyboard inset already reserved by DrawerWrapper. Focus correction is minimal, ignores blurred editors, and leaves tall textarea caret visibility to Flutter. Source audit: keyboard-focus-audit.md. All365 tests pass; analysis clean; signed MAIN production-configured Profile build succeeds. Physical interaction review of every screen remains pending.
+
+
+### Branded MFA setup QR — 11 October 2026
+
+MFA enrollment now renders through shared `BrandedQrCode` using pretty_qr_code, smooth black modules, a standard white quiet zone, high error correction and the centered GetPrio SVG logo. Queue ticket rendering delegates to the same component with its existing sizes and test keys. MFA stays at up to220 logical pixels and shrinks to its available width; QR surface stays white in light/dark mode. The API-provided otpauth URI is passed through unchanged, and manual-key/copy and OTP confirmation remain available. Removed the now-unused barcode_widget/barcode dependency. Light/dark MFA regressions check payload, renderer, branding and manual key; all367 tests pass and analysis is clean. Signed MAIN production Profile build succeeds and is installed/launched on Zero32. Physical authenticator-camera enrollment acceptance remains pending; no live MFA enrollment was initiated for verification.
