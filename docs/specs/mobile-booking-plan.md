@@ -478,3 +478,9 @@ Shared openAppDrawer adds20px above content/title when a bottom drawer has no vi
 ### Manual Payment pinned action — 12 October 2026
 
 Manual Payment drawer now uses a bounded column: expanded keyboard-aware scrolling for the QR/destination/reference/receipt fields, and a separate fixed footer for Submit payment proof. Footer respects the bottom safe area and shares the drawer background; keyboard resizing remains owned by the shared drawer wrapper. Validation, busy/duplicate guards and API submission remain unchanged. All19 affected payment/live detail/keyboard tests pass; analysis clean. Physical footer/keyboard spacing acceptance remains pending.
+
+### Booking form sliding screen — 12 October 2026
+
+Book from Vendor Details now pushes BookingPage on the same SwipeBackPageRoute used by Join queue. A centered bold Plan your visit AppBar and shared Back button replace the drawer title/grabber. Vendor/location context, selection, quantities, availability, contact fields and fixed verification footer are preserved. Scaffold owns keyboard resizing once; the form scrolls above the footer. Back returns to the vendor's selected services. Busy verification prevents exiting the page; OTP remains a separate drawer hosted within the page. Successful creation closes OTP and returns the booking from the screen, then opens Booking Details and eligible Manual Payment continuation as before. This supersedes the earlier booking-form drawer presentation.
+
+All26 focused booking UI/payment/live refresh/global keyboard tests pass and Flutter analysis is clean. Coverage includes actual vendor Book navigation/back with selection retained, phone keyboard/footer geometry, and complete OTP-bound creation returning from the pushed page. Physical sliding-page/keyboard acceptance remains pending; no live booking/payment submitted.

@@ -4,11 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/bookings/booking_repository.dart';
 import 'package:getprio_mobile/bookings/bookings_page.dart';
-import 'package:getprio_mobile/bookings/booking_sheet.dart';
+import 'package:getprio_mobile/bookings/booking_page.dart';
 import 'package:getprio_mobile/bookings/service_selection.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
 import 'package:getprio_mobile/otp_input.dart';
+import 'package:getprio_mobile/navigation/swipe_back_page_route.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -69,23 +70,21 @@ void main() {
             viewInsets: EdgeInsets.only(bottom: 320),
             padding: EdgeInsets.only(top: 44),
           ),
-          child: Scaffold(
-            child: BookingSheet(
-              repository: BookingRepository(_BookingApi()),
-              vendor: const VendorSummary(
-                slug: 'clinic',
-                name: 'Clinic',
-                queueAvailable: false,
-                bookingAvailable: true,
-              ),
-              location: const VendorLocation(
-                id: 'primary',
-                name: 'Main',
-                slug: 'primary',
-              ),
-              services: [BookingService.fromJson(_service)],
-              selected: {'consult'},
+          child: BookingPage(
+            repository: BookingRepository(_BookingApi()),
+            vendor: const VendorSummary(
+              slug: 'clinic',
+              name: 'Clinic',
+              queueAvailable: false,
+              bookingAvailable: true,
             ),
+            location: const VendorLocation(
+              id: 'primary',
+              name: 'Main',
+              slug: 'primary',
+            ),
+            services: [BookingService.fromJson(_service)],
+            selected: {'consult'},
           ),
         ),
       ),
@@ -135,6 +134,17 @@ void main() {
     await reveal(tester, find.byKey(const ValueKey('service-toggle-consult')));
     await tester.tap(find.byKey(const ValueKey('service-toggle-consult')));
     await tester.pumpAndSettle();
+    expect(find.textContaining('1 services selected'), findsOneWidget);
+    await tester.tap(find.text('Book'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('booking-form-page')), findsOneWidget);
+    expect(
+      ModalRoute.of(tester.element(find.byType(BookingPage))),
+      isA<SwipeBackPageRoute<CustomerBooking>>(),
+    );
+    await tester.tap(find.bySemanticsLabel('Back').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(BookingPage), findsNothing);
     expect(find.textContaining('1 services selected'), findsOneWidget);
     await reveal(tester, find.byKey(const ValueKey('vendor-location-other')));
     await tester.tap(find.byKey(const ValueKey('vendor-location-other')));
@@ -202,7 +212,7 @@ void main() {
     },
   );
   testWidgets(
-    'booking sheet uses OTP-bound payload, blocks duplicates and completes',
+    'booking page uses OTP-bound payload, blocks duplicates and completes',
     (tester) async {
       final api = _BookingApi()..createGate = Completer<void>();
       CustomerBooking? created;
@@ -214,34 +224,31 @@ void main() {
               child: Builder(
                 builder: (context) => PrimaryButton(
                   onPressed: () async {
-                    created = await openDrawerOverlay<CustomerBooking>(
-                      context: context,
-                      position: OverlayPosition.bottom,
-                      expands: false,
-                      barrierDismissible: false,
-                      draggable: false,
-                      builder: (_) => BookingSheet(
-                        repository: BookingRepository(api),
-                        vendor: const VendorSummary(
-                          slug: 'clinic',
-                          name: 'Clinic',
-                          queueAvailable: false,
-                          bookingAvailable: true,
-                        ),
-                        location: const VendorLocation(
-                          id: 'primary',
-                          name: 'Main',
-                          slug: 'primary',
-                        ),
-                        services: [service],
-                        selected: {'consult'},
-                        customer: const AuthUser(
-                          id: 'customer',
-                          email: 'customer@example.com',
-                          profileName: 'Customer',
+                    created = await Navigator.of(context).push<CustomerBooking>(
+                      SwipeBackPageRoute<CustomerBooking>(
+                        builder: (_) => BookingPage(
+                          repository: BookingRepository(api),
+                          vendor: const VendorSummary(
+                            slug: 'clinic',
+                            name: 'Clinic',
+                            queueAvailable: false,
+                            bookingAvailable: true,
+                          ),
+                          location: const VendorLocation(
+                            id: 'primary',
+                            name: 'Main',
+                            slug: 'primary',
+                          ),
+                          services: [service],
+                          selected: {'consult'},
+                          customer: const AuthUser(
+                            id: 'customer',
+                            email: 'customer@example.com',
+                            profileName: 'Customer',
+                          ),
                         ),
                       ),
-                    ).future;
+                    );
                   },
                   child: const Text('Open booking'),
                 ),

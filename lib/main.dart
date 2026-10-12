@@ -53,7 +53,7 @@ import 'otp_input.dart';
 import 'navigation/lists_page.dart';
 import 'bookings/booking_repository.dart';
 import 'bookings/bookings_page.dart';
-import 'bookings/booking_sheet.dart';
+import 'bookings/booking_page.dart';
 import 'bookings/service_selection.dart';
 import 'keyboard_avoidance.dart';
 import 'navigation/customer_navigation_bar.dart';
@@ -3722,22 +3722,18 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
         customer = (await api.client.authRepository.restoreSession())?.user;
       }
       if (!mounted) return;
-      final booking = await openAppDrawer<CustomerBooking>(
-        context: context,
-        position: OverlayPosition.bottom,
-        expands: false,
-        draggable: true,
-        barrierDismissible: true,
-        useSafeArea: false,
-        builder: (_) => BookingSheet(
-          repository: widget.bookingRepository!,
-          vendor: vendor,
-          location: _location!,
-          services: _services,
-          selected: _selectedServices,
-          customer: customer,
+      final booking = await Navigator.of(context).push<CustomerBooking>(
+        SwipeBackPageRoute<CustomerBooking>(
+          builder: (_) => BookingPage(
+            repository: widget.bookingRepository!,
+            vendor: vendor,
+            location: _location!,
+            services: _services,
+            selected: _selectedServices,
+            customer: customer,
+          ),
         ),
-      ).future;
+      );
       if (booking != null && mounted) {
         await Navigator.of(context).push(
           SwipeBackPageRoute<void>(
