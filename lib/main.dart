@@ -1,3 +1,4 @@
+import 'navigation/pull_to_refresh.dart';
 import 'details/detail_auto_update.dart';
 import 'navigation/app_drawer.dart';
 import 'theme_artwork.dart';
@@ -4960,7 +4961,8 @@ class _TicketsPageState extends State<TicketsPage> {
             _visibleTickets == null &&
             snapshot.connectionState == ConnectionState.waiting;
         final hasInitialError = _visibleTickets == null && snapshot.hasError;
-        return RefreshTrigger(
+        return withPullToRefresh(
+          enabled: !_history,
           key: const Key('tickets-refresh'),
           onRefresh: _refreshTickets,
           child: ListView(
@@ -5656,7 +5658,8 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
             activity: _activity,
             child: Stack(
               children: [
-                RefreshTrigger(
+                withPullToRefresh(
+                  enabled: ticket.isActive && !completed,
                   key: const Key('ticket-details-refresh'),
                   onRefresh: _refresh,
                   child: ListView(
@@ -5681,7 +5684,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                             'Your ticket was called. Proceed to the vendor.',
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
                       ],
                       DetailPassCard(
                         key: const Key('ticket-details-card'),
@@ -5690,10 +5693,8 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                         footer: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if ((ticket.canBeCancelled &&
-                                    widget.onCancel != null) ||
-                                (ticket.status == TicketStatus.served &&
-                                    widget.directoryRepository?.social != null))
+                            if (ticket.canBeCancelled &&
+                                widget.onCancel != null)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(
                                   20,
@@ -5718,22 +5719,6 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                               ? 'Cancelling...'
                                               : 'Cancel ticket',
                                         ),
-                                      ),
-                                    ],
-                                    if (ticket.status == TicketStatus.served &&
-                                        widget.directoryRepository?.social !=
-                                            null) ...[
-                                      const SizedBox(height: 16),
-                                      TicketReviewAction(
-                                        key: ValueKey(
-                                          'review-${ticket.lookupCode}',
-                                        ),
-                                        repository:
-                                            widget.directoryRepository!.social!,
-                                        ticket: ticket,
-                                        prompt:
-                                            widget.ticket.status !=
-                                            TicketStatus.served,
                                       ),
                                     ],
                                   ],
@@ -5873,6 +5858,17 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                   ticket.status != TicketStatus.called ||
                                   ticket.isConfirmed,
                             ),
+                          if (ticket.status == TicketStatus.served &&
+                              widget.directoryRepository?.social != null) ...[
+                            const SizedBox(height: 16),
+                            TicketReviewAction(
+                              key: ValueKey('review-${ticket.lookupCode}'),
+                              repository: widget.directoryRepository!.social!,
+                              ticket: ticket,
+                              prompt:
+                                  widget.ticket.status != TicketStatus.served,
+                            ),
+                          ],
                           if (snapshot.hasError && ticket.isActive) ...[
                             const SizedBox(height: 12),
                             const Text(

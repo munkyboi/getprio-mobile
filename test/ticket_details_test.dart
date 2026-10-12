@@ -547,6 +547,7 @@ void main() {
       }
       await tester.pump(const Duration(seconds: 15));
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-details-refresh')), findsNothing);
       expect(
         find.text(
           'Thank you for your business! We hope to see you again soon.',
@@ -646,6 +647,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('tickets-refresh')), findsOneWidget);
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tickets-refresh')), findsNothing);
+    await tester.tap(find.text('Active'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tickets-refresh')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('active-ticket-active-1')));
     await tester.pumpAndSettle();
 

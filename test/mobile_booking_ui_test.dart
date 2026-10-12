@@ -207,6 +207,7 @@ void main() {
       expect(find.text('Past Vendor'), findsNothing);
       await tester.tap(find.text('History'));
       await tester.pumpAndSettle();
+      expect(find.byType(RefreshTrigger), findsNothing);
       expect(find.text('Past Vendor'), findsOneWidget);
       expect(find.text('Upcoming Vendor'), findsNothing);
     },

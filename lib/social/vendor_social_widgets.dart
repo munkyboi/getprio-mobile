@@ -907,7 +907,22 @@ class _TicketReviewActionState extends State<TicketReviewAction> {
       }
       if (!snapshot.hasData) return const SizedBox.shrink();
       if (snapshot.data!['rating'] != null) {
-        return const Text('Thank you for reviewing this visit.');
+        return Container(
+          key: const Key('ticket-review-thank-you-alert'),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: GetPrioTheme.colors(context).paperAccent,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.circleCheck, size: 20),
+              SizedBox(width: 12),
+              Expanded(child: Text('Thank you for reviewing this visit.')),
+            ],
+          ),
+        );
       }
       if (snapshot.data!['eligible'] != true) return const SizedBox.shrink();
       if (widget.prompt) {

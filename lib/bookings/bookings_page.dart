@@ -1,3 +1,4 @@
+import '../navigation/pull_to_refresh.dart';
 import '../details/detail_auto_update.dart';
 import '../navigation/list_filter_tabs.dart';
 import 'booking_list_row.dart';
@@ -110,7 +111,8 @@ class _BookingsPageState extends State<BookingsPage>
       ],
       child: SafeArea(
         top: false,
-        child: RefreshTrigger(
+        child: withPullToRefresh(
+          enabled: !_history,
           onRefresh: _load,
           child: ListView(
             key: const Key('bookings-page'),
