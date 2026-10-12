@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
@@ -7,7 +5,7 @@ import '../auth/auth_models.dart';
 import '../auth/auth_repository.dart';
 import '../form_validation.dart';
 import '../navigation/app_drawer.dart';
-import '../otp_input.dart';
+import 'booking_otp_drawer.dart';
 import '../queue/queue_models.dart';
 import 'booking_repository.dart';
 import 'service_selection.dart';
@@ -35,7 +33,7 @@ class BookingSheet extends StatefulWidget {
 
 class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
   late final TextEditingController _name, _email, _phone;
-  final _notes = TextEditingController(), _code = TextEditingController();
+  final _notes = TextEditingController();
   late Set<String> _selected;
   final _quantities = <String, int>{};
   var _date = DateTime.now();
@@ -44,9 +42,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
   String? _startAt, _error;
   bool _busy = false, _loadingSlots = false;
   int _slotRequest = 0;
-  Map<String, dynamic>? _otp;
-  String? _verificationToken;
-  Timer? _timer;
+
   @override
   bool get formBusy => _busy;
   String get _base =>
@@ -64,15 +60,6 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
         },
       )
       .toList();
-  int get _resendSeconds =>
-      (DateTime.tryParse('${_otp?['resendAvailableAt']}')
-              ?.difference(DateTime.now())
-              .inSeconds ??
-          -1) +
-      1;
-  bool get _expired =>
-      DateTime.tryParse('${_otp?['expiresAt']}')?.isBefore(DateTime.now()) ??
-      false;
   @override
   void initState() {
     super.initState();
@@ -85,8 +72,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
 
   @override
   void dispose() {
-    _timer?.cancel();
-    for (final c in [_name, _email, _phone, _notes, _code]) {
+    for (final c in [_name, _email, _phone, _notes]) {
       c.dispose();
     }
     super.dispose();
@@ -150,11 +136,10 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
     'notes': _notes.text.trim(),
   };
   Future<void> _submit() async {
-    if (_busy || _startAt == null || _services.isEmpty || _expired) return;
+    if (_busy || _startAt == null || _services.isEmpty) return;
     if (!validateForm({
       _name: requiredField(_name.text, 'Name'),
       _email: emailField(_email.text),
-      if (_otp != null) _code: codeField(_code.text),
     })) {
       return;
     }
@@ -163,83 +148,37 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
       _error = null;
     });
     try {
-      if (_otp == null) {
-        final response = await widget.repository.api.post(
-          '$_base/booking-otp',
-          {..._payload(), 'channel': 'email'},
-        );
-        if (!mounted) return;
-        setState(() => _otp = response);
-        _timer ??= Timer.periodic(const Duration(seconds: 1), (_) {
-          if (mounted) setState(() {});
-        });
-        return;
-      }
-      final verified = _verificationToken != null
-          ? null
-          : await widget.repository.api.post('$_base/booking-otp/verify', {
-              'otpId': _otp!['otpId'],
-              'code': _code.text,
-            });
-      _verificationToken ??= verified?['bookingVerificationToken'] as String?;
-      if (_verificationToken == null) {
-        throw StateError('Verification did not return a booking token');
-      }
-      final response = await widget.repository.api.post(
-        '/api/account/bookings',
-        {..._payload(), 'bookingVerificationToken': _verificationToken},
-      );
-      if (mounted) {
-        closeDrawer(
-          context,
-          CustomerBooking(response['booking'] as Map<String, dynamic>),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        if (e is ApiException && e.statusCode == 409) {
-          setState(() {
-            _otp = null;
-            _verificationToken = null;
-            _code.clear();
-          });
-          await _loadSlots();
-        }
-        if (mounted) {
-          setState(
-            () => _error = e is ApiException
-                ? e.message
-                : 'Could not submit your booking. Please try again.',
-          );
-        }
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _resend() async {
-    if (_busy || _otp == null || _resendSeconds > 0) return;
-    setState(() => _busy = true);
-    try {
-      final response = await widget.repository.api.post(
-        '$_base/booking-otp/${Uri.encodeComponent('${_otp!['otpId']}')}/resend',
-        {},
-      );
-      if (mounted) {
-        setState(() {
-          _otp = response;
-          _verificationToken = null;
-          _code.clear();
-          _error = null;
-        });
+      final payload = _payload();
+      final response = await widget.repository.api.post('$_base/booking-otp', {
+        ...payload,
+        'channel': 'email',
+      });
+      if (!mounted) return;
+      final booking = await openAppDrawer<CustomerBooking>(
+        context: context,
+        position: OverlayPosition.bottom,
+        useSafeArea: false,
+        draggable: false,
+        barrierDismissible: false,
+        builder: (_) => BookingOtpDrawer(
+          repository: widget.repository,
+          base: _base,
+          challenge: response,
+          payload: payload,
+        ),
+      ).future;
+      if (!mounted) return;
+      if (booking != null) {
+        closeDrawer(context, booking);
+      } else {
+        await _loadSlots();
       }
     } catch (e) {
       if (mounted) {
         setState(
           () => _error = e is ApiException
               ? e.message
-              : 'Could not resend the code.',
+              : 'Could not start verification. Please try again.',
         );
       }
     } finally {
@@ -262,7 +201,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
         child: KeyboardAwareInput(
           child: TextField(
             controller: controller,
-            enabled: !_busy && _otp == null,
+            enabled: !_busy,
             keyboardType: type,
             scrollPadding: inputScrollPadding,
           ),
@@ -331,7 +270,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                         ServiceSelection(
                           services: widget.services,
                           selected: _selected,
-                          enabled: !_busy && _otp == null,
+                          enabled: !_busy,
                           onToggle: (service) {
                             setState(() {
                               if (!_selected.remove(service.slug)) {
@@ -357,7 +296,6 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                                   icon: const Icon(LucideIcons.minus),
                                   onPressed:
                                       _busy ||
-                                          _otp != null ||
                                           (_quantities[service.slug] ?? 1) <= 1
                                       ? null
                                       : () {
@@ -380,7 +318,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                                 ),
                                 IconButton.outline(
                                   icon: const Icon(LucideIcons.plus),
-                                  onPressed: _busy || _otp != null
+                                  onPressed: _busy
                                       ? null
                                       : () {
                                           setState(
@@ -403,7 +341,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                                   style: _mode == 'parallel'
                                       ? const ButtonStyle.primary()
                                       : const ButtonStyle.outline(),
-                                  onPressed: _busy || _otp != null
+                                  onPressed: _busy
                                       ? null
                                       : () {
                                           setState(() => _mode = 'parallel');
@@ -418,7 +356,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                                   style: _mode == 'sequential'
                                       ? const ButtonStyle.primary()
                                       : const ButtonStyle.outline(),
-                                  onPressed: _busy || _otp != null
+                                  onPressed: _busy
                                       ? null
                                       : () {
                                           setState(() => _mode = 'sequential');
@@ -442,7 +380,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                                 ? DateState.disabled
                                 : DateState.enabled;
                           },
-                          enabled: !_busy && _otp == null,
+                          enabled: !_busy,
                           onChanged: (value) {
                             if (value != null) {
                               setState(() => _date = value);
@@ -468,9 +406,7 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                                       ? const ButtonStyle.primary()
                                       : const ButtonStyle.outline(),
                                   onPressed:
-                                      _busy ||
-                                          _otp != null ||
-                                          slot['isAvailable'] != true
+                                      _busy || slot['isAvailable'] != true
                                       ? null
                                       : () => setState(
                                           () => _startAt = '${slot['startAt']}',
@@ -488,47 +424,6 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                         ),
                         _field('Phone', _phone, type: TextInputType.phone),
                         _field('Notes (optional)', _notes),
-                        if (_otp != null) ...[
-                          OutlineButton(
-                            onPressed: _busy
-                                ? null
-                                : () => setState(() {
-                                    _otp = null;
-                                    _verificationToken = null;
-                                    _code.clear();
-                                    _timer?.cancel();
-                                    _timer = null;
-                                    _error = null;
-                                  }),
-                            child: const Text('Edit booking details'),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Enter the code sent to ${_otp!['deliveryTarget'] ?? _email.text}.',
-                          ),
-                          const SizedBox(height: 12),
-                          GetPrioOtpInput(
-                            controller: _code,
-                            onCompleted: (_) => unawaited(_submit()),
-                            enabled: !_busy && !_expired,
-                            validation: formValidation,
-                          ),
-                          if (_expired)
-                            const Text(
-                              'This code has expired. Request a new code.',
-                            ),
-                          const SizedBox(height: 8),
-                          OutlineButton(
-                            onPressed: _busy || _resendSeconds > 0
-                                ? null
-                                : _resend,
-                            child: Text(
-                              _resendSeconds > 0
-                                  ? 'Resend in ${_resendSeconds}s'
-                                  : 'Resend code',
-                            ),
-                          ),
-                        ],
                         if (_error != null) ...[
                           const SizedBox(height: 12),
                           Semantics(
@@ -564,16 +459,11 @@ class _BookingSheetState extends State<BookingSheet> with FormValidationMixin {
                             _busy ||
                                 _loadingSlots ||
                                 _startAt == null ||
-                                _services.isEmpty ||
-                                _expired
+                                _services.isEmpty
                             ? null
                             : _submit,
                         child: Text(
-                          _busy
-                              ? 'Please wait...'
-                              : _otp == null
-                              ? 'Verify email to continue'
-                              : 'Submit request and continue',
+                          _busy ? 'Please wait...' : 'Verify email to continue',
                         ),
                       ),
                     ],

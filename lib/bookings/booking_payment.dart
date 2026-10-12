@@ -1,3 +1,6 @@
+import '../navigation/app_drawer.dart';
+import '../keyboard_avoidance.dart';
+
 import 'package:image_picker/image_picker.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
@@ -5,6 +8,37 @@ import '../auth/auth_repository.dart';
 import 'booking_repository.dart';
 import 'image_viewer.dart';
 import '../navigation/swipe_back_page_route.dart';
+
+Future<CustomerBooking?> openBookingPaymentDrawer({
+  required BuildContext context,
+  required BookingRepository repository,
+  required CustomerBooking booking,
+  ValueChanged<BuildContext>? onOpened,
+}) => openAppDrawer<CustomerBooking>(
+  context: context,
+  position: OverlayPosition.bottom,
+  useSafeArea: false,
+  builder: (drawerContext) {
+    onOpened?.call(drawerContext);
+    return Container(
+      key: const Key('booking-manual-payment-drawer'),
+      color: appDrawerBackground(drawerContext),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(drawerContext).height * .85,
+        ),
+        child: KeyboardAwareScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: BookingPayment(
+            repository: repository,
+            booking: booking,
+            onSubmitted: (updated) => closeDrawer(drawerContext, updated),
+          ),
+        ),
+      ),
+    );
+  },
+).future;
 
 /// Evidence goes through the authenticated API and stays pending vendor review.
 class BookingPayment extends StatefulWidget {
@@ -116,7 +150,7 @@ class _BookingPaymentState extends State<BookingPayment> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Manual payment').h3(),
+        const AppDrawerTitle('Manual Payment'),
         const SizedBox(height: 12),
         const Text(
           'Pay the vendor, then submit your payment reference and receipt. Payment proof must be reviewed by the vendor before confirmation.',

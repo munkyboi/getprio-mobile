@@ -257,6 +257,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Verify email to continue'));
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('booking-otp-drawer')), findsOneWidget);
+      expect(find.text('Verify email'), findsOneWidget);
       expect(api.otpPayload?['locationSlug'], 'primary');
       expect(api.otpPayload?['bundleItems'], [
         {'serviceSlug': 'consult', 'bookingQuantity': 1},

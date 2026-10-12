@@ -54,6 +54,15 @@ Future<void> openLive(WidgetTester tester, LiveApi api) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> openPayment(WidgetTester tester) async {
+  await tester.ensureVisible(
+    find.byKey(const Key('booking-open-manual-payment')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('booking-open-manual-payment')));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets(
     'booking interaction postpones idle pause; only successful refresh resumes',
@@ -99,6 +108,7 @@ void main() {
     (tester) async {
       final api = LiveApi();
       await openLive(tester, api);
+      await openPayment(tester);
       await Scrollable.ensureVisible(
         tester.element(find.byKey(const Key('booking-payment-reference'))),
       );
@@ -167,6 +177,7 @@ void main() {
   ) async {
     final api = LiveApi();
     await openLive(tester, api);
+    await openPayment(tester);
     api.gate = Completer<Map<String, dynamic>>();
     await tester.pump(const Duration(seconds: 15));
     expect(api.requests, 2);

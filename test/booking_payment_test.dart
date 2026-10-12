@@ -29,11 +29,12 @@ class PaymentApi implements BookingApi, BookingProofApi {
   Map<String, dynamic>? submitted;
   Completer<void>? gate;
   bool fail = false;
+  Map<String, dynamic>? data;
   @override
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, String>? query,
-  }) async => {'booking': paymentBooking()};
+  }) async => {'booking': data ?? paymentBooking()};
   @override
   Future<Map<String, dynamic>> uploadProof(
     String path, {
@@ -78,6 +79,51 @@ class PaymentApi implements BookingApi, BookingProofApi {
 }
 
 void main() {
+  testWidgets(
+    'new booking without manual payment does not open payment drawer',
+    (tester) async {
+      final data = {...paymentBooking(), 'serviceManualPaymentRequired': false};
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: BookingDetailPage(
+            repository: BookingRepository(PaymentApi()..data = data),
+            booking: CustomerBooking(data),
+            openPaymentOnArrival: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('booking-manual-payment-drawer')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('booking-open-manual-payment')),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets('new unpaid booking automatically opens manual payment drawer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: BookingDetailPage(
+          repository: BookingRepository(PaymentApi()),
+          booking: CustomerBooking(paymentBooking()),
+          openPaymentOnArrival: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('booking-manual-payment-drawer')),
+      findsOneWidget,
+    );
+    expect(find.text('Test Bank'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('unpaid payment QR opens a zoom viewer and preserves reference', (
     tester,
   ) async {
@@ -172,6 +218,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(find.byType(BookingPayment), findsNothing);
+      expect(find.text('Test Bank'), findsNothing);
+      await tester.ensureVisible(
+        find.byKey(const Key('booking-open-manual-payment')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('booking-open-manual-payment')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('booking-manual-payment-drawer')),
+        findsOneWidget,
+      );
       expect(find.text('Test Bank'), findsOneWidget);
       expect(find.text('Total payable: PHP 200.00'), findsOneWidget);
       expect(find.textContaining('Payment proof required.'), findsOneWidget);

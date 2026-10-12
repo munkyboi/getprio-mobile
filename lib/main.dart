@@ -3744,6 +3744,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
             builder: (_) => BookingDetailPage(
               repository: widget.bookingRepository!,
               booking: booking,
+              openPaymentOnArrival: true,
               onOpenTicket: (item) => _openBookingQueueTicket(
                 context,
                 item,
