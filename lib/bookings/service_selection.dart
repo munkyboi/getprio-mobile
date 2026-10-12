@@ -164,34 +164,47 @@ class ServiceSelection extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (service.allowQuantity && onQuantityChanged != null)
+                if (service.allowQuantity &&
+                    selected.contains(service.slug) &&
+                    onQuantityChanged != null)
                   Padding(
-                    padding: EdgeInsets.only(
-                      top: 8,
-                      left: service.imageUrl.isEmpty ? 0 : 64,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    padding: const EdgeInsets.only(top: 8, right: 6),
+                    child: Column(
                       children: [
-                        Flexible(
-                          child: Text(
-                            service.quantityLabel.isEmpty
-                                ? 'Units'
-                                : '${service.quantityLabel[0].toUpperCase()}${service.quantityLabel.substring(1)}',
-                            style: Theme.of(context).typography.small,
+                        Container(
+                          key: ValueKey(
+                            'service-units-divider-${service.slug}',
                           ),
+                          height: 1,
+                          color: GetPrioTheme.colors(context).line,
                         ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 150,
-                          child: _ServiceUnitStepper(
-                            key: ValueKey('service-units-${service.slug}'),
-                            service: service,
-                            quantity: quantities[service.slug] ?? 1,
-                            enabled: enabled && selected.contains(service.slug),
-                            onChanged: (quantity) =>
-                                onQuantityChanged!(service, quantity),
-                          ),
+                        const SizedBox(height: 8),
+                        Row(
+                          key: ValueKey('service-units-row-${service.slug}'),
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                service.quantityLabel.isEmpty
+                                    ? 'Units'
+                                    : '${service.quantityLabel[0].toUpperCase()}${service.quantityLabel.substring(1)}',
+                                style: Theme.of(context).typography.small,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 150,
+                              child: _ServiceUnitStepper(
+                                key: ValueKey('service-units-${service.slug}'),
+                                service: service,
+                                quantity: quantities[service.slug] ?? 1,
+                                enabled:
+                                    enabled && selected.contains(service.slug),
+                                onChanged: (quantity) =>
+                                    onQuantityChanged!(service, quantity),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

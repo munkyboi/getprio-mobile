@@ -85,14 +85,23 @@ void main() {
         findsNothing,
       );
       final initialRequests = api.requests;
-      final inactivePlus = find.byKey(
-        const ValueKey('service-units-plus-court-c'),
+      expect(find.byKey(const ValueKey('service-units-court-c')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('service-units-divider-court-c')),
+        findsNothing,
       );
-      await reveal(tester, inactivePlus);
-      await tester.tap(inactivePlus, warnIfMissed: false);
-      await tester.pumpAndSettle();
-      expect(api.requests, initialRequests);
-      expect(value('court-c'), '1');
+      final card = tester.getRect(
+        find.byKey(const ValueKey('service-row-court-a')),
+      );
+      final stepper = tester.getRect(
+        find.byKey(const ValueKey('service-units-value-court-a')),
+      );
+      final divider = tester.getRect(
+        find.byKey(const ValueKey('service-units-divider-court-a')),
+      );
+      expect(card.right - stepper.right, closeTo(13, 1));
+      expect(divider.bottom, lessThan(stepper.top));
+      expect(divider.width, greaterThan(stepper.width));
       final quantityField = find.byKey(
         const ValueKey('service-units-value-court-a'),
       );
@@ -102,10 +111,7 @@ void main() {
       expect(tester.testTextInput.isVisible, isFalse);
       await press('service-units-plus-court-a');
       expect(api.requests, initialRequests + 1);
-      expect(
-        [value('court-a'), value('court-b'), value('court-c')],
-        ['2', '2', '2'],
-      );
+      expect([value('court-a'), value('court-b')], ['2', '2']);
       await reveal(tester, find.text('One after another'));
       await tester.tap(find.text('One after another'));
       await tester.pumpAndSettle();
@@ -117,10 +123,7 @@ void main() {
       await reveal(tester, find.text('Together'));
       await tester.tap(find.text('Together'));
       await tester.pumpAndSettle();
-      expect(
-        [value('court-a'), value('court-b'), value('court-c')],
-        ['4', '4', '4'],
-      );
+      expect([value('court-a'), value('court-b')], ['4', '4']);
       expect(api.last?['executionMode'], 'parallel');
       expect(api.last?['items'], [
         {'serviceSlug': 'court-a', 'bookingQuantity': 4},
@@ -128,6 +131,7 @@ void main() {
         {'serviceSlug': 'lesson', 'bookingQuantity': 1},
       ]);
       await press('service-toggle-court-c');
+      expect(value('court-c'), '4');
       expect((api.last?['items'] as List).last, {
         'serviceSlug': 'lesson',
         'bookingQuantity': 1,
@@ -153,6 +157,12 @@ void main() {
             )
             .onPressed,
         isNull,
+      );
+      await press('service-toggle-court-c');
+      expect(find.byKey(const ValueKey('service-units-court-c')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('service-units-divider-court-c')),
+        findsNothing,
       );
       expect(tester.takeException(), isNull);
     },

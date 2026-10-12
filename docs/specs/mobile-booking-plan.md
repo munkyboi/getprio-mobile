@@ -550,3 +550,9 @@ All10 affected booking/location UI tests pass; analysis and diff checks clean. A
 The in-card unit counter now uses shadcn_flutter's Number Input Stepper Buttons pattern: a centered number field with built-in decrement/increment features, minus leading and plus trailing. Icons remain14px; Hours/other unit labels stay alongside the control beneath price/duration. The read-only value avoids opening a keyboard; a retained controller reconciles parent quantity updates so Together synchronization and maximum adoption remain authoritative. Minimum1, disabled/unselected controls, independent sequential quantities and one availability reload per change are preserved.
 
 All10 affected booking/location UI tests pass, including the320px layout, no keyboard on value tap, disabled controls, minimum1 and synchronized composed-availability payloads. Physical visual acceptance pending.
+
+### Selected service unit row — 12 October 2026
+
+Unit controls now appear only for selected unit-enabled services. A full-width themed line separates the service summary from the right-aligned unit label and shadcn stepper. Deselection removes both separator and counter; Together synchronization still updates the stored values of all unit-enabled services so newly selected cards receive the shared quantity.
+
+All10 affected booking/location UI tests pass; analyzer and diff checks clean. The320px regression verifies right alignment, separator above the counter, hidden unselected controls, preserved Together maximum adoption and newly selected quantities, and removal on deselection. Physical visual acceptance pending.
