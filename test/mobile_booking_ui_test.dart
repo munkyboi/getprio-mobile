@@ -19,6 +19,126 @@ Future<void> reveal(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  testWidgets(
+    'service units live in cards and Together synchronizes maximum quantities',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _UnitsApi();
+      final services = [
+        for (final slug in ['court-a', 'court-b', 'court-c'])
+          BookingService.fromJson({
+            'slug': slug,
+            'name': slug,
+            'durationMinutes': 60,
+            'priceDisplay': '₱100',
+            'allowBookingQuantity': true,
+            'bookingQuantityLabel': 'Hours',
+            'imageUrl': 'https://example.invalid/court.png',
+          }),
+        BookingService.fromJson({
+          'slug': 'lesson',
+          'name': 'Lesson',
+          'durationMinutes': 30,
+        }),
+      ];
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: BookingPage(
+            repository: BookingRepository(api),
+            vendor: const VendorSummary(
+              slug: 'club',
+              name: 'Club',
+              queueAvailable: false,
+            ),
+            location: const VendorLocation(
+              id: 'main',
+              name: 'Main',
+              slug: 'main',
+            ),
+            services: services,
+            selected: {'court-a', 'court-b', 'lesson'},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      String value(String slug) => tester
+          .widget<Text>(find.byKey(ValueKey('service-units-value-$slug')))
+          .data!;
+      Future<void> press(String key) async {
+        final target = find.byKey(ValueKey(key));
+        await reveal(tester, target);
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+      }
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('service-row-court-a')),
+          matching: find.byKey(const ValueKey('service-units-plus-court-a')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('service-units-plus-lesson')),
+        findsNothing,
+      );
+      final initialRequests = api.requests;
+      await press('service-units-plus-court-a');
+      expect(api.requests, initialRequests + 1);
+      expect(
+        [value('court-a'), value('court-b'), value('court-c')],
+        ['2', '2', '2'],
+      );
+      await reveal(tester, find.text('One after another'));
+      await tester.tap(find.text('One after another'));
+      await tester.pumpAndSettle();
+      await press('service-units-plus-court-b');
+      await press('service-units-plus-court-b');
+      await press('service-units-minus-court-a');
+      expect([value('court-a'), value('court-b')], ['1', '4']);
+      expect(api.last?['executionMode'], 'sequential');
+      await reveal(tester, find.text('Together'));
+      await tester.tap(find.text('Together'));
+      await tester.pumpAndSettle();
+      expect(
+        [value('court-a'), value('court-b'), value('court-c')],
+        ['4', '4', '4'],
+      );
+      expect(api.last?['executionMode'], 'parallel');
+      expect(api.last?['items'], [
+        {'serviceSlug': 'court-a', 'bookingQuantity': 4},
+        {'serviceSlug': 'court-b', 'bookingQuantity': 4},
+        {'serviceSlug': 'lesson', 'bookingQuantity': 1},
+      ]);
+      await press('service-toggle-court-c');
+      expect((api.last?['items'] as List).last, {
+        'serviceSlug': 'lesson',
+        'bookingQuantity': 1,
+      });
+      expect((api.last?['items'] as List)[2], {
+        'serviceSlug': 'court-c',
+        'bookingQuantity': 4,
+      });
+      for (var i = 0; i < 4; i++) {
+        await press('service-units-minus-court-b');
+      }
+      expect(
+        [value('court-a'), value('court-b'), value('court-c')],
+        ['1', '1', '1'],
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('service-units-minus-court-b')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('service thumbnail opens zoom viewer without selecting service', (
     tester,
   ) async {
@@ -452,5 +572,22 @@ class _ManyServicesApi extends _BookingApi {
       };
     }
     return super.get(path, query: query);
+  }
+}
+
+class _UnitsApi extends _BookingApi {
+  Map<String, dynamic>? last;
+  int requests = 0;
+  @override
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    if (path.endsWith('/composed-slots')) {
+      requests++;
+      last = body;
+      return {'slots': []};
+    }
+    return super.post(path, body);
   }
 }

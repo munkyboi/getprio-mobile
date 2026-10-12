@@ -14,11 +14,15 @@ class ServiceSelection extends StatelessWidget {
     required this.selected,
     required this.onToggle,
     this.enabled = true,
+    this.quantities = const {},
+    this.onQuantityChanged,
   });
   final List<BookingService> services;
   final Set<String> selected;
   final ValueChanged<BookingService> onToggle;
   final bool enabled;
+  final Map<String, int> quantities;
+  final void Function(BookingService, int)? onQuantityChanged;
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -40,120 +44,201 @@ class ServiceSelection extends StatelessWidget {
                     : GetPrioTheme.colors(context).line,
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (service.imageUrl.isNotEmpty) ...[
-                  Semantics(
-                    label: 'View image of ${service.name}',
-                    button: true,
-                    child: SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: Button(
-                        key: ValueKey('service-thumbnail-${service.slug}'),
-                        style: const ButtonStyle.ghost(
-                          density: ButtonDensity.compact,
-                        ),
-                        onPressed: () => Navigator.of(context).push(
-                          SwipeBackPageRoute<void>(
-                            builder: (_) => BookingImageViewer(
-                              imageUrl: service.imageUrl,
-                              title: service.name,
+                Row(
+                  children: [
+                    if (service.imageUrl.isNotEmpty) ...[
+                      Semantics(
+                        label: 'View image of ${service.name}',
+                        button: true,
+                        child: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: Button(
+                            key: ValueKey('service-thumbnail-${service.slug}'),
+                            style: const ButtonStyle.ghost(
+                              density: ButtonDensity.compact,
                             ),
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            service.imageUrl,
-                            width: 56,
-                            height: 56,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const SizedBox(
-                              width: 56,
-                              height: 56,
-                              child: Center(
-                                child: Icon(LucideIcons.image, size: 32),
+                            onPressed: () => Navigator.of(context).push(
+                              SwipeBackPageRoute<void>(
+                                builder: (_) => BookingImageViewer(
+                                  imageUrl: service.imageUrl,
+                                  title: service.name,
+                                ),
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                service.imageUrl,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => const SizedBox(
+                                  width: 56,
+                                  height: 56,
+                                  child: Center(
+                                    child: Icon(LucideIcons.image, size: 32),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(service.name).bold(),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${service.priceDisplay} · ${service.durationMinutes} min',
-                        style: Theme.of(context).typography.small,
-                      ),
+                      const SizedBox(width: 8),
                     ],
-                  ),
-                ),
-                if (service.description.trim().isNotEmpty)
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: IconButton.ghost(
-                      key: ValueKey('service-info-${service.slug}'),
-                      icon: const Icon(LucideIcons.info, size: 18),
-                      onPressed: () => openAppDrawer<void>(
-                        context: context,
-                        position: OverlayPosition.bottom,
-                        expands: false,
-                        builder: (sheetContext) => SafeArea(
-                          top: false,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              20,
-                              GetPrioTheme.bottomSheetTopPadding,
-                              20,
-                              20,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                AppDrawerTitle(service.name),
-                                const SizedBox(height: 12),
-                                Flexible(
-                                  child: SingleChildScrollView(
-                                    child: Text(service.description),
-                                  ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(service.name).bold(),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${service.priceDisplay} · ${service.durationMinutes} min',
+                            style: Theme.of(context).typography.small,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (service.description.trim().isNotEmpty)
+                      SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: IconButton.ghost(
+                          key: ValueKey('service-info-${service.slug}'),
+                          icon: const Icon(LucideIcons.info, size: 18),
+                          onPressed: () => openAppDrawer<void>(
+                            context: context,
+                            position: OverlayPosition.bottom,
+                            expands: false,
+                            builder: (sheetContext) => SafeArea(
+                              top: false,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  GetPrioTheme.bottomSheetTopPadding,
+                                  20,
+                                  20,
                                 ),
-                              ],
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    AppDrawerTitle(service.name),
+                                    const SizedBox(height: 12),
+                                    Flexible(
+                                      child: SingleChildScrollView(
+                                        child: Text(service.description),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                Semantics(
-                  label:
-                      '${selected.contains(service.slug) ? 'Remove' : 'Add'} ${service.name}',
-                  selected: selected.contains(service.slug),
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: IconButton.ghost(
-                      key: ValueKey('service-toggle-${service.slug}'),
-                      icon: Icon(
-                        selected.contains(service.slug)
-                            ? LucideIcons.check
-                            : LucideIcons.plus,
-                        size: 20,
-                        color: GetPrioTheme.primary,
+                    Semantics(
+                      label:
+                          '${selected.contains(service.slug) ? 'Remove' : 'Add'} ${service.name}',
+                      selected: selected.contains(service.slug),
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: IconButton.ghost(
+                          key: ValueKey('service-toggle-${service.slug}'),
+                          icon: Icon(
+                            selected.contains(service.slug)
+                                ? LucideIcons.check
+                                : LucideIcons.plus,
+                            size: 20,
+                            color: GetPrioTheme.primary,
+                          ),
+                          onPressed: enabled ? () => onToggle(service) : null,
+                        ),
                       ),
-                      onPressed: enabled ? () => onToggle(service) : null,
+                    ),
+                  ],
+                ),
+                if (service.allowQuantity && onQuantityChanged != null)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      top: 8,
+                      left: service.imageUrl.isEmpty ? 0 : 64,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            service.quantityLabel.isEmpty
+                                ? 'Units'
+                                : '${service.quantityLabel[0].toUpperCase()}${service.quantityLabel.substring(1)}',
+                            style: Theme.of(context).typography.small,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Semantics(
+                          label: 'Decrease ${service.name} units',
+                          button: true,
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: IconButton.outline(
+                              key: ValueKey(
+                                'service-units-minus-${service.slug}',
+                              ),
+                              icon: const Icon(LucideIcons.minus, size: 14),
+                              onPressed:
+                                  !enabled ||
+                                      !selected.contains(service.slug) ||
+                                      (quantities[service.slug] ?? 1) <= 1
+                                  ? null
+                                  : () => onQuantityChanged!(
+                                      service,
+                                      (quantities[service.slug] ?? 1) - 1,
+                                    ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text(
+                            '${quantities[service.slug] ?? 1}',
+                            key: ValueKey(
+                              'service-units-value-${service.slug}',
+                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        Semantics(
+                          label: 'Increase ${service.name} units',
+                          button: true,
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: IconButton.outline(
+                              key: ValueKey(
+                                'service-units-plus-${service.slug}',
+                              ),
+                              icon: const Icon(LucideIcons.plus, size: 14),
+                              onPressed:
+                                  !enabled || !selected.contains(service.slug)
+                                  ? null
+                                  : () => onQuantityChanged!(
+                                      service,
+                                      (quantities[service.slug] ?? 1) + 1,
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
               ],
             ),
           ),

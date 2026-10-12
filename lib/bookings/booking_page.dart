@@ -45,6 +45,45 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
   int _slotRequest = 0;
   BuildContext? _drawerHostContext;
 
+  void _synchronizeQuantities() {
+    final unitServices = widget.services.where(
+      (service) => service.allowQuantity,
+    );
+    var largest = 1;
+    for (final service in unitServices) {
+      final quantity = _quantities[service.slug] ?? 1;
+      if (quantity > largest) largest = quantity;
+    }
+    for (final service in unitServices) {
+      _quantities[service.slug] = largest;
+    }
+  }
+
+  void _changeQuantity(BookingService service, int quantity) {
+    if (_busy || quantity < 1 || !_selected.contains(service.slug)) return;
+    setState(() {
+      if (_mode == 'parallel') {
+        for (final item in widget.services.where(
+          (item) => item.allowQuantity,
+        )) {
+          _quantities[item.slug] = quantity;
+        }
+      } else {
+        _quantities[service.slug] = quantity;
+      }
+    });
+    _loadSlots();
+  }
+
+  void _changeMode(String mode) {
+    if (_busy) return;
+    setState(() {
+      _mode = mode;
+      if (mode == 'parallel') _synchronizeQuantities();
+    });
+    _loadSlots();
+  }
+
   @override
   bool get formBusy => _busy;
   String get _base =>
@@ -263,69 +302,20 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                             services: widget.services,
                             selected: _selected,
                             enabled: !_busy,
+                            quantities: _quantities,
+                            onQuantityChanged: _changeQuantity,
                             onToggle: (service) {
                               setState(() {
                                 if (!_selected.remove(service.slug)) {
                                   _selected.add(service.slug);
                                 }
+                                if (_mode == 'parallel') {
+                                  _synchronizeQuantities();
+                                }
                               });
                               _loadSlots();
                             },
                           ),
-                          for (final service in _services.where(
-                            (service) => service.allowQuantity,
-                          ))
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '${service.name} · ${service.quantityLabel}',
-                                    ),
-                                  ),
-                                  IconButton.outline(
-                                    icon: const Icon(LucideIcons.minus),
-                                    onPressed:
-                                        _busy ||
-                                            (_quantities[service.slug] ?? 1) <=
-                                                1
-                                        ? null
-                                        : () {
-                                            setState(
-                                              () => _quantities[service.slug] =
-                                                  (_quantities[service.slug] ??
-                                                      1) -
-                                                  1,
-                                            );
-                                            _loadSlots();
-                                          },
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    child: Text(
-                                      '${_quantities[service.slug] ?? 1}',
-                                    ),
-                                  ),
-                                  IconButton.outline(
-                                    icon: const Icon(LucideIcons.plus),
-                                    onPressed: _busy
-                                        ? null
-                                        : () {
-                                            setState(
-                                              () => _quantities[service.slug] =
-                                                  (_quantities[service.slug] ??
-                                                      1) +
-                                                  1,
-                                            );
-                                            _loadSlots();
-                                          },
-                                  ),
-                                ],
-                              ),
-                            ),
                           if (_services.length > 1)
                             Container(
                               key: const Key('booking-service-timing'),
@@ -356,8 +346,7 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                                     onPressed: _busy
                                         ? null
                                         : () {
-                                            setState(() => _mode = 'parallel');
-                                            _loadSlots();
+                                            _changeMode('parallel');
                                           },
                                   ),
                                   const SizedBox(height: 10),
@@ -369,10 +358,7 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                                     onPressed: _busy
                                         ? null
                                         : () {
-                                            setState(
-                                              () => _mode = 'sequential',
-                                            );
-                                            _loadSlots();
+                                            _changeMode('sequential');
                                           },
                                   ),
                                 ],
