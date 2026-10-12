@@ -5588,6 +5588,8 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
           final details = snapshot.data;
           final ticket = _displayedTicket ?? details?.ticket ?? widget.ticket;
           final vendor = details?.vendor ?? _fallbackVendor(ticket);
+          final completed =
+              ticket.status == TicketStatus.served || ticket.isServiceCompleted;
           final showQr =
               ticket.isActive &&
               !ticket.isServiceCompleted &&
@@ -5718,9 +5720,16 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                             ],
                           ),
                         ),
-                        if (widget.showJoinConfirmation) ...[
+                        if (widget.showJoinConfirmation &&
+                            (ticket.isActive || completed)) ...[
                           const SizedBox(height: 16),
-                          _TicketJoinSuccessNotice(ticket: ticket),
+                          if (completed)
+                            _TicketQueueStatusCard(
+                              ticket: ticket,
+                              completedWhileOpen: true,
+                            )
+                          else
+                            _TicketJoinSuccessNotice(ticket: ticket),
                         ],
                         const DetailPassDivider(),
                         _TicketDetailRow(
@@ -5777,10 +5786,11 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                             ),
                           ),
                         const SizedBox(height: 16),
-                        if (ticket.serviceMessage != null ||
-                            ticket.status != TicketStatus.called ||
-                            ticket.isConfirmed ||
-                            details?.snapshot != null)
+                        if (!(widget.showJoinConfirmation && completed) &&
+                            (ticket.serviceMessage != null ||
+                                ticket.status != TicketStatus.called ||
+                                ticket.isConfirmed ||
+                                details?.snapshot != null))
                           _TicketQueueStatusCard(
                             ticket: ticket,
                             completedWhileOpen: widget.ticket.isActive,

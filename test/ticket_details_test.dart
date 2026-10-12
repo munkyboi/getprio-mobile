@@ -342,6 +342,7 @@ void main() {
         ShadcnApp(
           home: TicketDetailsPage(
             ticket: QueueTicket.fromJson(waiting),
+            showJoinConfirmation: true,
             ticketRepository: QueueTicketRepository(accountApi),
             queueRepository: QueueRepository(queueApi),
           ),
@@ -350,6 +351,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text('You are in the queue. Keep this ticket ready.'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('ticket-join-success-notice')),
         findsOneWidget,
       );
       if (completionSource == 'snapshot') {
@@ -374,6 +379,8 @@ void main() {
       expect(find.text('Waiting now'), findsNothing);
       expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
       expect(find.text('COMPLETED'), findsOneWidget);
+      expect(find.text('You are in the queue'), findsNothing);
+      expect(find.byKey(const Key('ticket-join-success-notice')), findsNothing);
       await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
     });
   }
