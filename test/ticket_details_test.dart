@@ -10,6 +10,106 @@ import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  testWidgets('served history shows actual wait without live stats or QR', (
+    tester,
+  ) async {
+    final ticket = QueueTicket.fromJson({
+      'id': 'history-1',
+      'lookupCode': 'HISTORY',
+      'ticketNumber': 'H001',
+      'customerName': 'Test Customer',
+      'vendorName': 'City Clinic',
+      'locationName': 'Main location',
+      'tenantSlug': 'city-clinic',
+      'status': 'served',
+      'serviceOutcome': 'completed',
+      'joinedAt': '2026-10-11T01:00:00Z',
+      'serviceStartedAt': '2026-10-11T02:20:00Z',
+      'serviceEndedAt': '2026-10-11T03:00:00Z',
+    });
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: ticket,
+          queueRepository: QueueRepository(
+            FakeQueueApi(
+              snapshot: {
+                'stats': {
+                  'servedToday': 99,
+                  'waitingCount': 6,
+                  'estimatedWaitMinutes': 999,
+                },
+                'current': {'ticketNumber': 'LIVE001'},
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('This ticket has already been served.'), findsOneWidget);
+    expect(find.text('Completed today'), findsNothing);
+    expect(find.text('Currently serving LIVE001'), findsNothing);
+    expect(find.text('Waiting now'), findsNothing);
+    expect(find.text('Estimated wait'), findsNothing);
+    expect(find.text('Total waiting time'), findsOneWidget);
+    expect(find.text('80 min'), findsOneWidget);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    expect(find.text('Your queue ticket'), findsNothing);
+    final heading = find.byKey(const Key('ticket-vendor-heading'));
+    expect(
+      find.descendant(of: heading, matching: find.text('City Clinic')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: heading, matching: find.text('COMPLETED')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.text('Main location')).dy,
+      greaterThan(tester.getTopLeft(heading).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Test Customer')).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('ticket-cutout-1'))).dy,
+      ),
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  test('actual wait never substitutes completion or confirmation for service start', () {
+    for (final start in [null, '2026-10-11T00:59:00Z']) {
+      final ticket = QueueTicket.fromJson({
+        'status': 'served',
+        'joinedAt': '2026-10-11T01:00:00Z',
+        'customerConfirmedAt': '2026-10-11T01:10:00Z',
+        'serviceStartedAt': start,
+        'serviceEndedAt': '2026-10-11T03:00:00Z',
+      });
+      expect(ticket.actualWaitingTime, isNull);
+    }
+  });
+
+  for (final status in ['cancelled', 'unserved', 'skipped', 'expired']) {
+    testWidgets('$status history hides QR action', (tester) async {
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson({
+              'lookupCode': 'HISTORY',
+              'status': status,
+            }),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+      expect(find.text('Total waiting time'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   testWidgets('arrival confirmation closes QR dialog and hides its button', (
     tester,
   ) async {

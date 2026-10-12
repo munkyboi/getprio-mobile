@@ -5541,7 +5541,11 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   Future<void> _openQr(QueueTicket ticket) async {
-    if (_barcodeModalOpen || ticket.customerConfirmedAt != null) return;
+    if (_barcodeModalOpen ||
+        !ticket.isActive ||
+        ticket.customerConfirmedAt != null) {
+      return;
+    }
     final barcode = TicketBarcodeState(
       ticket: ticket,
       sandbox: widget.sandbox,
@@ -5653,7 +5657,20 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                         ],
                       ),
                       children: [
-                        const Text('Your queue ticket').h3(),
+                        Row(
+                          key: const Key('ticket-vendor-heading'),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(ticket.vendorName ?? vendor.name)
+                                  .h3(),
+                            ),
+                            const SizedBox(width: 12),
+                            _TicketDetailStatus(ticket: ticket),
+                          ],
+                        ),
+                        if (ticket.locationName != null)
+                          Text(ticket.locationName!),
                         const SizedBox(height: 12),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -5673,22 +5690,19 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                 ],
                               ),
                             ),
-                            _TicketDetailStatus(ticket: ticket),
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Text(ticket.vendorName ?? vendor.name).bold(),
-                        if (ticket.locationName != null)
-                          Text(ticket.locationName!),
+                        DetailPassField(
+                          label: 'Customer',
+                          value: ticket.customerName,
+                        ),
+
                         if (widget.showJoinConfirmation) ...[
                           const SizedBox(height: 16),
                           _TicketJoinSuccessNotice(ticket: ticket),
                         ],
                         const DetailPassDivider(),
-                        DetailPassField(
-                          label: 'Customer',
-                          value: ticket.customerName,
-                        ),
                         _TicketDetailRow(
                           label: 'Joined',
                           value: ticket.joinedAt == null
@@ -5701,10 +5715,16 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                             value: '#${ticket.position}',
                           ),
                         _TicketDetailRow(
-                          label: 'Estimated wait',
-                          value: ticket.estimatedWaitMinutes == null
-                              ? 'Unavailable'
-                              : '${ticket.estimatedWaitMinutes} min',
+                          label: ticket.isActive
+                              ? 'Estimated wait'
+                              : 'Total waiting time',
+                          value: ticket.isActive
+                              ? (ticket.estimatedWaitMinutes == null
+                                    ? 'Unavailable'
+                                    : '${ticket.estimatedWaitMinutes} min')
+                              : (ticket.actualWaitingTime == null
+                                    ? 'Unavailable'
+                                    : '${ticket.actualWaitingTime!.inMinutes} min'),
                         ),
                         if (ticket.queueLength != null)
                           _TicketDetailRow(
@@ -5751,7 +5771,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                 ticket.status != TicketStatus.called ||
                                 ticket.isConfirmed,
                           ),
-                        if (snapshot.hasError) ...[
+                        if (snapshot.hasError && ticket.isActive) ...[
                           const SizedBox(height: 12),
                           const Text(
                             'Live queue details are temporarily unavailable.',
@@ -5763,7 +5783,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                   ],
                 ),
               ),
-              if (ticket.customerConfirmedAt == null)
+              if (ticket.isActive && ticket.customerConfirmedAt == null)
                 Positioned(
                   right: 20,
                   bottom: 20,
@@ -5926,19 +5946,20 @@ class _TicketQueueStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final message =
-        ticket.serviceMessage ??
-        switch (ticket.status) {
-          TicketStatus.waiting =>
-            'You are in the queue. Keep this ticket ready.',
-          TicketStatus.called when ticket.customerConfirmedAt != null => 'Your arrival was confirmed. Please wait for staff to begin service.',
-          TicketStatus.called =>
-            'Your ticket was called. Proceed to the vendor.',
-          TicketStatus.served => 'This ticket has already been served.',
-          TicketStatus.pendingCarryOver =>
-            'Your ticket is saved for the next eligible queue day.',
-          _ => 'This ticket is no longer active.',
-        };
+    final message = ticket.status == TicketStatus.served
+        ? 'This ticket has already been served.'
+        : ticket.serviceMessage ??
+              switch (ticket.status) {
+                TicketStatus.waiting =>
+                  'You are in the queue. Keep this ticket ready.',
+                TicketStatus.called when ticket.customerConfirmedAt != null => 'Your arrival was confirmed. Please wait for staff to begin service.',
+                TicketStatus.called =>
+                  'Your ticket was called. Proceed to the vendor.',
+                TicketStatus.served => 'This ticket has already been served.',
+                TicketStatus.pendingCarryOver =>
+                  'Your ticket is saved for the next eligible queue day.',
+                _ => 'This ticket is no longer active.',
+              };
     return Container(
       key: const Key('ticket-details-queue-status'),
       padding: const EdgeInsets.all(18),
@@ -5956,7 +5977,7 @@ class _TicketQueueStatusCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (showMessage) Text(message),
-                if (snapshot != null) ...[
+                if (ticket.isActive && snapshot != null) ...[
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 12),

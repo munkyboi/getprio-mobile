@@ -94,6 +94,17 @@ class QueueTicket {
 
   // Queue lifecycle and actual service timing remain separate API facts.
   bool get isActive => status.isActive;
+
+  /// Actual time in queue, stopping when staff explicitly began service.
+  Duration? get actualWaitingTime {
+    final joined = joinedAt;
+    final started = serviceStartedAt;
+    if (joined == null || started == null || started.isBefore(joined)) {
+      return null;
+    }
+    return started.difference(joined);
+  }
+
   bool get needsArrival =>
       status == TicketStatus.called && !isConfirmed && !isInService;
 
