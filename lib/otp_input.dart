@@ -157,3 +157,41 @@ class _GetPrioOtpInputState extends State<GetPrioOtpInput> {
           ],
         );
 }
+
+/// Shared compact resend action for every OTP flow that supports resending.
+class OtpResendButton extends StatelessWidget {
+  const OtpResendButton({
+    super.key,
+    required this.onPressed,
+    this.secondsRemaining = 0,
+    this.limitReached = false,
+  });
+  final VoidCallback? onPressed;
+  final int secondsRemaining;
+  final bool limitReached;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: limitReached
+        ? 'Resend limit reached'
+        : secondsRemaining > 0
+        ? 'Resend code in $secondsRemaining seconds'
+        : 'Resend code',
+    child: GhostButton(
+      onPressed: secondsRemaining > 0 || limitReached ? null : onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(LucideIcons.history, size: 18),
+          const SizedBox(width: 4),
+          Text(
+            limitReached
+                ? 'Limit reached'
+                : secondsRemaining > 0
+                ? '${secondsRemaining}s'
+                : 'Resend',
+          ),
+        ],
+      ),
+    ),
+  );
+}

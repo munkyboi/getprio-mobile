@@ -160,22 +160,10 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
               onCompleted: (_) => unawaited(_submit()),
               enabled: !_busy && !_expired,
               validation: formValidation,
-              trailing: Semantics(
-                label: _resendSeconds > 0
-                    ? 'Resend code in $_resendSeconds seconds'
-                    : 'Resend code',
-                child: GhostButton(
-                  key: const Key('booking-otp-resend'),
-                  onPressed: _busy || _resendSeconds > 0 ? null : _resend,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(LucideIcons.history, size: 18),
-                      const SizedBox(width: 4),
-                      Text(_resendSeconds > 0 ? '${_resendSeconds}s' : 'Resend'),
-                    ],
-                  ),
-                ),
+              trailing: OtpResendButton(
+                key: const Key('booking-otp-resend'),
+                secondsRemaining: _resendSeconds,
+                onPressed: _busy ? null : _resend,
               ),
             ),
             if (_expired)

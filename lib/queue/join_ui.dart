@@ -1,5 +1,5 @@
 import '../navigation/app_drawer.dart';
-import '../otp_input.dart';
+import 'join_otp_drawer.dart';
 import '../directory/expandable_vendor_description.dart';
 
 import 'dart:async';
@@ -9,9 +9,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 import '../form_validation.dart';
-import '../feedback_toast.dart';
 import '../auth/auth_repository.dart';
-import '../keyboard_avoidance.dart';
 import '../navigation/scroll_aware_app_bar.dart';
 import 'join_repository.dart';
 import 'payment_flow.dart';
@@ -55,9 +53,7 @@ class _JoinPageState extends State<JoinPage>
   JoinedTicket? _joinedTicket;
   PaymentRequired? _payment;
   JoinEmailVerification? _emailChallenge;
-  final _otpController = TextEditingController();
-  final _otpFocusNode = FocusNode();
-  Timer? _otpTimer;
+  bool _otpDrawerOpen = false;
   Timer? _queueRefreshTimer;
   StreamSubscription<void>? _queueEvents;
   int _queueWatchGeneration = 0;
@@ -94,9 +90,6 @@ class _JoinPageState extends State<JoinPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopQueueUpdates();
-    _otpTimer?.cancel();
-    _otpFocusNode.dispose();
-    _otpController.dispose();
     super.dispose();
   }
 
@@ -180,144 +173,43 @@ class _JoinPageState extends State<JoinPage>
     }
   }
 
-  Widget _buildEmailVerification(JoinEmailVerification challenge) {
-    final resendAt = challenge.resendAvailableAt;
-    final seconds = resendAt == null
-        ? 0
-        : resendAt.difference(DateTime.now()).inSeconds + 1;
-    final expired = challenge.expiresAt?.isBefore(DateTime.now()) ?? false;
-    return Center(
-      child: KeyboardAwareScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Verify your email').h3(),
-              const SizedBox(height: 12),
-              Text(
-                'Enter the 6-digit code sent to ${challenge.email} to join this queue.',
-              ),
-              const SizedBox(height: 24),
-              GetPrioOtpInput(
-                inputKey: const Key('queue-join-otp'),
-                controller: _otpController,
-                focusNode: _otpFocusNode,
-                enabled: !_isBusy && !expired,
-                validation: formValidation,
-                onChanged: (_) => setState(() {}),
-                onCompleted: (_) => unawaited(_verifyEmail()),
-              ),
-              if (expired)
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text('This code has expired. Request a new code.'),
-                ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(_error!),
-                ),
-              const SizedBox(height: 20),
-              GetPrioActionButton.primary(
-                key: const Key('queue-join-otp-verify'),
-                onPressed: _isBusy || expired || _otpController.text.length != 6
-                    ? null
-                    : _verifyEmail,
-                child: Text(
-                  _isBusy ? 'Please wait...' : 'Verify and join queue',
-                ),
-              ),
-              const SizedBox(height: 12),
-              GetPrioActionButton.outline(
-                key: const Key('queue-join-otp-resend'),
-                onPressed:
-                    _isBusy || seconds > 0 || challenge.resendsRemaining <= 0
-                    ? null
-                    : _resendEmail,
-                child: Text(
-                  challenge.resendsRemaining <= 0
-                      ? 'Resend limit reached'
-                      : seconds > 0
-                      ? 'Resend code in ${seconds}s'
-                      : 'Resend code',
-                ),
-              ),
-            ],
-          ),
+  Future<void> _showOtpDrawer(JoinEmailVerification challenge) async {
+    final host = _drawerAnchorKey.currentContext;
+    if (_otpDrawerOpen || !mounted || host == null || !host.mounted) return;
+    _otpDrawerOpen = true;
+    JoinResult? result;
+    try {
+      result = await openAppDrawer<JoinResult>(
+        context: host,
+        position: OverlayPosition.bottom,
+        useSafeArea: false,
+        draggable: false,
+        barrierDismissible: false,
+        builder: (_) => JoinOtpDrawer(
+          repository: widget.repository!,
+          challenge: challenge,
+          messageFor: _messageFor,
         ),
-      ),
-    );
-  }
-
-  Future<void> _verifyEmail() async {
-    final challenge = _emailChallenge;
-    if (_isBusy || challenge == null || _otpController.text.length != 6) return;
-    setState(() {
-      _isBusy = true;
-      _error = null;
-    });
-    try {
-      final result = await widget.repository!.verifyEmail(
-        challenge,
-        _otpController.text,
-      );
-      if (mounted) {
-        setState(() => _emailChallenge = null);
-        _otpTimer?.cancel();
-        _handleJoinResult(result);
-      }
-    } catch (error) {
-      if (mounted) {
-        showFormError(
-          error,
-          _messageFor(error),
-          field: error is ApiException && error.statusCode == 400
-              ? _otpController
-              : null,
-        );
-      }
+      ).future;
     } finally {
-      if (mounted) setState(() => _isBusy = false);
+      _otpDrawerOpen = false;
     }
-  }
-
-  Future<void> _resendEmail() async {
-    if (_isBusy || _emailChallenge == null) return;
-    setState(() {
-      _isBusy = true;
-      _error = null;
-    });
-    try {
-      final challenge = await widget.repository!.resendEmail(_emailChallenge!);
-      if (mounted) {
-        _otpController.clear();
-        setState(() => _emailChallenge = challenge);
-        formValidation.setErrors({});
-        showFeedbackToast(
-          context,
-          message: 'A new verification code has been sent.',
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        showFormError(
-          error,
-          _messageFor(error),
-          field: error is ApiException && error.statusCode == 400
-              ? _otpController
-              : null,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isBusy = false);
+    if (!mounted) return;
+    setState(() => _emailChallenge = null);
+    if (result != null) {
+      _handleJoinResult(result);
+    } else if (_isDirectJoin) {
+      _closeJoinFlow();
+    } else {
+      _scanAgain();
     }
   }
 
   Widget _buildContent(BuildContext context) {
     final challenge = _emailChallenge;
-    if (challenge != null) return _buildEmailVerification(challenge);
+    if (challenge != null) {
+      return const Center(child: Text('Verify your email to join this queue.'));
+    }
     final preview = _preview;
     final joinedTicket = _joinedTicket;
     final payment = _payment;
@@ -576,10 +468,7 @@ class _JoinPageState extends State<JoinPage>
     switch (result) {
       case JoinEmailVerification challenge:
         setState(() => _emailChallenge = challenge);
-        _otpTimer?.cancel();
-        _otpTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-          if (mounted) setState(() {});
-        });
+        unawaited(_showOtpDrawer(challenge));
       case JoinedTicket(:final ticket):
         final onJoined = widget.onJoined;
         setState(() => _joinedTicket = JoinedTicket(ticket));

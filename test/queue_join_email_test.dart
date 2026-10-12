@@ -1,3 +1,4 @@
+import 'package:getprio_mobile/otp_input.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/queue/join_repository.dart';
@@ -28,6 +29,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(api.location, 'cebu');
       expect(find.text('Verify your email'), findsOneWidget);
+      expect(find.byKey(const Key('queue-join-otp-drawer')), findsOneWidget);
       expect(joined, isNull);
       await tester.enterText(
         find
@@ -73,6 +75,53 @@ void main() {
     },
   );
 
+  testWidgets(
+    'join OTP drawer blocks outside dismissal and enforces resend cooldown',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _EmailApi()..cooldownSeconds = 2;
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: Scaffold(
+            child: JoinPage(
+              repository: JoinRepository(api),
+              allowedHosts: const {},
+              customerName: 'Customer',
+              directTenantSlug: 'clinic',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final drawer = find.byKey(const Key('queue-join-otp-drawer'));
+      expect(drawer, findsOneWidget);
+      final resend = find.byKey(const Key('queue-join-otp-resend'));
+      final field = find.byType(InputOTP);
+      expect(
+        tester.getCenter(resend).dy,
+        closeTo(tester.getCenter(field).dy, 1),
+      );
+      expect(
+        tester.widget<OtpResendButton>(resend).secondsRemaining,
+        greaterThan(0),
+      );
+      await tester.tap(resend);
+      await tester.pump();
+      expect(api.resendCalls, 0);
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(drawer, findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(drawer, findsNothing);
+      expect(api.verifyCalls, 0);
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    },
+  );
+
   test('QR joins return email challenges before ticket creation', () async {
     final result = await JoinRepository(_EmailApi())
         .join(locationQrId: 'qr', customerName: 'Customer');
@@ -85,6 +134,7 @@ class _EmailApi implements JoinApi, DirectJoinApi, JoinOtpApi {
   String? lastOtpId;
   int verifyCalls = 0;
   int resendCalls = 0;
+  int cooldownSeconds = 0;
   Map<String, dynamic> challenge(String id) => {
     'otpRequired': true,
     'otpId': id,
@@ -92,6 +142,10 @@ class _EmailApi implements JoinApi, DirectJoinApi, JoinOtpApi {
     'tenantSlug': 'clinic',
     'locationSlug': 'cebu',
     'resendsRemaining': 3,
+    if (cooldownSeconds > 0)
+      'resendAvailableAt': DateTime.now()
+          .add(Duration(seconds: cooldownSeconds))
+          .toIso8601String(),
   };
   @override
   Future<Map<String, dynamic>> resolve(String locationQrId) async => {

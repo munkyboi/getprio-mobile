@@ -658,10 +658,12 @@ class _LabeledOtpField extends StatelessWidget {
     this.inputKey,
     this.onChanged,
     this.onCompleted,
+    this.trailing,
   });
   final TextEditingController controller;
   final String label;
   final Key? inputKey;
+  final Widget? trailing;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onCompleted;
   @override
@@ -679,6 +681,7 @@ class _LabeledOtpField extends StatelessWidget {
     });
     return GetPrioOtpInput(
       controller: controller,
+      trailing: trailing,
       label: label,
       inputKey: inputKey,
       enabled: enabled,
@@ -1486,6 +1489,10 @@ class _RegisterPageState extends State<RegisterPage>
         const SizedBox(height: 20),
         _LabeledOtpField(
           inputKey: const Key('register-otp'),
+          trailing: OtpResendButton(
+            key: const Key('register-otp-resend'),
+            onPressed: _busy ? null : _resendRegistrationOtp,
+          ),
           onCompleted: (_) => unawaited(_verifyRegistrationOtp()),
           controller: _otp,
           label: 'Verification code',
@@ -1495,12 +1502,6 @@ class _RegisterPageState extends State<RegisterPage>
           key: const Key('register-otp-submit'),
           onPressed: _busy ? null : _verifyRegistrationOtp,
           child: Text(_busy ? 'Verifying...' : 'Verify email'),
-        ),
-        const SizedBox(height: 8),
-        GetPrioActionButton.outline(
-          key: const Key('register-otp-resend'),
-          onPressed: _busy ? null : _resendRegistrationOtp,
-          child: const Text('Resend code'),
         ),
         const SizedBox(height: 8),
         GetPrioActionButton.outline(
