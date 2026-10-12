@@ -105,6 +105,19 @@ class QueueTicket {
     return started.difference(joined);
   }
 
+  String get actualWaitingTimeLabel {
+    final wait = actualWaitingTime;
+    if (wait == null) return 'Unavailable';
+    final minutes = wait.inMinutes;
+    final hours = minutes ~/ 60;
+    final remaining = minutes % 60;
+    return [
+      if (hours > 0) '$hours${hours == 1 ? 'hr' : 'hrs'}',
+      if (remaining > 0 || hours == 0)
+        '$remaining${remaining == 1 ? 'min' : 'mins'}',
+    ].join(' ');
+  }
+
   bool get needsArrival =>
       status == TicketStatus.called && !isConfirmed && !isInService;
 

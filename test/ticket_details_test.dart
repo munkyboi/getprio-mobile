@@ -10,6 +10,30 @@ import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  test('actual wait formats whole hours and remaining minutes', () {
+    for (final entry in {
+      0: '0mins',
+      1: '1min',
+      59: '59mins',
+      60: '1hr',
+      80: '1hr 20mins',
+      120: '2hrs',
+      151: '2hrs 31mins',
+    }.entries) {
+      final joined = DateTime.utc(2026, 10, 11);
+      final ticket = QueueTicket(
+        id: 'history',
+        lookupCode: 'HISTORY',
+        ticketNumber: 'H001',
+        customerName: 'Customer',
+        status: TicketStatus.served,
+        joinedAt: joined,
+        serviceStartedAt: joined.add(Duration(minutes: entry.key)),
+      );
+      expect(ticket.actualWaitingTimeLabel, entry.value);
+    }
+  });
+
   testWidgets('served history shows actual wait without live stats or QR', (
     tester,
   ) async {
@@ -53,8 +77,39 @@ void main() {
     expect(find.text('Waiting now'), findsNothing);
     expect(find.text('Estimated wait'), findsNothing);
     expect(find.text('Total waiting time'), findsOneWidget);
-    expect(find.text('80 min'), findsOneWidget);
+    expect(find.text('1hr 20mins'), findsOneWidget);
     expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    final joinedValue = find
+        .byWidgetPredicate(
+          (w) => w is Text && (w.data?.startsWith('2026-10-11,') ?? false),
+        )
+        .first;
+    final waitValue = find.text('1hr 20mins');
+    expect(tester.widget<Text>(joinedValue).textAlign, TextAlign.left);
+    expect(tester.widget<Text>(joinedValue).style?.fontWeight, FontWeight.w600);
+    expect(
+      tester.getTopLeft(joinedValue).dx,
+      closeTo(tester.getTopLeft(waitValue).dx, 1),
+    );
+    expect(tester.widget<Text>(waitValue).textAlign, TextAlign.left);
+    expect(tester.widget<Text>(waitValue).style?.fontWeight, FontWeight.w600);
+    expect(
+      tester
+          .widget<ListView>(find.byKey(const Key('ticket-details-page')))
+          .padding,
+      const EdgeInsets.fromLTRB(16, 12, 16, 20),
+    );
+    expect(
+      tester.getTopLeft(find.text('H001')).dx,
+      lessThan(tester.getTopLeft(find.text('Test Customer')).dx),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('ticket-heading-divider'))).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const Key('ticket-customer-grid'))).dy,
+      ),
+    );
+
     expect(find.text('Your queue ticket'), findsNothing);
     final heading = find.byKey(const Key('ticket-vendor-heading'));
     expect(

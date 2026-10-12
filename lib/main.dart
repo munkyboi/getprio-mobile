@@ -5580,6 +5580,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
           final details = snapshot.data;
           final ticket = _displayedTicket ?? details?.ticket ?? widget.ticket;
           final vendor = details?.vendor ?? _fallbackVendor(ticket);
+          final showQr = ticket.isActive && ticket.customerConfirmedAt == null;
           return Stack(
             children: [
               RefreshTrigger(
@@ -5588,7 +5589,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                 child: ListView(
                   key: const Key('ticket-details-page'),
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, showQr ? 100 : 20),
                   children: [
                     if (ticket.needsArrival) ...[
                       Container(
@@ -5672,32 +5673,40 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                         if (ticket.locationName != null)
                           Text(ticket.locationName!),
                         const SizedBox(height: 12),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Ticket number'),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    ticket.ticketNumber ?? ticket.lookupCode,
-                                    style: GetPrioTheme.ticketStyle(
-                                      Theme.of(context),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        const Divider(key: Key('ticket-heading-divider')),
                         const SizedBox(height: 16),
-                        DetailPassField(
-                          label: 'Customer',
-                          value: ticket.customerName,
+                        IntrinsicHeight(
+                          child: Row(
+                            key: const Key('ticket-customer-grid'),
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Ticket number'),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      ticket.ticketNumber ?? ticket.lookupCode,
+                                      style: GetPrioTheme.ticketStyle(
+                                        Theme.of(context),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              const VerticalDivider(width: 1, thickness: 1),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: DetailPassField(
+                                  label: 'Customer',
+                                  value: ticket.customerName,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-
                         if (widget.showJoinConfirmation) ...[
                           const SizedBox(height: 16),
                           _TicketJoinSuccessNotice(ticket: ticket),
@@ -5722,9 +5731,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                               ? (ticket.estimatedWaitMinutes == null
                                     ? 'Unavailable'
                                     : '${ticket.estimatedWaitMinutes} min')
-                              : (ticket.actualWaitingTime == null
-                                    ? 'Unavailable'
-                                    : '${ticket.actualWaitingTime!.inMinutes} min'),
+                              : ticket.actualWaitingTimeLabel,
                         ),
                         if (ticket.queueLength != null)
                           _TicketDetailRow(
@@ -5783,7 +5790,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                   ],
                 ),
               ),
-              if (ticket.isActive && ticket.customerConfirmedAt == null)
+              if (showQr)
                 Positioned(
                   right: 20,
                   bottom: 20,
@@ -5905,7 +5912,7 @@ class _TicketDetailRow extends StatelessWidget {
   const _TicketDetailRow({
     required this.label,
     required this.value,
-    this.textAlign = TextAlign.end,
+    this.textAlign = TextAlign.left,
   });
 
   final String label;
@@ -5926,7 +5933,13 @@ class _TicketDetailRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          Flexible(child: Text(value, textAlign: textAlign)),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: textAlign,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );
