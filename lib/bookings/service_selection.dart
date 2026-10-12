@@ -6,6 +6,7 @@ import '../app_theme.dart';
 import '../navigation/swipe_back_page_route.dart';
 import 'booking_repository.dart';
 import 'image_viewer.dart';
+import 'quantity_limits.dart';
 
 class ServiceSelection extends StatelessWidget {
   const ServiceSelection({
@@ -16,12 +17,14 @@ class ServiceSelection extends StatelessWidget {
     this.enabled = true,
     this.quantities = const {},
     this.onQuantityChanged,
+    this.bounds = const {},
   });
   final List<BookingService> services;
   final Set<String> selected;
   final ValueChanged<BookingService> onToggle;
   final bool enabled;
   final Map<String, int> quantities;
+  final Map<String, BookingQuantityBounds> bounds;
   final void Function(BookingService, int)? onQuantityChanged;
   @override
   Widget build(BuildContext context) => Column(
@@ -97,7 +100,10 @@ class ServiceSelection extends StatelessWidget {
                           Text(service.name).bold(),
                           const SizedBox(height: 4),
                           Text(
-                            '${service.priceDisplay} · ${service.durationMinutes} min',
+                            onQuantityChanged != null &&
+                                    selected.contains(service.slug)
+                                ? '${service.priceForQuantity(quantities[service.slug] ?? quantityBounds(service).min)} · ${service.durationMinutes * (quantities[service.slug] ?? quantityBounds(service).min)} min'
+                                : '${service.priceDisplay} · ${service.durationMinutes} min',
                             style: Theme.of(context).typography.small,
                           ),
                         ],
@@ -197,6 +203,9 @@ class ServiceSelection extends StatelessWidget {
                               child: _ServiceUnitStepper(
                                 key: ValueKey('service-units-${service.slug}'),
                                 service: service,
+                                bounds:
+                                    bounds[service.slug] ??
+                                    quantityBounds(service),
                                 quantity: quantities[service.slug] ?? 1,
                                 enabled:
                                     enabled && selected.contains(service.slug),
@@ -222,11 +231,13 @@ class _ServiceUnitStepper extends StatefulWidget {
     super.key,
     required this.service,
     required this.quantity,
+    required this.bounds,
     required this.enabled,
     required this.onChanged,
   });
   final BookingService service;
   final int quantity;
+  final BookingQuantityBounds bounds;
   final bool enabled;
   final ValueChanged<int> onChanged;
 
@@ -254,45 +265,55 @@ class _ServiceUnitStepperState extends State<_ServiceUnitStepper> {
   }
 
   @override
-  Widget build(BuildContext context) => AbsorbPointer(
-    absorbing: !widget.enabled,
-    child: TextField(
-      key: ValueKey('service-units-value-${widget.service.slug}'),
-      controller: _controller,
-      enabled: widget.enabled,
-      readOnly: true,
-      textAlign: TextAlign.center,
-      style: const TextStyle(fontWeight: FontWeight.w700),
-      features: [
-        InputFeature.decrementButton(
-          min: 1,
-          position: InputFeaturePosition.leading,
-          icon: Icon(
-            LucideIcons.minus,
-            key: ValueKey('service-units-minus-${widget.service.slug}'),
-            size: 14,
-            semanticLabel: 'Decrease ${widget.service.name} units',
+  Widget build(BuildContext context) => !widget.bounds.isValid
+      ? const Text('Unavailable')
+      : widget.bounds.isFixed
+      ? Text(
+          'Fixed at ${widget.quantity}',
+          key: ValueKey('service-units-fixed-${widget.service.slug}'),
+          textAlign: TextAlign.right,
+        )
+      : AbsorbPointer(
+          absorbing: !widget.enabled,
+          child: TextField(
+            key: ValueKey('service-units-value-${widget.service.slug}'),
+            controller: _controller,
+            enabled: widget.enabled,
+            readOnly: true,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+            features: [
+              InputFeature.decrementButton(
+                min: widget.bounds.min.toDouble(),
+                max: widget.bounds.max.toDouble(),
+                position: InputFeaturePosition.leading,
+                icon: Icon(
+                  LucideIcons.minus,
+                  key: ValueKey('service-units-minus-${widget.service.slug}'),
+                  size: 14,
+                  semanticLabel: 'Decrease ${widget.service.name} units',
+                ),
+              ),
+              InputFeature.incrementButton(
+                min: widget.bounds.min.toDouble(),
+                max: widget.bounds.max.toDouble(),
+                icon: Icon(
+                  LucideIcons.plus,
+                  key: ValueKey('service-units-plus-${widget.service.slug}'),
+                  size: 14,
+                  semanticLabel: 'Increase ${widget.service.name} units',
+                ),
+              ),
+            ],
+            onChanged: (text) {
+              final quantity = int.tryParse(text);
+              if (widget.enabled &&
+                  quantity != null &&
+                  quantity >= 1 &&
+                  quantity != widget.quantity) {
+                widget.onChanged(quantity);
+              }
+            },
           ),
-        ),
-        InputFeature.incrementButton(
-          min: 1,
-          icon: Icon(
-            LucideIcons.plus,
-            key: ValueKey('service-units-plus-${widget.service.slug}'),
-            size: 14,
-            semanticLabel: 'Increase ${widget.service.name} units',
-          ),
-        ),
-      ],
-      onChanged: (text) {
-        final quantity = int.tryParse(text);
-        if (widget.enabled &&
-            quantity != null &&
-            quantity >= 1 &&
-            quantity != widget.quantity) {
-          widget.onChanged(quantity);
-        }
-      },
-    ),
-  );
+        );
 }

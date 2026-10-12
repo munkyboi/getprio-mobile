@@ -18,10 +18,12 @@ class BookingOtpDrawer extends StatefulWidget {
     required this.base,
     required this.challenge,
     required this.payload,
+    this.isPayloadCurrent,
   });
   final BookingRepository repository;
   final String base;
   final Map<String, dynamic> challenge, payload;
+  final bool Function()? isPayloadCurrent;
   @override
   State<BookingOtpDrawer> createState() => _BookingOtpDrawerState();
 }
@@ -68,6 +70,12 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
         !validateForm({_code: codeField(_code.text)})) {
       return;
     }
+    if (widget.isPayloadCurrent?.call() == false) {
+      setState(
+        () => _error = 'Services changed. Return to Booking details and choose an available time again.',
+      );
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -80,6 +88,13 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
         );
         _token = verified['bookingVerificationToken'] as String?;
         if (_token == null) throw StateError('Missing verification token');
+      }
+      if (!mounted) return;
+      if (widget.isPayloadCurrent?.call() == false) {
+        setState(
+          () => _error = 'Services changed. Return to Booking details and choose an available time again.',
+        );
+        return;
       }
       final response = await widget.repository.api.post(
         '/api/account/bookings',
