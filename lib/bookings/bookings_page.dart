@@ -488,7 +488,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
           _drawerHostContext = drawerContext;
           return DetailActivityBoundary(
             activity: _activity,
-            child: Scaffold(
+            child: ScrollAwareScaffold(
               headers: const [DetailPassAppBar(title: 'Booking details')],
               child: SafeArea(
                 top: false,

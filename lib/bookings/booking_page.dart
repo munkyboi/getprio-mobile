@@ -221,7 +221,7 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
     );
     return PopScope(
       canPop: !_busy,
-      child: Scaffold(
+      child: ScrollAwareScaffold(
         key: const Key('booking-form-page'),
         resizeToAvoidBottomInset: true,
         headers: [

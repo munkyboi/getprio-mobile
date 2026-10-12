@@ -5629,7 +5629,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   @override
   Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
     value: GetPrioTheme.systemUi(context),
-    child: Scaffold(
+    child: ScrollAwareScaffold(
       headers: const [
         DetailPassAppBar(
           title: 'Ticket details',
