@@ -2,7 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../keyboard_avoidance.dart';
 
-/// Shared drawer presentation: zoomed backdrop and 8px below the grabber.
+/// Shared presentation: 8px below a grabber, or 20px top inset without one.
 DrawerOverlayCompleter<T?> openAppDrawer<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -46,7 +46,12 @@ DrawerOverlayCompleter<T?> openAppDrawer<T>({
               child: MediaQuery.removeViewInsets(
                 context: context,
                 removeBottom: true,
-                child: Builder(builder: builder),
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    top: draggable && (theme?.showDragHandle ?? true) ? 0 : 20,
+                  ),
+                  child: Builder(builder: builder),
+                ),
               ),
             )
           : Builder(builder: builder),

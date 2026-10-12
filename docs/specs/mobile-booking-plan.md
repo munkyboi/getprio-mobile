@@ -470,3 +470,7 @@ Booking Details no longer embeds the payment form. Its payment section provides 
 All381 mobile tests pass; analysis is clean. Coverage checks separate OTP drawer, immutable bound payload/automatic submission/duplicate blocking, automatic manual-payment continuation and no-payment skip, action-only details with drawer reopening, payment draft retention through errors, live verification closing the drawer, and submitted proof winning over stale polling. Physical drawer/keyboard/QR/receipt flow acceptance remains pending; no live booking/payment submission was made for this change.
 
 Signed MAIN production Profile build for d10f606 verified, installed and launched on Zero32 and Zero32 Domain. Device evidence: /tmp/getprio-booking-drawers-zero32-install.json, /tmp/getprio-booking-drawers-zero32-launch.json, /tmp/getprio-booking-drawers-domain-install.json and /tmp/getprio-booking-drawers-domain-launch.json.
+
+### Grabber-free bottom drawer spacing — 12 October 2026
+
+Shared openAppDrawer adds20px above content/title when a bottom drawer has no visible grabber, either because draggable=false or DrawerTheme.showDragHandle=false. Grabber-present drawers retain the existing8px gap. The library hides its grabber entirely for non-draggable drawers, so both conditions are checked centrally. All22 affected drawer keyboard/booking/payment tests pass and analysis is clean. Physical spacing acceptance remains pending.
