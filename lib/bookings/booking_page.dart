@@ -327,28 +327,45 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                               ),
                             ),
                           if (_services.length > 1)
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Button(
-                                    style: _mode == 'parallel'
-                                        ? const ButtonStyle.primary()
-                                        : const ButtonStyle.outline(),
+                            Container(
+                              key: const Key('booking-service-timing'),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: GetPrioTheme.colors(context).paperAccent,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: GetPrioTheme.colors(context).line,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const Text(
+                                    'How would you like your services?',
+                                  ).bold(),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'Choose how your services are scheduled. This changes the available times and the length of your visit.',
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _BookingTimingOption(
+                                    title: 'Together',
+                                    description: 'Services start at the same time. Your visit follows the longest service.',
+                                    icon: LucideIcons.layers,
+                                    selected: _mode == 'parallel',
                                     onPressed: _busy
                                         ? null
                                         : () {
                                             setState(() => _mode = 'parallel');
                                             _loadSlots();
                                           },
-                                    child: const Text('Together'),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Button(
-                                    style: _mode == 'sequential'
-                                        ? const ButtonStyle.primary()
-                                        : const ButtonStyle.outline(),
+                                  const SizedBox(height: 10),
+                                  _BookingTimingOption(
+                                    title: 'One after another',
+                                    description: 'Services happen one at a time, in the order listed above. Your visit includes the time for each service.',
+                                    icon: LucideIcons.listOrdered,
+                                    selected: _mode == 'sequential',
                                     onPressed: _busy
                                         ? null
                                         : () {
@@ -357,10 +374,9 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                                             );
                                             _loadSlots();
                                           },
-                                    child: const Text('One after another'),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           const SizedBox(height: 16),
                           const Text('Date').bold(),
@@ -481,5 +497,82 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
     return date == null
         ? value
         : '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Full-row choices keep scheduling guidance visible before choosing a time.
+class _BookingTimingOption extends StatelessWidget {
+  const _BookingTimingOption({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.selected,
+    required this.onPressed,
+  });
+  final String title, description;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = GetPrioTheme.colors(context);
+    return Semantics(
+      selected: selected,
+      child: Container(
+        decoration: BoxDecoration(
+          color: selected
+              ? GetPrioTheme.primary.withValues(alpha: .12)
+              : colors.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? GetPrioTheme.primary : colors.line,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Button.ghost(
+          onPressed: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
+                  color: selected ? GetPrioTheme.primary : colors.mutedInk,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          color: colors.mutedInk,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  selected ? LucideIcons.circleCheck : LucideIcons.circle,
+                  size: 20,
+                  color: selected ? GetPrioTheme.primary : colors.mutedInk,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
