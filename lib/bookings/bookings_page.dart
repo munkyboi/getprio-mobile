@@ -99,7 +99,7 @@ class _BookingsPageState extends State<BookingsPage>
 
   @override
   Widget build(BuildContext context) => ScrollNotificationObserver(
-    child: Scaffold(
+    child: ScrollAwareScaffold(
       headers: [
         ScrollAwareAppBar(
           title: const Text('Bookings'),
@@ -116,6 +116,7 @@ class _BookingsPageState extends State<BookingsPage>
             key: const Key('bookings-page'),
             padding: listPagePadding,
             children: [
+              const ScrollAwareHeaderSpace(),
               ListFilterTabs(
                 key: const Key('booking-tabs'),
                 labels: const ['Upcoming', 'History'],
@@ -496,6 +497,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                   key: const Key('booking-details-page'),
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 36),
                   children: [
+                    const ScrollAwareHeaderSpace(),
                     if (_activity.paused)
                       DetailAutoUpdateNotice(onRefresh: _manualRefresh),
                     Column(

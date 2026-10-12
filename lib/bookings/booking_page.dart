@@ -244,12 +244,6 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                    child: Text(
-                      '${widget.vendor.name} · ${widget.location.name}',
-                    ),
-                  ),
                   Expanded(
                     child: SingleChildScrollView(
                       keyboardDismissBehavior:
@@ -258,6 +252,13 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          const ScrollAwareHeaderSpace(),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8, bottom: 12),
+                            child: Text(
+                              '${widget.vendor.name} · ${widget.location.name}',
+                            ),
+                          ),
                           ServiceSelection(
                             services: widget.services,
                             selected: _selected,

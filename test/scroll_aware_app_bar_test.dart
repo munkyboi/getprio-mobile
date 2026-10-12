@@ -15,7 +15,7 @@ void main() {
             colorScheme: dark ? ColorSchemes.darkZinc : ColorSchemes.lightZinc,
           ),
           home: ScrollNotificationObserver(
-            child: Scaffold(
+            child: ScrollAwareScaffold(
               headers: [
                 ScrollAwareAppBar(
                   title: const Text('Ticket details'),
@@ -25,6 +25,8 @@ void main() {
               child: ListView(
                 controller: controller,
                 children: [
+                  const ScrollAwareHeaderSpace(),
+                  const SizedBox(key: Key('scroll-content-start'), height: 120),
                   for (var index = 0; index < 20; index++)
                     const SizedBox(height: 80),
                 ],
@@ -38,6 +40,9 @@ void main() {
       final back = find.byType(GetPrioBackButton);
       final original = tester.getRect(title);
       final backRect = tester.getRect(back);
+      final headerBottom = tester.getBottomLeft(find.byType(AppBar)).dy;
+      final content = find.byKey(const Key('scroll-content-start'));
+      expect(tester.getTopLeft(content).dy, closeTo(headerBottom, .1));
       expect(
         tester.widget<AppBar>(find.byType(AppBar)).backgroundColor,
         Colors.transparent,
@@ -49,6 +54,10 @@ void main() {
         closeTo(original.top - original.height / 2, .1),
       );
       expect(tester.getRect(back), backRect);
+      // The viewport starts at the top of the screen; content passes beneath
+      // the header instead of being clipped at its bottom edge.
+      expect(tester.getTopLeft(content).dy, closeTo(headerBottom - 50, .1));
+      expect(tester.getTopLeft(find.byType(ListView)).dy, 0);
       controller.jumpTo(100);
       await tester.pump();
       expect(tester.getBottomLeft(title).dy, closeTo(original.top, .1));

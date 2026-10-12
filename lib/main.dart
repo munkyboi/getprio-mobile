@@ -1373,7 +1373,7 @@ class _RegisterPageState extends State<RegisterPage>
   Widget build(BuildContext context) {
     final challenge = _registrationChallenge;
     return ScrollNotificationObserver(
-      child: Scaffold(
+      child: ScrollAwareScaffold(
         resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(
@@ -1401,6 +1401,7 @@ class _RegisterPageState extends State<RegisterPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const ScrollAwareHeaderSpace(),
         const Text('Customer registration').h1(),
         const SizedBox(height: 8),
         const Text('Create your account to manage bookings and queue tickets.'),
@@ -1475,6 +1476,7 @@ class _RegisterPageState extends State<RegisterPage>
       key: const Key('register-otp-screen'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const ScrollAwareHeaderSpace(),
         const Text('Verify your email').h1(),
         const SizedBox(height: 8),
         Text(
@@ -1882,7 +1884,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage>
   @override
   Widget build(BuildContext context) {
     return ScrollNotificationObserver(
-      child: Scaffold(
+      child: ScrollAwareScaffold(
         resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(
@@ -1900,6 +1902,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const ScrollAwareHeaderSpace(),
                 const Text('Reset your password').h1(),
                 const SizedBox(height: 8),
                 Text(
@@ -2337,7 +2340,7 @@ class _CustomerShellState extends State<CustomerShell>
     await Navigator.of(context).push(
       SwipeBackPageRoute<void>(
         builder: (context) => ScrollNotificationObserver(
-          child: Scaffold(
+          child: ScrollAwareScaffold(
             headers: [
               ScrollAwareAppBar(
                 title: const Text('Tickets'),
@@ -2427,7 +2430,7 @@ class _CustomerShellState extends State<CustomerShell>
     await navigator.push<void>(
       SwipeBackPageRoute<void>(
         builder: (context) => ScrollNotificationObserver(
-          child: Scaffold(
+          child: ScrollAwareScaffold(
             key: const Key('join-flow-shell'),
             headers: [
               ScrollAwareAppBar(
@@ -2462,7 +2465,7 @@ class _CustomerShellState extends State<CustomerShell>
     await navigator.push<void>(
       SwipeBackPageRoute<void>(
         builder: (context) => ScrollNotificationObserver(
-          child: Scaffold(
+          child: ScrollAwareScaffold(
             key: const Key('direct-join-flow-shell'),
             headers: [
               ScrollAwareAppBar(
@@ -4965,6 +4968,7 @@ class _TicketsPageState extends State<TicketsPage> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: listPagePadding,
             children: [
+              const ScrollAwareHeaderSpace(),
               ListFilterTabs(
                 key: const Key('ticket-tabs'),
                 labels: const ['Active', 'History'],
@@ -5660,6 +5664,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: EdgeInsets.fromLTRB(16, 12, 16, showQr ? 100 : 20),
                     children: [
+                      const ScrollAwareHeaderSpace(),
                       if (_activity.paused)
                         DetailAutoUpdateNotice(onRefresh: _refresh),
                       if (_syncError != null) Text(_syncError!),
@@ -7863,6 +7868,7 @@ class _SecurityPageState extends State<SecurityPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!widget.asSheet) const ScrollAwareHeaderSpace(),
           if (section == null || section == SecuritySection.biometrics) ...[
             if (widget.biometricLogin != null)
               _BiometricLoginSetting(
@@ -8053,7 +8059,7 @@ class _SecurityPageState extends State<SecurityPage>
       );
     }
     return ScrollNotificationObserver(
-      child: Scaffold(
+      child: ScrollAwareScaffold(
         resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(

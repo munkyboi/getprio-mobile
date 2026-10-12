@@ -19,10 +19,30 @@ class ScrollAwareScaffold extends StatelessWidget {
   Widget build(BuildContext context) => ScrollNotificationObserver(
     child: Scaffold(
       headers: headers,
+      floatingHeader: true,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-      child: child,
+      child: _FloatingAppBarScope(child: child),
     ),
   );
+}
+
+/// Initial header clearance that belongs inside the primary scroll content.
+/// It scrolls away so content can pass underneath the fixed transparent header.
+class ScrollAwareHeaderSpace extends StatelessWidget {
+  const ScrollAwareHeaderSpace({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_FloatingAppBarScope>() == null
+      ? const SizedBox.shrink()
+      : const ScaffoldHeaderPadding();
+}
+
+class _FloatingAppBarScope extends InheritedWidget {
+  const _FloatingAppBarScope({required super.child});
+
+  @override
+  bool updateShouldNotify(_FloatingAppBarScope oldWidget) => false;
 }
 
 /// Transparent header with a centered title sliding out over 100px of scroll.

@@ -1180,7 +1180,7 @@ class _JoinProfileScrollState extends State<_JoinProfileScroll> {
           controller: _controller,
           padding: EdgeInsets.zero,
           physics: const AlwaysScrollableScrollPhysics(),
-          children: [widget.surface],
+          children: [const ScrollAwareHeaderSpace(), widget.surface],
         ),
       ],
     );
@@ -1420,7 +1420,7 @@ class _QrScannerPageState extends State<QrScannerPage> {
     );
     if (!widget.showAppBar) return body;
     return ScrollNotificationObserver(
-      child: Scaffold(
+      child: ScrollAwareScaffold(
         headers: [
           ScrollAwareAppBar(
             title: const Text('Scan to join'),

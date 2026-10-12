@@ -10,7 +10,7 @@ class BookingImageViewer extends StatelessWidget {
   });
   final String imageUrl, title;
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => ScrollAwareScaffold(
     headers: [
       ScrollAwareAppBar(
         title: Text(title),
@@ -24,7 +24,7 @@ class BookingImageViewer extends StatelessWidget {
       ),
     ],
     child: SafeArea(
-      top: false,
+      top: true,
       child: Center(
         child: InteractiveViewer(
           key: const Key('booking-image-viewer'),
