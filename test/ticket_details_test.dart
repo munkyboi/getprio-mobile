@@ -314,6 +314,70 @@ void main() {
     await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
   });
 
+  for (final completionSource in ['snapshot', 'account']) {
+    testWidgets('thanks the customer after completion from $completionSource', (
+      tester,
+    ) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final waiting = <String, dynamic>{
+        'id': 'active-1',
+        'lookupCode': 'A0C18AF',
+        'ticketNumber': 'AH002',
+        'tenantSlug': 'city-clinic',
+        'status': 'waiting',
+      };
+      final completed = <String, dynamic>{
+        ...waiting,
+        'status': 'served',
+        'serviceOutcome': 'completed',
+      };
+      final accountApi = FakeAccountQueueApi();
+      final queueApi = FakeQueueApi(
+        snapshot: {
+          'focusTicket': waiting,
+          'stats': {'waitingCount': 5, 'servedToday': 8},
+        },
+      );
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson(waiting),
+            ticketRepository: QueueTicketRepository(accountApi),
+            queueRepository: QueueRepository(queueApi),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('You are in the queue. Keep this ticket ready.'),
+        findsOneWidget,
+      );
+      if (completionSource == 'snapshot') {
+        queueApi.snapshot = {'focusTicket': completed};
+      } else {
+        // The live snapshot intentionally still contains the waiting ticket.
+        accountApi.completedTicket = completed;
+      }
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Thank you for your business! We hope to see you again soon.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('You are in the queue. Keep this ticket ready.'),
+        findsNothing,
+      );
+      expect(find.text('Completed today'), findsNothing);
+      expect(find.text('Waiting now'), findsNothing);
+      expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+      expect(find.text('COMPLETED'), findsOneWidget);
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    });
+  }
+
   testWidgets('opens the active Home ticket in ticket details', (tester) async {
     await tester.pumpWidget(
       ShadcnApp(
@@ -862,6 +926,7 @@ class _TicketCoverDirectoryApi implements DirectoryApi {
 
 class FakeAccountQueueApi implements AccountQueueApi, TicketBarcodeApi {
   int barcodeCalls = 0;
+  Map<String, dynamic>? completedTicket;
   @override
   Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) async {
     barcodeCalls++;
@@ -877,24 +942,28 @@ class FakeAccountQueueApi implements AccountQueueApi, TicketBarcodeApi {
   Future<Map<String, dynamic>> loadHistory({
     required int page,
     required int limit,
-  }) async => const {'tickets': []};
+  }) async => {
+    'tickets': [?completedTicket],
+  };
 
   @override
-  Future<Map<String, dynamic>> loadOverview() async => const {
-    'tickets': [
-      {
-        'id': 'active-1',
-        'lookupCode': 'A0C18AF',
-        'ticketNumber': 'AH002',
-        'tenantName': 'City Clinic',
-        'tenantSlug': 'city-clinic',
-        'locationName': 'Main location',
-        'locationSlug': 'main',
-        'status': 'waiting',
-        'createdAt': '2026-09-02T03:42:00Z',
-      },
-    ],
-  };
+  Future<Map<String, dynamic>> loadOverview() async => completedTicket != null
+      ? const {'tickets': []}
+      : const {
+          'tickets': [
+            {
+              'id': 'active-1',
+              'lookupCode': 'A0C18AF',
+              'ticketNumber': 'AH002',
+              'tenantName': 'City Clinic',
+              'tenantSlug': 'city-clinic',
+              'locationName': 'Main location',
+              'locationSlug': 'main',
+              'status': 'waiting',
+              'createdAt': '2026-09-02T03:42:00Z',
+            },
+          ],
+        };
 }
 
 class _ChangingSandboxAccountQueueApi implements AccountQueueApi {

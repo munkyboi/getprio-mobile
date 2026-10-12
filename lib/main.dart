@@ -5450,14 +5450,21 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       locationSlug: ticket.locationSlug,
       lookupCode: ticket.lookupCode,
     );
-    final snapshotTicket =
-        snapshot.focusTicket?.copyWith(
-          vendorName: ticket.vendorName,
-          locationName: ticket.locationName,
-          tenantSlug: ticket.tenantSlug,
-          locationSlug: ticket.locationSlug,
-        ) ??
-        ticket;
+    // A delayed live snapshot must not revive a completed account ticket.
+    final accountCompleted =
+        ticket.status == TicketStatus.served || ticket.isServiceCompleted;
+    final snapshotCompleted =
+        snapshot.focusTicket?.status == TicketStatus.served ||
+        snapshot.focusTicket?.isServiceCompleted == true;
+    final snapshotTicket = accountCompleted && !snapshotCompleted
+        ? ticket
+        : snapshot.focusTicket?.copyWith(
+                vendorName: ticket.vendorName,
+                locationName: ticket.locationName,
+                tenantSlug: ticket.tenantSlug,
+                locationSlug: ticket.locationSlug,
+              ) ??
+              ticket;
     if (mounted && revision == _detailsRevision) {
       _barcode?.updateTicket(_displayedTicket ?? snapshotTicket);
     }
@@ -5543,6 +5550,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   Future<void> _openQr(QueueTicket ticket) async {
     if (_barcodeModalOpen ||
         !ticket.isActive ||
+        ticket.isServiceCompleted ||
         ticket.customerConfirmedAt != null) {
       return;
     }
@@ -5580,7 +5588,10 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
           final details = snapshot.data;
           final ticket = _displayedTicket ?? details?.ticket ?? widget.ticket;
           final vendor = details?.vendor ?? _fallbackVendor(ticket);
-          final showQr = ticket.isActive && ticket.customerConfirmedAt == null;
+          final showQr =
+              ticket.isActive &&
+              !ticket.isServiceCompleted &&
+              ticket.customerConfirmedAt == null;
           return Stack(
             children: [
               RefreshTrigger(
@@ -5591,7 +5602,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: EdgeInsets.fromLTRB(16, 12, 16, showQr ? 100 : 20),
                   children: [
-                    if (ticket.needsArrival) ...[
+                    if (ticket.needsArrival && !ticket.isServiceCompleted) ...[
                       Container(
                         key: const Key('ticket-called-alert'),
                         padding: const EdgeInsets.all(16),
@@ -5772,6 +5783,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                             details?.snapshot != null)
                           _TicketQueueStatusCard(
                             ticket: ticket,
+                            completedWhileOpen: widget.ticket.isActive,
                             snapshot: details?.snapshot,
                             showMessage:
                                 ticket.serviceMessage != null ||
@@ -5951,16 +5963,22 @@ class _TicketQueueStatusCard extends StatelessWidget {
     required this.ticket,
     this.snapshot,
     this.showMessage = true,
+    this.completedWhileOpen = false,
   });
   final bool showMessage;
+  final bool completedWhileOpen;
 
   final QueueTicket ticket;
   final QueueSnapshot? snapshot;
 
   @override
   Widget build(BuildContext context) {
-    final message = ticket.status == TicketStatus.served
-        ? 'This ticket has already been served.'
+    final completed =
+        ticket.status == TicketStatus.served || ticket.isServiceCompleted;
+    final message = completed
+        ? completedWhileOpen
+              ? 'Thank you for your business! We hope to see you again soon.'
+              : 'This ticket has already been served.'
         : ticket.serviceMessage ??
               switch (ticket.status) {
                 TicketStatus.waiting =>
@@ -5990,7 +6008,7 @@ class _TicketQueueStatusCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (showMessage) Text(message),
-                if (ticket.isActive && snapshot != null) ...[
+                if (ticket.isActive && !completed && snapshot != null) ...[
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 12),

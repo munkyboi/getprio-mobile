@@ -437,3 +437,10 @@ Actual waiting time now uses compact hours/minutes, e.g. 1hr20mins (displayed wi
 Coordinated with Assess multidimensional queue for and inspected deployed backend commit1a5ec189: accountRoutes.js exports serviceStartedAt and createdAt, consumed by the mobile joinedAt??createdAt parser; queueSnapshotHelpers.js exports serviceStartedAt and joinedAt. No serializer gap was found. Service timing defaults off, and legacy served transitions can finish tickets without a recorded start; migration preserves historical unknown starts. This explains how Unavailable can arise. The user's specific production ticket records were not inspected, so null service starts for those exact records remain unconfirmed. Missing actual waits are not fabricated from called, confirmed or served times; no API/data changes made.
 
 All374 tests pass and analysis is clean, including duration boundaries, grid geometry, consistent value alignment/weight and reduced history padding. Signed MAIN production Profile verified, installed and launched on Zero32. Physical visual acceptance remains pending.
+
+
+### Friendly completion alert — 12 October 2026
+
+A ticket opened while active now displays “Thank you for your business! We hope to see you again soon.” after authoritative served status or completed service outcome arrives. Tickets opened from history retain “This ticket has already been served.” Interrupted and other terminal outcomes retain their existing messages. Completed tickets omit live queue stats and QR actions. Fresh completed account data cannot be overwritten by a delayed waiting/live queue snapshot.
+
+Two regression tests cover completion during 15-second polling from the snapshot and from account history while the snapshot remains waiting. All376 tests pass; final29 ticket details/QR viewer tests pass and analysis is clean. Signed MAIN production Profile build verified and installed on Zero32. Physical live completion acceptance remains pending; no production tickets modified.
