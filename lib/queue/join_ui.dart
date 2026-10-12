@@ -23,6 +23,7 @@ class JoinPage extends StatefulWidget {
     required this.allowedHosts,
     required this.customerName,
     this.directTenantSlug,
+    this.initialResult,
     this.directLocationSlug,
     this.onJoined,
     this.paymentBrowser,
@@ -34,6 +35,7 @@ class JoinPage extends StatefulWidget {
   final Set<String> allowedHosts;
   final String customerName;
   final String? directTenantSlug;
+  final JoinResult? initialResult;
   final String? directLocationSlug;
   final ValueChanged<QueueTicket>? onJoined;
   final PaymentBrowser? paymentBrowser;
@@ -72,7 +74,11 @@ class _JoinPageState extends State<JoinPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (_isDirectJoin) {
+    if (widget.initialResult != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handleJoinResult(widget.initialResult!);
+      });
+    } else if (_isDirectJoin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_joinDirect());
       });

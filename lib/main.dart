@@ -1,3 +1,4 @@
+import 'queue/join_otp_drawer.dart';
 import 'navigation/pull_to_refresh.dart';
 import 'details/detail_auto_update.dart';
 import 'navigation/app_drawer.dart';
@@ -2006,6 +2007,7 @@ class _CustomerShellState extends State<CustomerShell>
   CustomerDestination _selectedDestination = CustomerDestination.home;
   Timer? _ticketRefreshTimer;
   Timer? _invitationRefreshTimer;
+  bool _vendorJoinOpen = false;
 
   @override
   void initState() {
@@ -2295,8 +2297,8 @@ class _CustomerShellState extends State<CustomerShell>
                 ExplorePage(
                   repository: widget.directoryRepository,
                   queueRepository: widget.queueRepository,
-                  onOpenJoin: (vendor, locationSlug) =>
-                      unawaited(_openVendorJoin(vendor, locationSlug)),
+                  onOpenJoin: (host, vendor, locationSlug) =>
+                      unawaited(_openVendorJoin(host, vendor, locationSlug)),
                 ),
                 ListsPage(
                   onTickets: _openTickets,
@@ -2420,8 +2422,8 @@ class _CustomerShellState extends State<CustomerShell>
           vendor: vendor,
           repository: repository,
           queueRepository: widget.queueRepository,
-          onJoinLocation: (location) =>
-              unawaited(_openVendorJoin(vendor, location.slug)),
+          onJoinLocationWithContext: (host, location) =>
+              unawaited(_openVendorJoin(host, vendor, location.slug)),
         ),
       ),
     );
@@ -2460,45 +2462,70 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   Future<void> _openVendorJoin(
+    BuildContext host,
     VendorSummary vendor,
     String? locationSlug,
   ) async {
-    final navigator = Navigator.of(context);
-    await navigator.push<void>(
-      SwipeBackPageRoute<void>(
-        builder: (context) => ScrollNotificationObserver(
-          child: ScrollAwareScaffold(
-            key: const Key('direct-join-flow-shell'),
-            headers: [
-              ScrollAwareAppBar(
-                title: const Text('Join queue'),
-                leading: [
-                  GetPrioBackButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
+    if (_vendorJoinOpen || widget.joinRepository == null || !host.mounted) {
+      return;
+    }
+    _vendorJoinOpen = true;
+    final navigator = Navigator.of(host);
+    try {
+      final result = await openAppDrawer<JoinResult>(
+        context: host,
+        position: OverlayPosition.bottom,
+        useSafeArea: false,
+        draggable: false,
+        barrierDismissible: false,
+        builder: (_) => DirectQueueJoinDrawer(
+          repository: widget.joinRepository!,
+          tenantSlug: vendor.slug,
+          locationSlug: locationSlug,
+          customerName: widget.user?.customerName ?? 'Customer',
+        ),
+      ).future;
+      if (!mounted || !navigator.mounted || result == null) return;
+      if (result is JoinedTicket) {
+        _openJoinedTicket(navigator, result.ticket, replaceJoinPage: false);
+      } else if (result is PaymentRequired) {
+        await navigator.push<void>(
+          SwipeBackPageRoute<void>(
+            builder: (_) => ScrollAwareScaffold(
+              headers: [
+                ScrollAwareAppBar(
+                  title: const Text('Join queue'),
+                  leading: [GetPrioBackButton(onPressed: navigator.pop)],
+                ),
+              ],
+              child: JoinPage(
+                repository: widget.joinRepository,
+                allowedHosts: widget.allowedHosts,
+                customerName: widget.user?.customerName ?? 'Customer',
+                directTenantSlug: vendor.slug,
+                directLocationSlug: locationSlug,
+                initialResult: result,
+                paymentApi: widget.paymentApi,
+                paymentLinkSource: widget.paymentLinkSource,
+                onJoined: (ticket) => _openJoinedTicket(navigator, ticket),
               ),
-            ],
-            child: JoinPage(
-              repository: widget.joinRepository,
-              allowedHosts: widget.allowedHosts,
-              customerName: widget.user?.customerName ?? 'Customer',
-              directTenantSlug: vendor.slug,
-              directLocationSlug: locationSlug,
-              paymentApi: widget.paymentApi,
-              paymentLinkSource: widget.paymentLinkSource,
-              onJoined: (ticket) => _openJoinedTicket(navigator, ticket),
             ),
           ),
-        ),
-      ),
-    );
-    widget.ticketRepository?.requestRefresh();
+        );
+      }
+      widget.ticketRepository?.requestRefresh();
+    } finally {
+      _vendorJoinOpen = false;
+    }
   }
 
-  void _openJoinedTicket(NavigatorState navigator, QueueTicket ticket) {
+  void _openJoinedTicket(
+    NavigatorState navigator,
+    QueueTicket ticket, {
+    bool replaceJoinPage = true,
+  }) {
     if (!navigator.mounted) return;
-    navigator.pop();
+    if (replaceJoinPage) navigator.pop();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !navigator.mounted) return;
       unawaited(
@@ -2954,7 +2981,7 @@ class ExplorePage extends StatefulWidget {
 
   final DirectoryRepository? repository;
   final QueueRepository? queueRepository;
-  final void Function(VendorSummary, String?)? onOpenJoin;
+  final void Function(BuildContext, VendorSummary, String?)? onOpenJoin;
 
   @override
   State<ExplorePage> createState() => _ExplorePageState();
@@ -3169,7 +3196,7 @@ class _VendorCard extends StatelessWidget {
   final VendorSummary vendor;
   final DirectoryRepository repository;
   final QueueRepository? queueRepository;
-  final void Function(VendorSummary, String?)? onOpenJoin;
+  final void Function(BuildContext, VendorSummary, String?)? onOpenJoin;
 
   @override
   Widget build(BuildContext context) {
@@ -3181,9 +3208,10 @@ class _VendorCard extends StatelessWidget {
               vendor: vendor,
               repository: repository,
               queueRepository: queueRepository,
-              onJoinLocation: onOpenJoin == null
+              onJoinLocationWithContext: onOpenJoin == null
                   ? null
-                  : (location) => onOpenJoin!(vendor, location.slug),
+                  : (host, location) =>
+                        onOpenJoin!(host, vendor, location.slug),
             ),
           ),
         );
@@ -3368,6 +3396,7 @@ class VendorDetailPage extends StatefulWidget {
     this.bookingRepository,
     this.onJoinQueue,
     this.onJoinLocation,
+    this.onJoinLocationWithContext,
     this.contactLauncher = const ExternalVendorContactLauncher(),
   });
 
@@ -3377,6 +3406,7 @@ class VendorDetailPage extends StatefulWidget {
   final BookingRepository? bookingRepository;
   final VoidCallback? onJoinQueue;
   final ValueChanged<VendorLocation>? onJoinLocation;
+  final void Function(BuildContext, VendorLocation)? onJoinLocationWithContext;
   final VendorContactLauncher contactLauncher;
 
   @override
@@ -3518,6 +3548,12 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
                 queueRefreshVersion: _queueRefreshVersion,
                 onBack: () => Navigator.of(context).pop(),
                 onJoinLocation:
+                    (widget.onJoinLocationWithContext == null
+                        ? null
+                        : (location) => widget.onJoinLocationWithContext!(
+                            context,
+                            location,
+                          )) ??
                     widget.onJoinLocation ??
                     (widget.onJoinQueue == null
                         ? null

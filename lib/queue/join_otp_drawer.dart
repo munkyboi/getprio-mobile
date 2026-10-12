@@ -187,3 +187,108 @@ class _JoinOtpDrawerState extends State<JoinOtpDrawer>
     ),
   );
 }
+
+/// Starts a direct vendor join inside the same drawer that hosts verification.
+class DirectQueueJoinDrawer extends StatefulWidget {
+  const DirectQueueJoinDrawer({
+    super.key,
+    required this.repository,
+    required this.tenantSlug,
+    this.locationSlug,
+    required this.customerName,
+  });
+  final JoinRepository repository;
+  final String tenantSlug, customerName;
+  final String? locationSlug;
+  @override
+  State<DirectQueueJoinDrawer> createState() => _DirectQueueJoinDrawerState();
+}
+
+class _DirectQueueJoinDrawerState extends State<DirectQueueJoinDrawer> {
+  JoinEmailVerification? _challenge;
+  String? _error;
+  bool _loading = true;
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  String _message(Object error) => error is ApiException
+      ? error.message
+      : 'Could not join this queue. Please try again.';
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.repository.joinDirect(
+        tenantSlug: widget.tenantSlug,
+        locationSlug: widget.locationSlug,
+        customerName: widget.customerName,
+      );
+      if (!mounted) return;
+      if (result is JoinEmailVerification) {
+        setState(() {
+          _challenge = result;
+          _loading = false;
+        });
+      } else {
+        closeDrawer(context, result);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = _message(error);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final challenge = _challenge;
+    if (challenge != null) {
+      return JoinOtpDrawer(
+        repository: widget.repository,
+        challenge: challenge,
+        messageFor: _message,
+      );
+    }
+    return PopScope(
+      canPop: !_loading,
+      child: Container(
+        key: const Key('direct-queue-join-drawer'),
+        color: appDrawerBackground(context),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const AppDrawerTitle('Join queue'),
+            const SizedBox(height: 16),
+            if (_loading)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              Text(_error ?? 'Could not join this queue.'),
+              const SizedBox(height: 16),
+              PrimaryButton(
+                onPressed: _load,
+                alignment: Alignment.center,
+                child: const Text('Try again'),
+              ),
+              const SizedBox(height: 8),
+              OutlineButton(
+                onPressed: () => closeDrawer(context),
+                alignment: Alignment.center,
+                child: const Text('Cancel'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
