@@ -182,58 +182,15 @@ class ServiceSelection extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Semantics(
-                          label: 'Decrease ${service.name} units',
-                          button: true,
-                          child: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: IconButton.outline(
-                              key: ValueKey(
-                                'service-units-minus-${service.slug}',
-                              ),
-                              icon: const Icon(LucideIcons.minus, size: 14),
-                              onPressed:
-                                  !enabled ||
-                                      !selected.contains(service.slug) ||
-                                      (quantities[service.slug] ?? 1) <= 1
-                                  ? null
-                                  : () => onQuantityChanged!(
-                                      service,
-                                      (quantities[service.slug] ?? 1) - 1,
-                                    ),
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Text(
-                            '${quantities[service.slug] ?? 1}',
-                            key: ValueKey(
-                              'service-units-value-${service.slug}',
-                            ),
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Semantics(
-                          label: 'Increase ${service.name} units',
-                          button: true,
-                          child: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: IconButton.outline(
-                              key: ValueKey(
-                                'service-units-plus-${service.slug}',
-                              ),
-                              icon: const Icon(LucideIcons.plus, size: 14),
-                              onPressed:
-                                  !enabled || !selected.contains(service.slug)
-                                  ? null
-                                  : () => onQuantityChanged!(
-                                      service,
-                                      (quantities[service.slug] ?? 1) + 1,
-                                    ),
-                            ),
+                        SizedBox(
+                          width: 150,
+                          child: _ServiceUnitStepper(
+                            key: ValueKey('service-units-${service.slug}'),
+                            service: service,
+                            quantity: quantities[service.slug] ?? 1,
+                            enabled: enabled && selected.contains(service.slug),
+                            onChanged: (quantity) =>
+                                onQuantityChanged!(service, quantity),
                           ),
                         ),
                       ],
@@ -244,5 +201,85 @@ class ServiceSelection extends StatelessWidget {
           ),
         ),
     ],
+  );
+}
+
+class _ServiceUnitStepper extends StatefulWidget {
+  const _ServiceUnitStepper({
+    super.key,
+    required this.service,
+    required this.quantity,
+    required this.enabled,
+    required this.onChanged,
+  });
+  final BookingService service;
+  final int quantity;
+  final bool enabled;
+  final ValueChanged<int> onChanged;
+
+  @override
+  State<_ServiceUnitStepper> createState() => _ServiceUnitStepperState();
+}
+
+class _ServiceUnitStepperState extends State<_ServiceUnitStepper> {
+  late final TextEditingController _controller = TextEditingController(
+    text: '${widget.quantity}',
+  );
+
+  @override
+  void didUpdateWidget(covariant _ServiceUnitStepper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_controller.text != '${widget.quantity}') {
+      _controller.text = '${widget.quantity}';
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AbsorbPointer(
+    absorbing: !widget.enabled,
+    child: TextField(
+      key: ValueKey('service-units-value-${widget.service.slug}'),
+      controller: _controller,
+      enabled: widget.enabled,
+      readOnly: true,
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontWeight: FontWeight.w700),
+      features: [
+        InputFeature.decrementButton(
+          min: 1,
+          position: InputFeaturePosition.leading,
+          icon: Icon(
+            LucideIcons.minus,
+            key: ValueKey('service-units-minus-${widget.service.slug}'),
+            size: 14,
+            semanticLabel: 'Decrease ${widget.service.name} units',
+          ),
+        ),
+        InputFeature.incrementButton(
+          min: 1,
+          icon: Icon(
+            LucideIcons.plus,
+            key: ValueKey('service-units-plus-${widget.service.slug}'),
+            size: 14,
+            semanticLabel: 'Increase ${widget.service.name} units',
+          ),
+        ),
+      ],
+      onChanged: (text) {
+        final quantity = int.tryParse(text);
+        if (widget.enabled &&
+            quantity != null &&
+            quantity >= 1 &&
+            quantity != widget.quantity) {
+          widget.onChanged(quantity);
+        }
+      },
+    ),
   );
 }

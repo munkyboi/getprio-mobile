@@ -63,8 +63,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       String value(String slug) => tester
-          .widget<Text>(find.byKey(ValueKey('service-units-value-$slug')))
-          .data!;
+          .widget<TextField>(find.byKey(ValueKey('service-units-value-$slug')))
+          .controller!
+          .text;
       Future<void> press(String key) async {
         final target = find.byKey(ValueKey(key));
         await reveal(tester, target);
@@ -84,6 +85,21 @@ void main() {
         findsNothing,
       );
       final initialRequests = api.requests;
+      final inactivePlus = find.byKey(
+        const ValueKey('service-units-plus-court-c'),
+      );
+      await reveal(tester, inactivePlus);
+      await tester.tap(inactivePlus, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(api.requests, initialRequests);
+      expect(value('court-c'), '1');
+      final quantityField = find.byKey(
+        const ValueKey('service-units-value-court-a'),
+      );
+      await reveal(tester, quantityField);
+      await tester.tap(quantityField);
+      await tester.pumpAndSettle();
+      expect(tester.testTextInput.isVisible, isFalse);
       await press('service-units-plus-court-a');
       expect(api.requests, initialRequests + 1);
       expect(
@@ -130,7 +146,10 @@ void main() {
       expect(
         tester
             .widget<IconButton>(
-              find.byKey(const ValueKey('service-units-minus-court-b')),
+              find.ancestor(
+                of: find.byKey(const ValueKey('service-units-minus-court-b')),
+                matching: find.byType(IconButton),
+              ),
             )
             .onPressed,
         isNull,
