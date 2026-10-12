@@ -474,3 +474,7 @@ Signed MAIN production Profile build for d10f606 verified, installed and launche
 ### Grabber-free bottom drawer spacing — 12 October 2026
 
 Shared openAppDrawer adds20px above content/title when a bottom drawer has no visible grabber, either because draggable=false or DrawerTheme.showDragHandle=false. Grabber-present drawers retain the existing8px gap. The library hides its grabber entirely for non-draggable drawers, so both conditions are checked centrally. All22 affected drawer keyboard/booking/payment tests pass and analysis is clean. Physical spacing acceptance remains pending.
+
+### Manual Payment pinned action — 12 October 2026
+
+Manual Payment drawer now uses a bounded column: expanded keyboard-aware scrolling for the QR/destination/reference/receipt fields, and a separate fixed footer for Submit payment proof. Footer respects the bottom safe area and shares the drawer background; keyboard resizing remains owned by the shared drawer wrapper. Validation, busy/duplicate guards and API submission remain unchanged. All19 affected payment/live detail/keyboard tests pass; analysis clean. Physical footer/keyboard spacing acceptance remains pending.

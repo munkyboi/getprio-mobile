@@ -23,17 +23,13 @@ Future<CustomerBooking?> openBookingPaymentDrawer({
     return Container(
       key: const Key('booking-manual-payment-drawer'),
       color: appDrawerBackground(drawerContext),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(drawerContext).height * .85,
-        ),
-        child: KeyboardAwareScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: BookingPayment(
-            repository: repository,
-            booking: booking,
-            onSubmitted: (updated) => closeDrawer(drawerContext, updated),
-          ),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(drawerContext).height * .85,
+        child: BookingPayment(
+          repository: repository,
+          booking: booking,
+          fixedFooter: true,
+          onSubmitted: (updated) => closeDrawer(drawerContext, updated),
         ),
       ),
     );
@@ -48,11 +44,13 @@ class BookingPayment extends StatefulWidget {
     required this.booking,
     required this.onSubmitted,
     this.pickReceipt,
+    this.fixedFooter = false,
   });
   final BookingRepository repository;
   final CustomerBooking booking;
   final ValueChanged<CustomerBooking> onSubmitted;
   final Future<XFile?> Function()? pickReceipt;
+  final bool fixedFooter;
   @override
   State<BookingPayment> createState() => _BookingPaymentState();
 }
@@ -147,7 +145,7 @@ class _BookingPaymentState extends State<BookingPayment> {
   Widget build(BuildContext context) {
     final destination = widget.booking.data['manualPaymentDestination'];
     final details = destination is Map ? destination : null;
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const AppDrawerTitle('Manual Payment'),
@@ -233,14 +231,41 @@ class _BookingPaymentState extends State<BookingPayment> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(_error!),
           ),
-        const SizedBox(height: 16),
-        PrimaryButton(
-          onPressed: _busy || _bytes == null || _reference.text.trim().isEmpty
-              ? null
-              : _submit,
-          child: Text(_busy ? 'Please wait...' : 'Submit payment proof'),
+        if (!widget.fixedFooter) ...[
+          const SizedBox(height: 16),
+          _submitAction(),
+        ],
+      ],
+    );
+    if (!widget.fixedFooter) return content;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: KeyboardAwareScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: content,
+          ),
+        ),
+        Container(
+          key: const Key('booking-payment-footer'),
+          color: appDrawerBackground(context),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: _submitAction(),
+            ),
+          ),
         ),
       ],
     );
   }
+
+  Widget _submitAction() => PrimaryButton(
+    onPressed: _busy || _bytes == null || _reference.text.trim().isEmpty
+        ? null
+        : _submit,
+    child: Text(_busy ? 'Please wait...' : 'Submit payment proof'),
+  );
 }
