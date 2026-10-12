@@ -215,7 +215,7 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
                       children: [
                         Expanded(
                           child: Text(
-                            _busy ? 'Please wait...' : 'Submit and continue',
+                            _busy ? 'Please wait...' : 'Continue',
                             textAlign: TextAlign.center,
                           ),
                         ),
