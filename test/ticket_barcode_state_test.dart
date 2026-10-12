@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:getprio_mobile/auth/auth_repository.dart';
 import 'package:getprio_mobile/details/ticket_barcode_state.dart';
 import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
@@ -27,6 +28,35 @@ TicketBarcodeToken token(DateTime now, String code) => TicketBarcodeToken(
 );
 
 void main() {
+  testWidgets('QR API error is visible and clears on a successful retry', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026);
+    var fail = true;
+    final state = TicketBarcodeState(
+      ticket: ticket(),
+      now: () => now,
+      load: (_) async {
+        if (fail) {
+          throw const ApiException(
+            429,
+            'RATE_LIMITED',
+            'Please wait before retrying.',
+          );
+        }
+        return token(now, 'RECOVERED');
+      },
+    );
+    await tester.pump();
+    expect(state.code, isNull);
+    expect(state.errorMessage, 'Please wait before retrying.');
+    fail = false;
+    await state.refresh();
+    expect(state.code, 'RECOVERED');
+    expect(state.errorMessage, isNull);
+    state.dispose();
+  });
+
   testWidgets(
     'expires closed, rotates once, and prevents overlapping retries',
     (tester) async {

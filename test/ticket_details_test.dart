@@ -308,6 +308,98 @@ void main() {
     expect(find.byType(BrandedTicketQr), findsNothing);
   });
 
+  testWidgets('QR retry after idle pause refreshes status and recovers', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final api = FakeAccountQueueApi()..barcodeFailure = true;
+    final queueApi = FakeQueueApi(snapshot: {});
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson({
+            'id': 'active-1',
+            'lookupCode': 'A0C18AF',
+            'status': 'waiting',
+            'tenantSlug': 'city-clinic',
+          }),
+          ticketRepository: QueueTicketRepository(api),
+          queueRepository: QueueRepository(queueApi),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-auto-update-paused')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-retry')), findsOneWidget);
+    final beforeRetry = queueApi.loadCalls;
+    api.barcodeFailure = false;
+    await tester.tap(find.byKey(const Key('ticket-barcode-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BrandedTicketQr), findsOneWidget);
+    expect(queueApi.loadCalls, greaterThan(beforeRetry));
+    queueApi.snapshot = {
+      'focusTicket': {
+        'id': 'active-1',
+        'lookupCode': 'A0C18AF',
+        'status': 'called',
+        'customerConfirmedAt': '2026-10-12T00:00:00Z',
+      },
+    };
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'QR retry closes a paused stale ticket once arrival is confirmed',
+    (tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final api = FakeAccountQueueApi()..barcodeFailure = true;
+      final queueApi = FakeQueueApi(snapshot: {});
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson({
+              'id': 'active-1',
+              'lookupCode': 'A0C18AF',
+              'status': 'waiting',
+              'tenantSlug': 'city-clinic',
+            }),
+            ticketRepository: QueueTicketRepository(api),
+            queueRepository: QueueRepository(queueApi),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(minutes: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-barcode-retry')), findsOneWidget);
+      final issued = api.barcodeCalls;
+      queueApi.snapshot = {
+        'focusTicket': {
+          'id': 'active-1',
+          'lookupCode': 'A0C18AF',
+          'status': 'called',
+          'customerConfirmedAt': '2026-10-12T00:00:00Z',
+        },
+      };
+      await tester.tap(find.byKey(const Key('ticket-barcode-retry')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+      expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+      expect(api.barcodeCalls, issued);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets('QR issuance exists only while floating-button dialog is open', (
     tester,
   ) async {
@@ -1023,10 +1115,12 @@ class _TicketCoverDirectoryApi implements DirectoryApi {
 
 class FakeAccountQueueApi implements AccountQueueApi, TicketBarcodeApi {
   int barcodeCalls = 0;
+  bool barcodeFailure = false;
   Map<String, dynamic>? completedTicket;
   @override
   Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) async {
     barcodeCalls++;
+    if (barcodeFailure) throw StateError('temporarily unavailable');
     final now = DateTime.now().toUtc();
     return TicketBarcodeToken(
       code: 'QB0123456789ABCDEF0123456789ABCDEF',

@@ -80,7 +80,7 @@ class _TicketBarcodeViewerState extends State<TicketBarcodeViewer>
   void _closeAfterConfirmation() {
     if (!mounted ||
         _closingAfterConfirmation ||
-        widget.state?.arrivalConfirmed != true) {
+        widget.state?.arrivalUnavailable != true) {
       return;
     }
     _closingAfterConfirmation = true;
@@ -265,8 +265,9 @@ class TicketBarcodeContent extends StatelessWidget {
           ] else ...[
             Text(
               state.loading
-                  ? 'Refreshing barcode…'
-                  : 'Barcode unavailable. Refresh to show a valid barcode.',
+                  ? 'Refreshing QR code…'
+                  : state.errorMessage ??
+                        'QR code unavailable. Retry to get a valid QR code.',
               key: const Key('ticket-barcode-unavailable'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: GetPrioTheme.ink),

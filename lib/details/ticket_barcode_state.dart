@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../queue/queue_models.dart';
+import '../auth/auth_repository.dart';
 
 class TicketBarcodeToken {
   const TicketBarcodeToken({
@@ -59,6 +60,14 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
   int _generation = 0;
   DateTime? _retryAt;
   bool get loading => _loading;
+  String? errorMessage;
+  bool get arrivalUnavailable =>
+      !_ticket.isActive ||
+      _ticket.customerConfirmedAt != null ||
+      _ticket.serviceStartedAt != null ||
+      _ticket.serviceEndedAt != null ||
+      _ticket.isServiceCompleted ||
+      _ticket.isServiceInterrupted;
   bool get arrivalConfirmed => _ticket.customerConfirmedAt != null;
   bool get rotating =>
       !sandbox &&
@@ -118,6 +127,7 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
     }
     _clockInvalid = false;
     _loading = true;
+    errorMessage = null;
     notifyListeners();
     try {
       final token = await load(_ticket.id).timeout(const Duration(seconds: 15));
@@ -145,8 +155,11 @@ class TicketBarcodeState extends ChangeNotifier with WidgetsBindingObserver {
       _deadline = receivedAt.add(usable);
       _wallDeadline = receivedWall.add(usable);
       _retryAt = null;
-    } catch (_) {
+    } catch (error) {
       if (_disposed || generation != _generation) return;
+      errorMessage = error is ApiException
+          ? error.message
+          : 'QR code unavailable. Retry to get a valid QR code.';
       if (remaining <= Duration.zero) {
         _token = null;
         _deadline = null;

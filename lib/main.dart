@@ -5392,7 +5392,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   void _handleTicketRepositoryRefresh() {
-    if (!mounted || _activity.paused) return;
+    if (!mounted || (_activity.paused && !_barcodeModalOpen)) return;
     unawaited(_refreshFromSignal());
   }
 
@@ -5420,7 +5420,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   Future<void> _pollStatus() async {
-    if (_activity.paused ||
+    if ((_activity.paused && !_barcodeModalOpen) ||
         _pollingStatus ||
         !mounted ||
         _isCancelling ||
@@ -5602,9 +5602,18 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     final barcode = TicketBarcodeState(
       ticket: ticket,
       sandbox: widget.sandbox,
-      load: (id) =>
-          widget.ticketRepository?.loadTicketBarcode(id) ??
-          Future.error(StateError('Ticket barcode API unavailable')),
+      load: (id) async {
+        // A QR request is explicit activity, even after details auto-updates
+        // pause. Reconcile status on opening/retrying before issuing a token.
+        await _refreshFromSignal();
+        if (!mounted || _barcode?.arrivalUnavailable == true) {
+          throw StateError('Ticket no longer needs an arrival QR code');
+        }
+        final token =
+            await (widget.ticketRepository?.loadTicketBarcode(id) ??
+                Future.error(StateError('Ticket QR API unavailable')));
+        return token;
+      },
     );
     _barcode = barcode;
     _barcodeModalOpen = true;
