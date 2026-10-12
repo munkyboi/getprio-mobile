@@ -10,6 +10,96 @@ import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  testWidgets('keeps confirmed ticket when refreshed snapshot omits it', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final ticket = QueueTicket.fromJson({
+      'id': 'stable',
+      'lookupCode': 'STABLE',
+      'status': 'waiting',
+      'tenantSlug': 'city-clinic',
+    });
+    final directory = _RetainedVendorRepository();
+    final api = FakeQueueApi(
+      snapshot: {
+        'focusTicket': {
+          'id': 'stable',
+          'lookupCode': 'STABLE',
+          'status': 'called',
+          'customerConfirmedAt': '2026-10-12T00:00:00Z',
+          'serviceStartedAt': '2026-10-12T00:01:00Z',
+        },
+      },
+    );
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: ticket,
+          queueRepository: QueueRepository(api),
+          directoryRepository: directory,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    api.snapshot = {};
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    expect(directory.calls, 1);
+    api.failure = true;
+    await tester
+        .widget<RefreshTrigger>(find.byKey(const Key('ticket-details-refresh')))
+        .onRefresh!();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+  });
+
+  testWidgets('idle ticket pauses and successful manual refresh resumes', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final ticket = QueueTicket.fromJson({
+      'id': 'idle',
+      'lookupCode': 'IDLE',
+      'status': 'served',
+      'tenantSlug': 'city-clinic',
+    });
+    final api = FakeQueueApi(snapshot: {});
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: ticket,
+          queueRepository: QueueRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-auto-update-paused')), findsOneWidget);
+    final calls = api.loadCalls;
+    await tester.pump(const Duration(minutes: 1));
+    expect(api.loadCalls, calls);
+    api.failure = true;
+    await tester.tap(find.text('Refresh and resume'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-auto-update-paused')), findsOneWidget);
+    api.failure = false;
+    await tester.tap(find.text('Refresh and resume'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-auto-update-paused')), findsNothing);
+    final resumed = api.loadCalls;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(api.loadCalls, resumed + 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test('actual wait formats whole hours and remaining minutes', () {
     for (final entry in {
       0: '0mins',
@@ -1009,6 +1099,7 @@ class FakeQueueApi implements QueueApi {
 
   Map<String, dynamic> snapshot;
   int loadCalls = 0;
+  bool failure = false;
 
   @override
   Future<Map<String, dynamic>> cancelTicket({
@@ -1024,6 +1115,18 @@ class FakeQueueApi implements QueueApi {
     String? lookupCode,
   }) async {
     loadCalls++;
+    if (failure) throw StateError('429');
     return snapshot;
+  }
+}
+
+class _RetainedVendorRepository extends DirectoryRepository {
+  _RetainedVendorRepository() : super(_TicketCoverDirectoryApi());
+  int calls = 0;
+  @override
+  Future<VendorSummary> loadVendor(String slug) async {
+    calls++;
+    if (calls > 1) throw StateError('rate limited');
+    return super.loadVendor(slug);
   }
 }

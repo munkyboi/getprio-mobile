@@ -1,3 +1,4 @@
+import 'details/detail_auto_update.dart';
 import 'navigation/app_drawer.dart';
 import 'theme_artwork.dart';
 import 'navigation/list_filter_tabs.dart';
@@ -5361,10 +5362,18 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   Timer? _statusPoll;
   bool _pollingStatus = false;
   int _detailsRevision = 0;
+  _TicketDetailsData? _lastDetails;
+  VendorSummary? _vendorCache;
+  final _activity = DetailAutoUpdate();
+  String? _syncError;
+  void _activityChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
     super.initState();
+    _activity.addListener(_activityChanged);
     _details = _loadDetails();
     _statusPoll = Timer.periodic(
       const Duration(seconds: 15),
@@ -5377,6 +5386,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
 
   @override
   void dispose() {
+    _activity.dispose();
     _statusPoll?.cancel();
     widget.ticketRepository?.refreshVersion.removeListener(
       _handleTicketRepositoryRefresh,
@@ -5385,15 +5395,36 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   void _handleTicketRepositoryRefresh() {
-    if (!mounted) return;
-    final details = _loadDetails(refreshTicket: true);
-    setState(() {
-      _details = details;
-    });
+    if (!mounted || _activity.paused) return;
+    unawaited(_refreshFromSignal());
+  }
+
+  Future<void> _refreshFromSignal() async {
+    if (_pollingStatus || _isCancelling) return;
+    _pollingStatus = true;
+    try {
+      final data = await _loadDetails(refreshTicket: true);
+      if (mounted) {
+        setState(() {
+          _details = SynchronousFuture(data);
+          _syncError = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _syncError =
+              'Could not update. Showing the last available ticket details.',
+        );
+      }
+    } finally {
+      _pollingStatus = false;
+    }
   }
 
   Future<void> _pollStatus() async {
-    if (_pollingStatus ||
+    if (_activity.paused ||
+        _pollingStatus ||
         !mounted ||
         _isCancelling ||
         WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
@@ -5409,10 +5440,16 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       if (mounted && revision == _detailsRevision && !_isCancelling) {
         setState(() {
           _details = SynchronousFuture(details);
+          _syncError = null;
         });
       }
     } catch (_) {
-      // Keep the last successful state; the next poll or manual refresh retries.
+      if (mounted) {
+        setState(
+          () => _syncError =
+              'Could not update. Showing the last available ticket details.',
+        );
+      }
     } finally {
       _pollingStatus = false;
     }
@@ -5420,7 +5457,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
 
   Future<_TicketDetailsData> _loadDetails({bool refreshTicket = false}) async {
     final revision = ++_detailsRevision;
-    var ticket = widget.ticket;
+    var ticket = _lastDetails?.ticket ?? widget.ticket;
     if (refreshTicket) {
       final ticketRepository = widget.ticketRepository;
       if (ticketRepository != null) {
@@ -5442,7 +5479,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       if (mounted && revision == _detailsRevision) {
         _barcode?.updateTicket(_displayedTicket ?? ticket);
       }
-      return _TicketDetailsData(ticket: ticket, vendor: vendor);
+      final data = _TicketDetailsData(ticket: ticket, vendor: vendor);
+      if (mounted && revision == _detailsRevision) _lastDetails = data;
+      return data;
     }
 
     final snapshot = await repository.loadQueueSnapshot(
@@ -5468,21 +5507,26 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     if (mounted && revision == _detailsRevision) {
       _barcode?.updateTicket(_displayedTicket ?? snapshotTicket);
     }
-    return _TicketDetailsData(
+    final data = _TicketDetailsData(
       ticket: snapshotTicket,
       snapshot: snapshot,
       vendor: vendor,
     );
+    if (mounted && revision == _detailsRevision) _lastDetails = data;
+    return data;
   }
 
   Future<VendorSummary> _loadVendor(QueueTicket ticket) async {
+    if (_vendorCache != null) return _vendorCache!;
     final repository = widget.directoryRepository;
     final tenantSlug = ticket.tenantSlug?.trim();
     if (repository == null || tenantSlug == null || tenantSlug.isEmpty) {
       return _fallbackVendor(ticket);
     }
     try {
-      return await repository.loadVendor(tenantSlug);
+      final vendor = await repository.loadVendor(tenantSlug);
+      _vendorCache = vendor;
+      return vendor;
     } catch (_) {
       return _fallbackVendor(ticket);
     }
@@ -5510,23 +5554,27 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   Future<void> _refresh() async {
-    final details = _loadDetails(refreshTicket: true);
-    setState(() {
-      _details = details;
-    });
+    if (_pollingStatus) return;
+    _pollingStatus = true;
     try {
-      await details;
+      final data = await _loadDetails(refreshTicket: true);
       if (mounted) {
+        setState(() {
+          _details = SynchronousFuture(data);
+          _syncError = null;
+        });
+        _activity.resume();
         showFeedbackToast(context, message: 'Ticket status refreshed.');
       }
     } catch (_) {
       if (mounted) {
-        showFeedbackToast(
-          context,
-          message: 'Could not refresh ticket status.',
-          isError: true,
+        setState(
+          () => _syncError =
+              'Could not refresh. Showing the last available ticket details.',
         );
       }
+    } finally {
+      _pollingStatus = false;
     }
   }
 
@@ -5585,7 +5633,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       child: FutureBuilder<_TicketDetailsData>(
         future: _details,
         builder: (context, snapshot) {
-          final details = snapshot.data;
+          final details = snapshot.data ?? _lastDetails;
           final ticket = _displayedTicket ?? details?.ticket ?? widget.ticket;
           final vendor = details?.vendor ?? _fallbackVendor(ticket);
           final completed =
@@ -5594,265 +5642,280 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
               ticket.isActive &&
               !ticket.isServiceCompleted &&
               ticket.customerConfirmedAt == null;
-          return Stack(
-            children: [
-              RefreshTrigger(
-                key: const Key('ticket-details-refresh'),
-                onRefresh: _refresh,
-                child: ListView(
-                  key: const Key('ticket-details-page'),
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, showQr ? 100 : 20),
-                  children: [
-                    if (ticket.needsArrival && !ticket.isServiceCompleted) ...[
-                      Container(
-                        key: const Key('ticket-called-alert'),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: GetPrioTheme.orange.withValues(alpha: .12),
-                          borderRadius: BorderRadius.circular(16),
+          return DetailActivityBoundary(
+            activity: _activity,
+            child: Stack(
+              children: [
+                RefreshTrigger(
+                  key: const Key('ticket-details-refresh'),
+                  onRefresh: _refresh,
+                  child: ListView(
+                    key: const Key('ticket-details-page'),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, showQr ? 100 : 20),
+                    children: [
+                      if (_activity.paused)
+                        DetailAutoUpdateNotice(onRefresh: _refresh),
+                      if (_syncError != null) Text(_syncError!),
+                      if (ticket.needsArrival &&
+                          !ticket.isServiceCompleted) ...[
+                        Container(
+                          key: const Key('ticket-called-alert'),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: GetPrioTheme.orange.withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Text(
+                            'Your ticket was called. Proceed to the vendor.',
+                          ),
                         ),
-                        child: const Text(
-                          'Your ticket was called. Proceed to the vendor.',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    DetailPassCard(
-                      key: const Key('ticket-details-card'),
-                      ticketCutouts: true,
-                      vendor: vendor,
-                      footer: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if ((ticket.canBeCancelled &&
-                                  widget.onCancel != null) ||
-                              (ticket.status == TicketStatus.served &&
-                                  widget.directoryRepository?.social != null))
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  if (ticket.canBeCancelled &&
-                                      widget.onCancel != null) ...[
-                                    const SizedBox(height: 20),
-                                    GetPrioActionButton.destructive(
-                                      key: const Key('ticket-details-cancel'),
-                                      onPressed: _isCancelling
-                                          ? null
-                                          : _cancelTicket,
-                                      child: Text(
-                                        _isCancelling
-                                            ? 'Cancelling...'
-                                            : 'Cancel ticket',
-                                      ),
-                                    ),
-                                  ],
-                                  if (ticket.status == TicketStatus.served &&
-                                      widget.directoryRepository?.social !=
-                                          null) ...[
-                                    const SizedBox(height: 16),
-                                    TicketReviewAction(
-                                      key: ValueKey(
-                                        'review-${ticket.lookupCode}',
-                                      ),
-                                      repository:
-                                          widget.directoryRepository!.social!,
-                                      ticket: ticket,
-                                      prompt:
-                                          widget.ticket.status !=
-                                          TicketStatus.served,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                      children: [
-                        Row(
-                          key: const Key('ticket-vendor-heading'),
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 12),
+                      ],
+                      DetailPassCard(
+                        key: const Key('ticket-details-card'),
+                        ticketCutouts: true,
+                        vendor: vendor,
+                        footer: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              child: Text(ticket.vendorName ?? vendor.name)
-                                  .h3(),
-                            ),
-                            const SizedBox(width: 12),
-                            _TicketDetailStatus(ticket: ticket),
+                            if ((ticket.canBeCancelled &&
+                                    widget.onCancel != null) ||
+                                (ticket.status == TicketStatus.served &&
+                                    widget.directoryRepository?.social != null))
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  0,
+                                  20,
+                                  20,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (ticket.canBeCancelled &&
+                                        widget.onCancel != null) ...[
+                                      const SizedBox(height: 20),
+                                      GetPrioActionButton.destructive(
+                                        key: const Key('ticket-details-cancel'),
+                                        onPressed: _isCancelling
+                                            ? null
+                                            : _cancelTicket,
+                                        child: Text(
+                                          _isCancelling
+                                              ? 'Cancelling...'
+                                              : 'Cancel ticket',
+                                        ),
+                                      ),
+                                    ],
+                                    if (ticket.status == TicketStatus.served &&
+                                        widget.directoryRepository?.social !=
+                                            null) ...[
+                                      const SizedBox(height: 16),
+                                      TicketReviewAction(
+                                        key: ValueKey(
+                                          'review-${ticket.lookupCode}',
+                                        ),
+                                        repository:
+                                            widget.directoryRepository!.social!,
+                                        ticket: ticket,
+                                        prompt:
+                                            widget.ticket.status !=
+                                            TicketStatus.served,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
-                        if (ticket.locationName != null)
-                          Text(ticket.locationName!),
-                        const SizedBox(height: 12),
-                        const Divider(key: Key('ticket-heading-divider')),
-                        const SizedBox(height: 16),
-                        IntrinsicHeight(
-                          child: Row(
-                            key: const Key('ticket-customer-grid'),
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            key: const Key('ticket-vendor-heading'),
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Ticket number'),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      ticket.ticketNumber ?? ticket.lookupCode,
-                                      style: GetPrioTheme.ticketStyle(
-                                        Theme.of(context),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                child: Text(ticket.vendorName ?? vendor.name)
+                                    .h3(),
                               ),
-                              const SizedBox(width: 16),
-                              const VerticalDivider(width: 1, thickness: 1),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: DetailPassField(
-                                  label: 'Customer',
-                                  value: ticket.customerName,
-                                ),
-                              ),
+                              const SizedBox(width: 12),
+                              _TicketDetailStatus(ticket: ticket),
                             ],
                           ),
-                        ),
-                        if (widget.showJoinConfirmation &&
-                            (ticket.isActive || completed)) ...[
+                          if (ticket.locationName != null)
+                            Text(ticket.locationName!),
+                          const SizedBox(height: 12),
+                          const Divider(key: Key('ticket-heading-divider')),
                           const SizedBox(height: 16),
-                          if (completed)
+                          IntrinsicHeight(
+                            child: Row(
+                              key: const Key('ticket-customer-grid'),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Ticket number'),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        ticket.ticketNumber ??
+                                            ticket.lookupCode,
+                                        style: GetPrioTheme.ticketStyle(
+                                          Theme.of(context),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                const VerticalDivider(width: 1, thickness: 1),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: DetailPassField(
+                                    label: 'Customer',
+                                    value: ticket.customerName,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (widget.showJoinConfirmation &&
+                              (ticket.isActive || completed)) ...[
+                            const SizedBox(height: 16),
+                            if (completed)
+                              _TicketQueueStatusCard(
+                                ticket: ticket,
+                                completedWhileOpen: true,
+                              )
+                            else
+                              _TicketJoinSuccessNotice(ticket: ticket),
+                          ],
+                          const DetailPassDivider(),
+                          _TicketDetailRow(
+                            label: 'Joined',
+                            value: ticket.joinedAt == null
+                                ? 'Unavailable'
+                                : _formatTicketDateTime(ticket.joinedAt!),
+                          ),
+                          if (ticket.position != null)
+                            _TicketDetailRow(
+                              label: 'Position',
+                              value: '#${ticket.position}',
+                            ),
+                          _TicketDetailRow(
+                            label: ticket.isActive
+                                ? 'Estimated wait'
+                                : 'Total waiting time',
+                            value: ticket.isActive
+                                ? (ticket.estimatedWaitMinutes == null
+                                      ? 'Unavailable'
+                                      : '${ticket.estimatedWaitMinutes} min')
+                                : ticket.actualWaitingTimeLabel,
+                          ),
+                          if (ticket.queueLength != null)
+                            _TicketDetailRow(
+                              label: 'Queue length',
+                              value: '${ticket.queueLength} waiting',
+                            ),
+                          if (ticket.queueUpdatedAt != null)
+                            _TicketDetailRow(
+                              label: 'Last queue update',
+                              value: _formatTicketDateTime(
+                                ticket.queueUpdatedAt!,
+                              ),
+                            ),
+                          if (ticket.customerFriendlyStatusReason != null)
+                            _TicketDetailRow(
+                              label: 'Note',
+                              value: ticket.customerFriendlyStatusReason!,
+                              textAlign: TextAlign.left,
+                            ),
+                          if (ticket.serviceStartedAt != null)
+                            _TicketDetailRow(
+                              label: 'Service started',
+                              value: _formatTicketDateTime(
+                                ticket.serviceStartedAt!,
+                              ),
+                            ),
+                          if (ticket.serviceEndedAt != null)
+                            _TicketDetailRow(
+                              label: 'Service ended',
+                              value: _formatTicketDateTime(
+                                ticket.serviceEndedAt!,
+                              ),
+                            ),
+                          const SizedBox(height: 16),
+                          if (!(widget.showJoinConfirmation && completed) &&
+                              (ticket.serviceMessage != null ||
+                                  ticket.status != TicketStatus.called ||
+                                  ticket.isConfirmed ||
+                                  details?.snapshot != null))
                             _TicketQueueStatusCard(
                               ticket: ticket,
-                              completedWhileOpen: true,
-                            )
-                          else
-                            _TicketJoinSuccessNotice(ticket: ticket),
+                              completedWhileOpen: widget.ticket.isActive,
+                              snapshot: details?.snapshot,
+                              showMessage:
+                                  ticket.serviceMessage != null ||
+                                  ticket.status != TicketStatus.called ||
+                                  ticket.isConfirmed,
+                            ),
+                          if (snapshot.hasError && ticket.isActive) ...[
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Live queue details are temporarily unavailable.',
+                            ),
+                          ],
+                          const SizedBox(height: 20),
                         ],
-                        const DetailPassDivider(),
-                        _TicketDetailRow(
-                          label: 'Joined',
-                          value: ticket.joinedAt == null
-                              ? 'Unavailable'
-                              : _formatTicketDateTime(ticket.joinedAt!),
-                        ),
-                        if (ticket.position != null)
-                          _TicketDetailRow(
-                            label: 'Position',
-                            value: '#${ticket.position}',
-                          ),
-                        _TicketDetailRow(
-                          label: ticket.isActive
-                              ? 'Estimated wait'
-                              : 'Total waiting time',
-                          value: ticket.isActive
-                              ? (ticket.estimatedWaitMinutes == null
-                                    ? 'Unavailable'
-                                    : '${ticket.estimatedWaitMinutes} min')
-                              : ticket.actualWaitingTimeLabel,
-                        ),
-                        if (ticket.queueLength != null)
-                          _TicketDetailRow(
-                            label: 'Queue length',
-                            value: '${ticket.queueLength} waiting',
-                          ),
-                        if (ticket.queueUpdatedAt != null)
-                          _TicketDetailRow(
-                            label: 'Last queue update',
-                            value: _formatTicketDateTime(
-                              ticket.queueUpdatedAt!,
-                            ),
-                          ),
-                        if (ticket.customerFriendlyStatusReason != null)
-                          _TicketDetailRow(
-                            label: 'Note',
-                            value: ticket.customerFriendlyStatusReason!,
-                            textAlign: TextAlign.left,
-                          ),
-                        if (ticket.serviceStartedAt != null)
-                          _TicketDetailRow(
-                            label: 'Service started',
-                            value: _formatTicketDateTime(
-                              ticket.serviceStartedAt!,
-                            ),
-                          ),
-                        if (ticket.serviceEndedAt != null)
-                          _TicketDetailRow(
-                            label: 'Service ended',
-                            value: _formatTicketDateTime(
-                              ticket.serviceEndedAt!,
-                            ),
-                          ),
-                        const SizedBox(height: 16),
-                        if (!(widget.showJoinConfirmation && completed) &&
-                            (ticket.serviceMessage != null ||
-                                ticket.status != TicketStatus.called ||
-                                ticket.isConfirmed ||
-                                details?.snapshot != null))
-                          _TicketQueueStatusCard(
-                            ticket: ticket,
-                            completedWhileOpen: widget.ticket.isActive,
-                            snapshot: details?.snapshot,
-                            showMessage:
-                                ticket.serviceMessage != null ||
-                                ticket.status != TicketStatus.called ||
-                                ticket.isConfirmed,
-                          ),
-                        if (snapshot.hasError && ticket.isActive) ...[
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Live queue details are temporarily unavailable.',
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (showQr)
-                Positioned(
-                  right: 20,
-                  bottom: 20,
-                  child: SafeArea(
-                    top: false,
-                    child: Semantics(
-                      label: 'Show ticket QR code',
-                      button: true,
-                      child: GestureDetector(
-                        key: const Key('ticket-qr-fab'),
-                        onTap: () => _openQr(ticket),
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: GetPrioTheme.orange,
-                              width: 2,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x44000000),
-                                blurRadius: 14,
-                                offset: Offset(0, 4),
+                if (showQr)
+                  Positioned(
+                    right: 20,
+                    bottom: 20,
+                    child: SafeArea(
+                      top: false,
+                      child: Semantics(
+                        label: 'Show ticket QR code',
+                        button: true,
+                        child: GestureDetector(
+                          key: const Key('ticket-qr-fab'),
+                          onTap: () => _openQr(ticket),
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: GetPrioTheme.orange,
+                                width: 2,
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            LucideIcons.qrCode,
-                            color: GetPrioTheme.ink,
-                            size: 28,
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x44000000),
+                                  blurRadius: 14,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              LucideIcons.qrCode,
+                              color: GetPrioTheme.ink,
+                              size: 28,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           );
         },
       ),

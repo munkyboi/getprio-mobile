@@ -56,6 +56,45 @@ Future<void> openLive(WidgetTester tester, LiveApi api) async {
 
 void main() {
   testWidgets(
+    'booking interaction postpones idle pause; only successful refresh resumes',
+    (tester) async {
+      final api = LiveApi();
+      await openLive(tester, api);
+      await tester.pump(const Duration(minutes: 4));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Booking details'));
+      await tester.pump(const Duration(minutes: 4));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('detail-auto-update-paused')), findsNothing);
+      await tester.pump(const Duration(minutes: 1));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('detail-auto-update-paused')),
+        findsOneWidget,
+      );
+      final calls = api.requests;
+      await tester.pump(const Duration(minutes: 1));
+      expect(api.requests, calls);
+      api.fail = true;
+      await tester.tap(find.text('Refresh and resume'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('detail-auto-update-paused')),
+        findsOneWidget,
+      );
+      api.fail = false;
+      await tester.tap(find.text('Refresh and resume'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('detail-auto-update-paused')), findsNothing);
+      final resumed = api.requests;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pumpAndSettle();
+      expect(api.requests, resumed + 1);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'polls visible booking and preserves payment draft during errors',
     (tester) async {
       final api = LiveApi();
