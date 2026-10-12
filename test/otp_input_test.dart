@@ -40,6 +40,11 @@ void main() {
       expect(controller.text, '123456');
       expect(completed, ['123456']);
       final display = tester.widget<InputOTP>(find.byType(InputOTP));
+      expect(display.children, hasLength(6));
+      expect(
+        display.children.every((child) => child is CharacterInputOTPChild),
+        isTrue,
+      );
       expect(
         display.children.whereType<CharacterInputOTPChild>().every(
           (child) => child.obscured,

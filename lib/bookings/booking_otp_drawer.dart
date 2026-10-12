@@ -160,30 +160,72 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
               onCompleted: (_) => unawaited(_submit()),
               enabled: !_busy && !_expired,
               validation: formValidation,
+              trailing: Semantics(
+                label: _resendSeconds > 0
+                    ? 'Resend code in $_resendSeconds seconds'
+                    : 'Resend code',
+                child: GhostButton(
+                  key: const Key('booking-otp-resend'),
+                  onPressed: _busy || _resendSeconds > 0 ? null : _resend,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(LucideIcons.history, size: 18),
+                      const SizedBox(width: 4),
+                      Text(_resendSeconds > 0 ? '${_resendSeconds}s' : 'Resend'),
+                    ],
+                  ),
+                ),
+              ),
             ),
             if (_expired)
               const Text('This code has expired. Request a new code.'),
             if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
             const SizedBox(height: 16),
-            PrimaryButton(
-              onPressed: _busy || _expired ? null : _submit,
-              child: Text(
-                _busy ? 'Please wait...' : 'Submit request and continue',
-              ),
-            ),
-            const SizedBox(height: 8),
-            OutlineButton(
-              onPressed: _busy || _resendSeconds > 0 ? null : _resend,
-              child: Text(
-                _resendSeconds > 0
-                    ? 'Resend in ${_resendSeconds}s'
-                    : 'Resend code',
-              ),
-            ),
-            const SizedBox(height: 8),
-            OutlineButton(
-              onPressed: _busy ? null : () => closeDrawer(context),
-              child: const Text('Edit booking details'),
+
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: OutlineButton(
+                    key: const Key('booking-otp-details'),
+                    alignment: Alignment.center,
+                    onPressed: _busy ? null : () => closeDrawer(context),
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.undo2, size: 18),
+                        const SizedBox(width: 6),
+                        const Expanded(
+                          child: Text(
+                            'Booking details',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: PrimaryButton(
+                    key: const Key('booking-otp-submit'),
+                    alignment: Alignment.center,
+                    onPressed: _busy || _expired ? null : _submit,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _busy ? 'Please wait...' : 'Submit and continue',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(LucideIcons.arrowRight, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

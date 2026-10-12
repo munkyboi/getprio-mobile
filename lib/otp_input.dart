@@ -16,6 +16,7 @@ class GetPrioOtpInput extends StatefulWidget {
     this.onChanged,
     this.onCompleted,
     this.onTap,
+    this.trailing,
   });
 
   final TextEditingController controller;
@@ -27,6 +28,7 @@ class GetPrioOtpInput extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onCompleted;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   @override
   State<GetPrioOtpInput> createState() => _GetPrioOtpInputState();
@@ -79,15 +81,12 @@ class _GetPrioOtpInputState extends State<GetPrioOtpInput> {
                                 : null,
                           ),
                           children: [
-                            for (var i = 0; i < 7; i++)
-                              if (i == 3)
-                                InputOTPChild.separator
-                              else
-                                InputOTPChild.character(
-                                  allowDigit: true,
-                                  obscured: true,
-                                  readOnly: true,
-                                ),
+                            for (var i = 0; i < 6; i++)
+                              InputOTPChild.character(
+                                allowDigit: true,
+                                obscured: true,
+                                readOnly: true,
+                              ),
                           ],
                         ),
                       ),
@@ -132,11 +131,11 @@ class _GetPrioOtpInputState extends State<GetPrioOtpInput> {
             Semantics(
               label: '${widget.label}, 6 digits',
               child: widget.validation == null
-                  ? field
+                  ? _withTrailing(field)
                   : ValidatedField(
                       validation: widget.validation!,
                       controller: widget.controller,
-                      child: field,
+                      child: _withTrailing(field),
                     ),
             ),
           ],
@@ -144,4 +143,17 @@ class _GetPrioOtpInputState extends State<GetPrioOtpInput> {
       },
     );
   }
+
+  Widget _withTrailing(Widget field) => widget.trailing == null
+      ? field
+      : Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: FittedBox(fit: BoxFit.scaleDown, child: field),
+            ),
+            const SizedBox(width: 8),
+            widget.trailing!,
+          ],
+        );
 }

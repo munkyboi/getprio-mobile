@@ -215,6 +215,8 @@ void main() {
   testWidgets(
     'booking page uses OTP-bound payload, blocks duplicates and completes',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final api = _BookingApi()..createGate = Completer<void>();
       CustomerBooking? created;
       final service = BookingService.fromJson(_service);
@@ -267,6 +269,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('booking-otp-drawer')), findsOneWidget);
       expect(find.text('Verify email'), findsOneWidget);
+      final detailsAction = find.byKey(const Key('booking-otp-details'));
+      final submitAction = find.byKey(const Key('booking-otp-submit'));
+      expect(
+        tester.getTopLeft(detailsAction).dy,
+        tester.getTopLeft(submitAction).dy,
+      );
+      expect(
+        tester.getCenter(detailsAction).dx,
+        lessThan(tester.getCenter(submitAction).dx),
+      );
+      final resend = find.byKey(const Key('booking-otp-resend'));
+      expect(
+        tester.getCenter(resend).dy,
+        closeTo(tester.getCenter(find.byType(InputOTP)).dy, 1),
+      );
+
       expect(api.otpPayload?['locationSlug'], 'primary');
       expect(api.otpPayload?['bundleItems'], [
         {'serviceSlug': 'consult', 'bookingQuantity': 1},
