@@ -13,7 +13,12 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'queue_repository_test.dart' show FakeAuthApiForTransport;
 
 void main() {
-  for (final source in ['canonical', 'unavailable', 'wrong ticket']) {
+  for (final source in [
+    'canonical',
+    'unavailable',
+    'wrong ticket',
+    'stale waiting',
+  ]) {
     test('called preview fallback safely handles $source snapshot', () async {
       final auth = AuthRepository(
         api: FakeAuthApiForTransport(),
@@ -53,10 +58,14 @@ void main() {
               return http.Response(
                 jsonEncode({
                   'focusTicket': {
-                    'lookupCode': 'OTHER',
-                    'status': 'called',
-                    'customerConfirmedAt': '2026-10-10T04:00:00Z',
-                    'serviceStartedAt': '2026-10-10T04:01:00Z',
+                    'lookupCode': source == 'stale waiting'
+                        ? 'ABC123'
+                        : 'OTHER',
+                    'status': source == 'stale waiting' ? 'waiting' : 'called',
+                    if (source != 'stale waiting') ...{
+                      'customerConfirmedAt': '2026-10-10T04:00:00Z',
+                      'serviceStartedAt': '2026-10-10T04:01:00Z',
+                    },
                   },
                 }),
                 200,

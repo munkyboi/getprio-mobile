@@ -2028,6 +2028,7 @@ class _CustomerShellState extends State<CustomerShell>
   bool _inboxOpen = false;
   int _bookingPushGeneration = 0;
   bool _bookingPushOpen = false;
+  BookingRepository? _bookingRepository;
   final _pendingBookingTaps = <(PushSignal, String)>[];
   Route<void>? _bookingPushRoute;
   NavigatorState? _bookingPushNavigator;
@@ -2039,6 +2040,7 @@ class _CustomerShellState extends State<CustomerShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _resetBookingRepository();
     widget.ticketRepository?.servedTicket.addListener(_promptServedTicket);
     widget.pushSignal?.addListener(_handlePushSignal);
     _startTicketRefreshFallback();
@@ -2108,6 +2110,11 @@ class _CustomerShellState extends State<CustomerShell>
       _bookingPushOpen = false;
       widget.pushSignal?.value = null;
       _resetInbox();
+    }
+    if (oldWidget.user?.id != widget.user?.id ||
+        oldWidget.directoryRepository != widget.directoryRepository ||
+        oldWidget.sandbox != widget.sandbox) {
+      _resetBookingRepository();
     }
     if (oldWidget.pushSignal != widget.pushSignal) {
       oldWidget.pushSignal?.removeListener(_handlePushSignal);
@@ -2487,6 +2494,8 @@ class _CustomerShellState extends State<CustomerShell>
                     onOpenTicketDetails: _openTicketDetails,
                   ),
                   ExplorePage(
+                    customer: widget.user,
+                    bookingRepository: _bookingRepository,
                     repository: widget.directoryRepository,
                     queueRepository: widget.queueRepository,
                     onOpenJoin: (host, vendor, locationSlug) =>
@@ -2530,10 +2539,9 @@ class _CustomerShellState extends State<CustomerShell>
     );
   }
 
-  BookingRepository? get _bookingRepository {
-    if (widget.sandbox) return null;
+  void _resetBookingRepository() {
     final api = widget.directoryRepository?.api;
-    return api is RestDirectoryApi
+    _bookingRepository = !widget.sandbox && api is RestDirectoryApi
         ? BookingRepository(RestBookingApi(api.client))
         : null;
   }
@@ -2638,6 +2646,8 @@ class _CustomerShellState extends State<CustomerShell>
         builder: (_) => VendorDetailPage(
           vendor: vendor,
           repository: repository,
+          customer: widget.user,
+          bookingRepository: _bookingRepository,
           queueRepository: widget.queueRepository,
           onJoinLocationWithContext: (host, location) =>
               unawaited(_openVendorJoin(host, vendor, location.slug)),
@@ -3196,8 +3206,12 @@ class ExplorePage extends StatefulWidget {
     this.repository,
     this.queueRepository,
     this.onOpenJoin,
+    this.customer,
+    this.bookingRepository,
   });
 
+  final AuthUser? customer;
+  final BookingRepository? bookingRepository;
   final DirectoryRepository? repository;
   final QueueRepository? queueRepository;
   final void Function(BuildContext, VendorSummary, String?)? onOpenJoin;
@@ -3376,6 +3390,8 @@ class _ExplorePageState extends State<ExplorePage> {
                           child: _VendorCard(
                             vendor: vendor,
                             repository: directoryRepository,
+                            customer: widget.customer,
+                            bookingRepository: widget.bookingRepository,
                             queueRepository: widget.queueRepository,
                             onOpenJoin: widget.onOpenJoin,
                           ),
@@ -3411,8 +3427,12 @@ class _VendorCard extends StatelessWidget {
     required this.repository,
     this.queueRepository,
     this.onOpenJoin,
+    this.customer,
+    this.bookingRepository,
   });
 
+  final AuthUser? customer;
+  final BookingRepository? bookingRepository;
   final VendorSummary vendor;
   final DirectoryRepository repository;
   final QueueRepository? queueRepository;
@@ -3426,6 +3446,8 @@ class _VendorCard extends StatelessWidget {
           SwipeBackPageRoute<void>(
             builder: (context) => VendorDetailPage(
               vendor: vendor,
+              customer: customer,
+              bookingRepository: bookingRepository,
               repository: repository,
               queueRepository: queueRepository,
               onJoinLocationWithContext: onOpenJoin == null
@@ -3614,12 +3636,14 @@ class VendorDetailPage extends StatefulWidget {
     required this.repository,
     this.queueRepository,
     this.bookingRepository,
+    this.customer,
     this.onJoinQueue,
     this.onJoinLocation,
     this.onJoinLocationWithContext,
     this.contactLauncher = const ExternalVendorContactLauncher(),
   });
 
+  final AuthUser? customer;
   final VendorSummary vendor;
   final DirectoryRepository repository;
   final QueueRepository? queueRepository;
@@ -3635,17 +3659,30 @@ class VendorDetailPage extends StatefulWidget {
 
 class _VendorDetailPageState extends State<VendorDetailPage> {
   late Future<VendorSummary> _details;
+  BookingRepository? _fallbackBookingRepository;
   int _queueRefreshVersion = 0;
 
   @override
   void initState() {
     super.initState();
     _details = widget.repository.loadVendor(widget.vendor.slug);
+    final api = widget.repository.api;
+    if (api is RestDirectoryApi) {
+      _fallbackBookingRepository = BookingRepository(
+        RestBookingApi(api.client),
+      );
+    }
   }
 
   @override
   void didUpdateWidget(covariant VendorDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository) {
+      final api = widget.repository.api;
+      _fallbackBookingRepository = api is RestDirectoryApi
+          ? BookingRepository(RestBookingApi(api.client))
+          : null;
+    }
     if (oldWidget.repository != widget.repository ||
         oldWidget.vendor.slug != widget.vendor.slug ||
         oldWidget.queueRepository != widget.queueRepository) {
@@ -3778,16 +3815,9 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
                     (widget.onJoinQueue == null
                         ? null
                         : (_) => widget.onJoinQueue!()),
+                customer: widget.customer,
                 bookingRepository:
-                    widget.bookingRepository ??
-                    (widget.repository.api is RestDirectoryApi
-                        ? BookingRepository(
-                            RestBookingApi(
-                              (widget.repository.api as RestDirectoryApi)
-                                  .client,
-                            ),
-                          )
-                        : null),
+                    widget.bookingRepository ?? _fallbackBookingRepository,
                 onContact: details.contactEmail == null
                     ? null
                     : () => _openContactSheet(context, details),
@@ -3810,12 +3840,14 @@ class _VendorProfileView extends StatefulWidget {
     required this.onBack,
     required this.onJoinLocation,
     this.bookingRepository,
+    this.customer,
     required this.onContact,
   });
 
   static const surfaceOverlap = 44.0;
   static const logoSize = 104.0;
 
+  final AuthUser? customer;
   final VendorSocialRepository? socialRepository;
   final VendorSummary vendor;
   final int openLocations;
@@ -3977,11 +4009,6 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
     }
     _openingBooking = true;
     try {
-      AuthUser? customer;
-      final api = widget.bookingRepository!.api;
-      if (api is RestBookingApi) {
-        customer = (await api.client.authRepository.restoreSession())?.user;
-      }
       if (!mounted) return;
       final booking = await Navigator.of(context).push<CustomerBooking>(
         SwipeBackPageRoute<CustomerBooking>(
@@ -3991,7 +4018,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
             location: _location!,
             services: _services,
             selected: _selectedServices,
-            customer: customer,
+            customer: widget.customer,
           ),
         ),
       );
@@ -5771,7 +5798,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     );
     // Preserve account progress over lagging public snapshots, but accept later progress.
     final accountTerminal =
-        ticket.progressRank >= 2 &&
+        ticket.progressRank > 0 &&
         ticket.progressRank >= (snapshot.focusTicket?.progressRank ?? 0);
     final snapshotTicket = accountTerminal
         ? ticket
@@ -6139,15 +6166,14 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
                                   ticket.status != TicketStatus.called ||
                                   ticket.isConfirmed,
                             ),
-                          if (ticket.status == TicketStatus.served &&
+                          if (completed &&
                               widget.directoryRepository?.social != null) ...[
                             const SizedBox(height: 16),
                             TicketReviewAction(
                               key: ValueKey('review-${ticket.lookupCode}'),
                               repository: widget.directoryRepository!.social!,
                               ticket: ticket,
-                              prompt:
-                                  widget.ticket.status != TicketStatus.served,
+                              prompt: widget.ticket.isActive,
                             ),
                           ],
                           if (snapshot.hasError && ticket.isActive) ...[

@@ -25,49 +25,60 @@ class Presenter implements ForegroundNotificationPresenter {
 }
 
 void main() {
-  testWidgets(
-    'native launch payload is delivered once across initialize calls',
-    (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      addTearDown(() => debugDefaultTargetPlatformOverride = null);
-      const channel = MethodChannel(
-        'dexterous.com/flutter/local_notifications',
-      );
-      var queries = 0;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
-        call,
-      ) async {
-        if (call.method == 'initialize') return true;
-        if (call.method == 'getNotificationAppLaunchDetails') {
-          queries++;
-          return {
-            'notificationLaunchedApp': true,
-            'notificationResponse': {
-              'notificationId': 1,
-              'notificationResponseType': 0,
-              'payload': 'payload',
-            },
-          };
-        }
-        return null;
-      });
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+  for (final failFirstQuery in [false, true]) {
+    testWidgets(
+      'native launch payload delivered once with initial failure=$failFirstQuery',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        const channel = MethodChannel(
+          'dexterous.com/flutter/local_notifications',
+        );
+        var queries = 0;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           channel,
-          null,
-        ),
-      );
-      AndroidFlutterLocalNotificationsPlugin.registerWith();
-      final presenter = NativeForegroundNotificationPresenter();
-      expect(await presenter.initialize(), isTrue);
-      expect(await presenter.initialPayload, 'payload');
-      await presenter.initialize();
-      expect(await presenter.initialPayload, isNull);
-      expect(queries, 1);
-      debugDefaultTargetPlatformOverride = null;
-    },
-  );
-
+          (call) async {
+            if (call.method == 'initialize') return true;
+            if (call.method == 'getNotificationAppLaunchDetails') {
+              queries++;
+              if (failFirstQuery && queries == 1) {
+                throw PlatformException(code: 'temporary');
+              }
+              return {
+                'notificationLaunchedApp': true,
+                'notificationResponse': {
+                  'notificationId': 1,
+                  'notificationResponseType': 0,
+                  'payload': 'payload',
+                },
+              };
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            null,
+          ),
+        );
+        AndroidFlutterLocalNotificationsPlugin.registerWith();
+        final presenter = NativeForegroundNotificationPresenter();
+        expect(await presenter.initialize(), isTrue);
+        if (failFirstQuery) {
+          await expectLater(
+            presenter.initialPayload,
+            throwsA(isA<PlatformException>()),
+          );
+        }
+        expect(await presenter.initialPayload, 'payload');
+        await presenter.initialize();
+        expect(await presenter.initialPayload, isNull);
+        expect(queries, failFirstQuery ? 2 : 1);
+        debugDefaultTargetPlatformOverride = null;
+      },
+    );
+  }
   test(
     'foreground reminder banner preserves booking link for explicit local tap',
     () async {

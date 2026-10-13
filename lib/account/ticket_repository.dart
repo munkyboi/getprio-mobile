@@ -302,8 +302,9 @@ class RestAccountQueueApi
                 focus['lookupCode'] != ticket.lookupCode) {
               return raw;
             }
-            if (ticket.progressRank >= 2 &&
-                ticket.progressRank >= QueueTicket.fromJson(focus).progressRank) {
+            if (ticket.progressRank > 0 &&
+                ticket.progressRank >=
+                    QueueTicket.fromJson(focus).progressRank) {
               return raw;
             }
             // Retain account metadata while using the queue's live lifecycle data.

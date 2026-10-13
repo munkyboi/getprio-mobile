@@ -257,7 +257,9 @@ class _BookingProofSummaryState extends State<BookingProofSummary> {
       _error = null;
     });
     try {
-      final url = await widget.repository.paymentProofUrl(widget.booking.id);
+      final url = await widget.repository
+          .paymentProofUrl(widget.booking.id)
+          .timeout(const Duration(seconds: 20));
       if (!mounted) return;
       await Navigator.of(context).push(
         SwipeBackPageRoute<void>(

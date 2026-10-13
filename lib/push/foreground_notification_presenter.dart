@@ -36,8 +36,9 @@ class NativeForegroundNotificationPresenter
   @override
   Future<String?> get initialPayload async {
     if (!_initialized || _launchPayloadConsumed) return null;
-    _launchPayloadConsumed = true;
     final details = await _plugin.getNotificationAppLaunchDetails();
+    if (_launchPayloadConsumed) return null;
+    _launchPayloadConsumed = true;
     return details?.didNotificationLaunchApp == true
         ? details?.notificationResponse?.payload
         : null;
