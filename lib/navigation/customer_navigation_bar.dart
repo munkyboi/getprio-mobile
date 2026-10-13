@@ -2,7 +2,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 
-enum CustomerDestination { home, explore, tickets, account }
+enum CustomerDestination { home, explore, lists, account }
 
 class CustomerNavigationBar extends StatelessWidget {
   const CustomerNavigationBar({
@@ -11,18 +11,19 @@ class CustomerNavigationBar extends StatelessWidget {
     required this.onDestinationSelected,
     required this.onJoinQueue,
     this.exploreEnabled = true,
+    this.bookingsEnabled = true,
   });
 
   final CustomerDestination selectedDestination;
   final ValueChanged<CustomerDestination> onDestinationSelected;
   final VoidCallback onJoinQueue;
-  final bool exploreEnabled;
+  final bool exploreEnabled, bookingsEnabled;
 
   @override
   Widget build(BuildContext context) {
     return NavigationBar(
       key: const Key('customer-main-menu'),
-      backgroundColor: GetPrioTheme.paper,
+      backgroundColor: GetPrioTheme.colors(context).paper,
       alignment: NavigationBarAlignment.spaceBetween,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       spacing: 0,
@@ -49,9 +50,9 @@ class CustomerNavigationBar extends StatelessWidget {
         _joinQueueAction(context),
         _destinationItem(
           context: context,
-          destination: CustomerDestination.tickets,
-          label: 'Tickets',
-          icon: LucideIcons.ticket,
+          destination: CustomerDestination.lists,
+          label: bookingsEnabled ? 'Lists' : 'Tickets',
+          icon: bookingsEnabled ? LucideIcons.layoutGrid : LucideIcons.ticket,
         ),
         _destinationItem(
           context: context,
@@ -74,8 +75,8 @@ class CustomerNavigationBar extends StatelessWidget {
     final color = selected
         ? GetPrioTheme.orange
         : enabled
-        ? GetPrioTheme.ink
-        : GetPrioTheme.disabled;
+        ? GetPrioTheme.colors(context).ink
+        : GetPrioTheme.colors(context).disabled;
     return NavigationItem(
       key: ValueKey(destination),
       enabled: enabled,

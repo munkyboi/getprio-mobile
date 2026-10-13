@@ -1,3 +1,18 @@
+import 'uploads/compressed_image.dart';
+import 'notifications/notification_settings_card.dart';
+import 'queue/join_otp_drawer.dart';
+import 'navigation/pull_to_refresh.dart';
+import 'details/detail_auto_update.dart';
+import 'navigation/app_drawer.dart';
+import 'theme_artwork.dart';
+import 'navigation/list_filter_tabs.dart';
+import 'queue/ticket_list_row.dart';
+import 'appearance.dart';
+import 'navigation/tab_page_header.dart';
+import 'directory/vendor_profile_hero.dart';
+import 'details/detail_pass.dart';
+import 'details/ticket_barcode_viewer.dart';
+import 'details/ticket_barcode_state.dart';
 import 'queue/active_ticket_carousel.dart';
 import 'directory/expandable_vendor_description.dart';
 import 'social/vendor_social_widgets.dart';
@@ -8,7 +23,8 @@ import 'package:flutter/material.dart' show Icons;
 import 'dart:async';
 import 'dart:math';
 
-import 'package:barcode_widget/barcode_widget.dart';
+import 'branded_qr_code.dart';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'
     show FirebaseMessaging;
@@ -37,6 +53,12 @@ import 'directory/directory_repository.dart';
 import 'directory/vendor_contact.dart';
 import 'feedback_toast.dart';
 import 'form_validation.dart';
+import 'otp_input.dart';
+import 'navigation/lists_page.dart';
+import 'bookings/booking_repository.dart';
+import 'bookings/bookings_page.dart';
+import 'bookings/booking_page.dart';
+import 'bookings/service_selection.dart';
 import 'keyboard_avoidance.dart';
 import 'navigation/customer_navigation_bar.dart';
 import 'navigation/scroll_aware_app_bar.dart';
@@ -49,6 +71,10 @@ import 'queue/queue_models.dart';
 import 'queue/queue_repository.dart';
 import 'queue/current_queue_card.dart';
 import 'push/push_coordinator.dart';
+import 'notifications/notification_inbox.dart';
+import 'notifications/rest_notification_inbox_api.dart';
+import 'notifications/notification_inbox_page.dart';
+import 'navigation/main_page_top_bar.dart';
 import 'app_theme.dart';
 import 'loading_skeleton.dart';
 import 'onboarding/onboarding_gate.dart';
@@ -81,6 +107,7 @@ class GetPrioApp extends StatelessWidget {
     AuthRepository? authRepository,
     this.appVersion = '1.0.1',
     this.firebaseEnabled = false,
+    this.appearanceController,
     this.onboardingStore = const InstallationOnboardingStore(),
     MobileEnvironmentConfig? environmentConfig,
     ApprovedVendorStore? approvedVendorStore,
@@ -93,6 +120,7 @@ class GetPrioApp extends StatelessWidget {
            environmentConfig ?? MobileEnvironmentConfig.fromCompileTime(),
        approvedVendorStore = approvedVendorStore ?? SecureApprovedVendorStore();
 
+  final AppearanceController? appearanceController;
   final AuthRepository authRepository;
   final String appVersion;
   final bool firebaseEnabled;
@@ -172,25 +200,38 @@ class GetPrioApp extends StatelessWidget {
       paymentLinkSource: AppPaymentLinkSource(),
       pushCoordinator: pushCoordinator,
       pushSignal: pushSignal,
+      notificationInboxApi: environmentConfig.isSandbox
+          ? null
+          : RestNotificationInboxApi(apiClient),
       oauthFlow: oauthFlow,
       approvedVendorStore: approvedVendorStore,
     );
-    return ShadcnApp(
-      title: environmentConfig.appName,
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.light,
-      background: lightTheme.colorScheme.background,
-      theme: lightTheme,
-      onUnknownRoute: (settings) {
-        if (settings.name?.startsWith('/callback') != true) return null;
-        return PageRouteBuilder<void>(
-          settings: settings,
-          opaque: false,
-          pageBuilder: (_, _, _) => const _OAuthCallbackRoute(),
-        );
-      },
-      home: GetPrioTheme.wrap(
-        environmentConfig.isSandbox
+    return AppearanceHost(
+      controller: appearanceController,
+      builder: (mode) => ShadcnApp(
+        title: environmentConfig.appName,
+        debugShowCheckedModeBanner: false,
+        themeMode: mode,
+        darkTheme: GetPrioTheme.dark(),
+        builder: (context, child) => GetPrioTheme.wrap(
+          AnnotatedRegion<SystemUiOverlayStyle>(
+            value: GetPrioTheme.systemUi(context),
+            child: ColoredBox(
+              color: GetPrioTheme.colors(context).paper,
+              child: child!,
+            ),
+          ),
+        ),
+        theme: lightTheme,
+        onUnknownRoute: (settings) {
+          if (settings.name?.startsWith('/callback') != true) return null;
+          return PageRouteBuilder<void>(
+            settings: settings,
+            opaque: false,
+            pageBuilder: (_, _, _) => const _OAuthCallbackRoute(),
+          );
+        },
+        home: environmentConfig.isSandbox
             ? authGate
             : OnboardingGate(
                 store: onboardingStore,
@@ -269,6 +310,7 @@ class AuthGate extends StatefulWidget {
     this.paymentLinkSource,
     this.pushCoordinator,
     this.pushSignal,
+    this.notificationInboxApi,
     this.oauthFlow,
     this.approvedVendorStore,
     this.sandbox = false,
@@ -287,6 +329,7 @@ class AuthGate extends StatefulWidget {
   final PaymentLinkSource? paymentLinkSource;
   final PushCoordinator? pushCoordinator;
   final ValueNotifier<PushSignal?>? pushSignal;
+  final NotificationInboxApi? notificationInboxApi;
   final OAuthFlow? oauthFlow;
   final ApprovedVendorStore? approvedVendorStore;
   final bool sandbox;
@@ -357,6 +400,7 @@ class _AuthGateState extends State<AuthGate> {
         allowedHosts: widget.allowedHosts,
         paymentLinkSource: widget.paymentLinkSource,
         pushSignal: widget.pushSignal,
+        notificationInboxApi: widget.notificationInboxApi,
         approvedVendorStore: widget.approvedVendorStore,
         onSignOut: () => unawaited(_signOut()),
       );
@@ -386,6 +430,7 @@ class _AuthGateState extends State<AuthGate> {
             allowedHosts: widget.allowedHosts,
             paymentLinkSource: widget.paymentLinkSource,
             pushSignal: widget.pushSignal,
+            notificationInboxApi: widget.notificationInboxApi,
             approvedVendorStore: widget.approvedVendorStore,
             onSignOut: () => unawaited(_signOut()),
           );
@@ -500,10 +545,10 @@ class SplashLoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       key: const Key('splash-loading-screen'),
-      color: GetPrioTheme.paper,
+      color: GetPrioTheme.colors(context).paper,
       child: Center(
         child: SvgPicture.asset(
-          'assets/branding/logo.svg',
+          GetPrioArtwork.logo(context),
           key: const Key('splash-logo'),
           width: 180,
           fit: BoxFit.contain,
@@ -523,12 +568,9 @@ class _LabeledTextField extends StatefulWidget {
     this.focusNode,
     this.keyboardType,
     this.obscureText = false,
-    this.onTap,
     this.onChanged,
     this.supportingText,
     this.supportingTextColor,
-    this.inputFormatters,
-    this.maxLength,
   });
 
   final String label;
@@ -538,12 +580,9 @@ class _LabeledTextField extends StatefulWidget {
   final FocusNode? focusNode;
   final TextInputType? keyboardType;
   final bool obscureText;
-  final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
   final String? supportingText;
   final Color? supportingTextColor;
-  final List<TextInputFormatter>? inputFormatters;
-  final int? maxLength;
 
   @override
   State<_LabeledTextField> createState() => _LabeledTextFieldState();
@@ -586,10 +625,7 @@ class _LabeledTextFieldState extends State<_LabeledTextField> {
             ? const [InputFeature.passwordToggle()]
             : const [focusedClearInputFeature],
         scrollPadding: inputScrollPadding,
-        onTap: widget.onTap,
         onChanged: widget.onChanged,
-        inputFormatters: widget.inputFormatters,
-        maxLength: widget.maxLength,
         onEditingComplete: _dismissKeyboard,
       ),
     );
@@ -618,11 +654,54 @@ class _LabeledTextFieldState extends State<_LabeledTextField> {
           Text(
             widget.supportingText!,
             style: theme.typography.small.copyWith(
-              color: widget.supportingTextColor ?? GetPrioTheme.mutedInk,
+              color:
+                  widget.supportingTextColor ??
+                  GetPrioTheme.colors(context).mutedInk,
             ),
           ),
         ],
       ],
+    );
+  }
+}
+
+class _LabeledOtpField extends StatelessWidget {
+  const _LabeledOtpField({
+    required this.controller,
+    required this.label,
+    this.inputKey,
+    this.onChanged,
+    this.onCompleted,
+    this.trailing,
+  });
+  final TextEditingController controller;
+  final String label;
+  final Key? inputKey;
+  final Widget? trailing;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onCompleted;
+  @override
+  Widget build(BuildContext context) {
+    FormValidation? validation;
+    var enabled = true;
+    context.visitAncestorElements((element) {
+      if (element is StatefulElement && element.state is FormValidationMixin) {
+        final owner = element.state as FormValidationMixin;
+        validation = owner.formValidation;
+        enabled = !owner.formBusy;
+        return false;
+      }
+      return true;
+    });
+    return GetPrioOtpInput(
+      controller: controller,
+      trailing: trailing,
+      label: label,
+      inputKey: inputKey,
+      enabled: enabled,
+      validation: validation,
+      onChanged: onChanged,
+      onCompleted: onCompleted,
     );
   }
 }
@@ -708,7 +787,7 @@ class _RememberedLoginProfile extends StatelessWidget {
               key: const Key('biometric-profile-avatar'),
               width: 72,
               height: 72,
-              color: GetPrioTheme.paperAccent,
+              color: GetPrioTheme.colors(context).paperAccent,
               child: url == null || url.isEmpty
                   ? fallback
                   : CachedNetworkImage(
@@ -766,7 +845,6 @@ class _SignInPageState extends State<SignInPage>
   String? _error;
   bool _isBusy = false;
   bool _useRecoveryCode = false;
-  Timer? _keepFieldVisibleTimer;
   @override
   void initState() {
     super.initState();
@@ -802,7 +880,6 @@ class _SignInPageState extends State<SignInPage>
 
   @override
   void dispose() {
-    _keepFieldVisibleTimer?.cancel();
     _identifierController.dispose();
     _passwordController.dispose();
     _mfaController.dispose();
@@ -828,26 +905,37 @@ class _SignInPageState extends State<SignInPage>
         child: Center(
           child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(
-              24,
-              24,
-              24,
-              24 + MediaQuery.viewInsetsOf(context).bottom,
-            ),
+            padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const AspectRatio(
+                  AspectRatio(
                     aspectRatio: 3 / 2,
-                    child: Image(
-                      image: AssetImage(
-                        'assets/branding/login-biometric-scene.png',
-                      ),
-                      fit: BoxFit.contain,
-                      semanticLabel:
-                          'GetPrio customers waiting and checking in',
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image(
+                          image: AssetImage(GetPrioArtwork.login(context)),
+                          fit: BoxFit.contain,
+                          semanticLabel:
+                              'GetPrio customers waiting and checking in',
+                        ),
+                        if (GetPrioTheme.colors(context).dark)
+                          Align(
+                            alignment: const Alignment(-.02, -.1),
+                            child: FractionallySizedBox(
+                              widthFactor: .21,
+                              heightFactor: .29,
+                              child: SvgPicture.asset(
+                                GetPrioArtwork.logo(context),
+                                fit: BoxFit.contain,
+                                excludeFromSemantics: true,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -879,7 +967,6 @@ class _SignInPageState extends State<SignInPage>
                         label: 'Email or username',
                         placeholder: 'you@example.com or username',
                         keyboardType: TextInputType.emailAddress,
-                        onTap: () => _keepFieldVisible(_identifierController),
                       ),
                     const SizedBox(height: 12),
                     _LabeledTextField(
@@ -888,7 +975,6 @@ class _SignInPageState extends State<SignInPage>
                       label: 'Password',
                       placeholder: 'Enter your password',
                       obscureText: true,
-                      onTap: () => _keepFieldVisible(_passwordController),
                     ),
                     const SizedBox(height: 20),
                     GetPrioActionButton.primary(
@@ -995,16 +1081,13 @@ class _SignInPageState extends State<SignInPage>
                         controller: _recoveryController,
                         label: 'Recovery code',
                         placeholder: 'Enter a recovery code',
-                        onTap: () => _keepFieldVisible(_recoveryController),
                       )
                     else
-                      _LabeledTextField(
+                      _LabeledOtpField(
                         inputKey: const Key('mfa-code'),
+                        onCompleted: (_) => unawaited(_verifyMfa(challenge)),
                         controller: _mfaController,
                         label: 'Authenticator code',
-                        placeholder: 'Enter your 6-digit code',
-                        keyboardType: TextInputType.number,
-                        onTap: () => _keepFieldVisible(_mfaController),
                       ),
                     const SizedBox(height: 12),
                     GetPrioActionButton.primary(
@@ -1046,51 +1129,6 @@ class _SignInPageState extends State<SignInPage>
         ),
       ),
     );
-  }
-
-  void _keepFieldVisible(TextEditingController controller) {
-    void ensureVisible() {
-      final fieldContext = formValidation.keyFor(controller).currentContext;
-      if (!mounted || fieldContext == null || !fieldContext.mounted) return;
-      final fieldRenderObject = fieldContext.findRenderObject();
-      final scrollable = Scrollable.maybeOf(fieldContext);
-      if (fieldRenderObject is! RenderBox ||
-          !fieldRenderObject.hasSize ||
-          scrollable == null) {
-        return;
-      }
-
-      final fieldTop = fieldRenderObject.localToGlobal(Offset.zero).dy;
-      final fieldBottom = fieldTop + fieldRenderObject.size.height;
-      final viewInsets = MediaQuery.viewInsetsOf(context);
-      final keyboardTop = MediaQuery.sizeOf(context).height - viewInsets.bottom;
-      const safeGap = 24.0;
-      final scrollDelta = fieldBottom > keyboardTop - safeGap
-          ? fieldBottom - (keyboardTop - safeGap)
-          : fieldTop < safeGap
-          ? fieldTop - safeGap
-          : 0.0;
-      if (scrollDelta == 0) return;
-
-      final position = scrollable.position;
-      final target = (position.pixels + scrollDelta).clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      position.animateTo(
-        target,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ensureVisible();
-      _keepFieldVisibleTimer?.cancel();
-      _keepFieldVisibleTimer = Timer(const Duration(milliseconds: 250), () {
-        if (mounted) ensureVisible();
-      });
-    });
   }
 
   Future<void> _signIn() async {
@@ -1353,24 +1391,25 @@ class _RegisterPageState extends State<RegisterPage>
   Widget build(BuildContext context) {
     final challenge = _registrationChallenge;
     return ScrollNotificationObserver(
-      child: Scaffold(
+      child: ScrollAwareScaffold(
+        resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(
             title: Text(challenge == null ? 'Create account' : 'Verify email'),
             leading: [
-              GhostButton(
-                onPressed: () => Navigator.of(context).pop(),
-                density: ButtonDensity.icon,
-                child: const Icon(LucideIcons.arrowLeft),
-              ),
+              GetPrioBackButton(onPressed: () => Navigator.of(context).pop()),
             ],
           ),
         ],
-        child: KeyboardAwareScrollView(
-          padding: const EdgeInsets.all(24),
-          child: challenge == null
-              ? _buildRegistrationForm(context)
-              : _buildOtpForm(context, challenge),
+        child: SafeArea(
+          top: false,
+          child: KeyboardAwareScrollView(
+            reserveKeyboardSpace: false,
+            padding: const EdgeInsets.all(24),
+            child: challenge == null
+                ? _buildRegistrationForm(context)
+                : _buildOtpForm(context, challenge),
+          ),
         ),
       ),
     );
@@ -1380,6 +1419,7 @@ class _RegisterPageState extends State<RegisterPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const ScrollAwareHeaderSpace(),
         const Text('Customer registration').h1(),
         const SizedBox(height: 8),
         const Text('Create your account to manage bookings and queue tickets.'),
@@ -1406,8 +1446,8 @@ class _RegisterPageState extends State<RegisterPage>
               ? null
               : _usernameMessage,
           supportingTextColor: _checkingUsername
-              ? GetPrioTheme.mutedInk
-              : GetPrioTheme.teal,
+              ? GetPrioTheme.colors(context).mutedInk
+              : GetPrioTheme.colors(context).teal,
         ),
         const SizedBox(height: 12),
         _LabeledTextField(
@@ -1454,32 +1494,28 @@ class _RegisterPageState extends State<RegisterPage>
       key: const Key('register-otp-screen'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const ScrollAwareHeaderSpace(),
         const Text('Verify your email').h1(),
         const SizedBox(height: 8),
         Text(
           'We sent a 6-digit verification code to ${challenge.deliveryTarget}.',
         ),
         const SizedBox(height: 20),
-        _LabeledTextField(
+        _LabeledOtpField(
           inputKey: const Key('register-otp'),
+          trailing: OtpResendButton(
+            key: const Key('register-otp-resend'),
+            onPressed: _busy ? null : _resendRegistrationOtp,
+          ),
+          onCompleted: (_) => unawaited(_verifyRegistrationOtp()),
           controller: _otp,
           label: 'Verification code',
-          placeholder: 'Enter your 6-digit code',
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          maxLength: 6,
         ),
         const SizedBox(height: 20),
         GetPrioActionButton.primary(
           key: const Key('register-otp-submit'),
           onPressed: _busy ? null : _verifyRegistrationOtp,
           child: Text(_busy ? 'Verifying...' : 'Verify email'),
-        ),
-        const SizedBox(height: 8),
-        GetPrioActionButton.outline(
-          key: const Key('register-otp-resend'),
-          onPressed: _busy ? null : _resendRegistrationOtp,
-          child: const Text('Resend code'),
         ),
         const SizedBox(height: 8),
         GetPrioActionButton.outline(
@@ -1747,7 +1783,7 @@ class _PasswordStrengthIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final progressColor = strength.isValid
-        ? GetPrioTheme.teal
+        ? GetPrioTheme.colors(context).teal
         : strength.score >= 3
         ? GetPrioTheme.orange
         : theme.colorScheme.destructive;
@@ -1774,7 +1810,7 @@ class _PasswordStrengthIndicator extends StatelessWidget {
           value: strength.score / 5,
           minHeight: 6,
           color: progressColor,
-          backgroundColor: GetPrioTheme.paperAccent,
+          backgroundColor: GetPrioTheme.colors(context).paperAccent,
         ),
         const SizedBox(height: 8),
         _PasswordRequirement(
@@ -1818,13 +1854,17 @@ class _PasswordRequirement extends StatelessWidget {
           Icon(
             met ? LucideIcons.circleCheck : LucideIcons.circleX,
             size: 14,
-            color: met ? GetPrioTheme.teal : GetPrioTheme.mutedInk,
+            color: met
+                ? GetPrioTheme.colors(context).teal
+                : GetPrioTheme.colors(context).mutedInk,
           ),
           const SizedBox(width: 6),
           Text(
             label,
             style: theme.typography.small.copyWith(
-              color: met ? GetPrioTheme.teal : GetPrioTheme.mutedInk,
+              color: met
+                  ? GetPrioTheme.colors(context).teal
+                  : GetPrioTheme.colors(context).mutedInk,
             ),
           ),
         ],
@@ -1860,46 +1900,48 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage>
   @override
   Widget build(BuildContext context) {
     return ScrollNotificationObserver(
-      child: Scaffold(
+      child: ScrollAwareScaffold(
+        resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(
             title: const Text('Password recovery'),
             leading: [
-              GhostButton(
-                onPressed: () => Navigator.of(context).pop(),
-                density: ButtonDensity.icon,
-                child: const Icon(LucideIcons.arrowLeft),
-              ),
+              GetPrioBackButton(onPressed: () => Navigator.of(context).pop()),
             ],
           ),
         ],
-        child: KeyboardAwareScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Reset your password').h1(),
-              const SizedBox(height: 8),
-              Text(
-                _sent
-                    ? 'If an account exists for this email, recovery instructions are on the way.'
-                    : 'Enter your email and we will send recovery instructions.',
-              ),
-              const SizedBox(height: 20),
-              if (!_sent) ...[
-                _LabeledTextField(
-                  controller: _email,
-                  label: 'Email address',
-                  placeholder: 'you@example.com',
-                  keyboardType: TextInputType.emailAddress,
+        child: SafeArea(
+          top: false,
+          child: KeyboardAwareScrollView(
+            reserveKeyboardSpace: false,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const ScrollAwareHeaderSpace(),
+                const Text('Reset your password').h1(),
+                const SizedBox(height: 8),
+                Text(
+                  _sent
+                      ? 'If an account exists for this email, recovery instructions are on the way.'
+                      : 'Enter your email and we will send recovery instructions.',
                 ),
                 const SizedBox(height: 20),
-                GetPrioActionButton.primary(
-                  onPressed: _busy ? null : _request,
-                  child: Text(_busy ? 'Sending...' : 'Send instructions'),
-                ),
+                if (!_sent) ...[
+                  _LabeledTextField(
+                    controller: _email,
+                    label: 'Email address',
+                    placeholder: 'you@example.com',
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 20),
+                  GetPrioActionButton.primary(
+                    onPressed: _busy ? null : _request,
+                    child: Text(_busy ? 'Sending...' : 'Send instructions'),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1947,6 +1989,7 @@ class CustomerShell extends StatefulWidget {
     this.onUserUpdated,
     this.paymentLinkSource,
     this.pushSignal,
+    this.notificationInboxApi,
     this.approvedVendorStore,
     this.allowedHosts = const {},
     this.sandbox = false,
@@ -1966,6 +2009,7 @@ class CustomerShell extends StatefulWidget {
   final Set<String> allowedHosts;
   final PaymentLinkSource? paymentLinkSource;
   final ValueNotifier<PushSignal?>? pushSignal;
+  final NotificationInboxApi? notificationInboxApi;
   final ApprovedVendorStore? approvedVendorStore;
   final bool sandbox;
 
@@ -1978,16 +2022,36 @@ class _CustomerShellState extends State<CustomerShell>
   CustomerDestination _selectedDestination = CustomerDestination.home;
   Timer? _ticketRefreshTimer;
   Timer? _invitationRefreshTimer;
+  bool _vendorJoinOpen = false;
+  NotificationInboxController? _inbox;
+  Timer? _inboxRefreshTimer;
+  bool _inboxOpen = false;
+  int _bookingPushGeneration = 0;
+  bool _bookingPushOpen = false;
+  BookingRepository? _bookingRepository;
+  final _pendingBookingTaps = <(PushSignal, String)>[];
+  Route<void>? _bookingPushRoute;
+  NavigatorState? _bookingPushNavigator;
+  final _openedBookingNotifications = <String>{};
+  Route<void>? _inboxRoute;
+  NavigatorState? _inboxNavigator;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _resetBookingRepository();
     widget.ticketRepository?.servedTicket.addListener(_promptServedTicket);
     widget.pushSignal?.addListener(_handlePushSignal);
     _startTicketRefreshFallback();
     _startInvitationRefreshFallback();
     _loadPendingInvitationAfterFrame();
+    _resetInbox();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.pushSignal?.value?.opened == true) {
+        _handlePushSignal();
+      }
+    });
   }
 
   @override
@@ -1997,6 +2061,12 @@ class _CustomerShellState extends State<CustomerShell>
     _invitationRefreshTimer?.cancel();
     widget.ticketRepository?.servedTicket.removeListener(_promptServedTicket);
     widget.pushSignal?.removeListener(_handlePushSignal);
+    _inboxRefreshTimer?.cancel();
+    _closeOwnedInbox();
+    _closeOwnedBookingPush();
+    _inbox?.dispose();
+    _bookingPushGeneration++;
+    _pendingBookingTaps.clear();
     super.dispose();
   }
 
@@ -2004,14 +2074,95 @@ class _CustomerShellState extends State<CustomerShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       widget.ticketRepository?.requestRefresh();
+      unawaited(_inbox?.refresh());
       _startTicketRefreshFallback();
       _startInvitationRefreshFallback();
       _loadPendingInvitationAfterFrame();
     } else {
+      _inboxRefreshTimer?.cancel();
+      _inboxRefreshTimer = null;
       _ticketRefreshTimer?.cancel();
       _ticketRefreshTimer = null;
       _invitationRefreshTimer?.cancel();
       _invitationRefreshTimer = null;
+    }
+  }
+
+  void _resetInbox() {
+    _closeOwnedInbox();
+    _inboxRefreshTimer?.cancel();
+    _inbox?.dispose();
+    _inbox = widget.notificationInboxApi == null
+        ? null
+        : NotificationInboxController(widget.notificationInboxApi!);
+    unawaited(_inbox?.refresh());
+  }
+
+  @override
+  void didUpdateWidget(covariant CustomerShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user?.id != widget.user?.id ||
+        oldWidget.notificationInboxApi != widget.notificationInboxApi) {
+      _bookingPushGeneration++;
+      _pendingBookingTaps.clear();
+      _closeOwnedBookingPush();
+      _openedBookingNotifications.clear();
+      _bookingPushOpen = false;
+      widget.pushSignal?.value = null;
+      _resetInbox();
+    }
+    if (oldWidget.user?.id != widget.user?.id ||
+        oldWidget.directoryRepository != widget.directoryRepository ||
+        oldWidget.sandbox != widget.sandbox) {
+      _resetBookingRepository();
+    }
+    if (oldWidget.pushSignal != widget.pushSignal) {
+      oldWidget.pushSignal?.removeListener(_handlePushSignal);
+      widget.pushSignal?.addListener(_handlePushSignal);
+    }
+  }
+
+  Widget _withTopBar(Widget child) => _inbox == null
+      ? child
+      : MainPageTopBarScope(
+          tickets: widget.ticketRepository,
+          unreadCount: _inbox!.unreadCount,
+          activePage: _selectedDestination.name,
+          onTicket: _openTicketDetails,
+          onNotifications: _openInbox,
+          child: child,
+        );
+
+  void _closeOwnedInbox() {
+    final route = _inboxRoute, navigator = _inboxNavigator;
+    if (route == null || navigator == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (navigator.mounted && route.isActive) navigator.removeRoute(route);
+    });
+  }
+
+  Future<void> _openInbox() async {
+    final inbox = _inbox;
+    if (inbox == null || _inboxOpen) return;
+    _inboxOpen = true;
+    final navigator = Navigator.of(context);
+    final route = SwipeBackPageRoute<void>(
+      builder: (_) => NotificationInboxPage(
+        controller: inbox,
+        settingsRepository: widget.settingsRepository,
+      ),
+    );
+    _inboxRoute = route;
+    _inboxNavigator = navigator;
+    try {
+      await navigator.push(route);
+      if (mounted && identical(_inbox, inbox)) unawaited(inbox.refresh());
+    } finally {
+      if (identical(_inboxRoute, route)) {
+        _inboxOpen = false;
+        _inboxRoute = null;
+        _inboxNavigator = null;
+      }
     }
   }
 
@@ -2042,13 +2193,90 @@ class _CustomerShellState extends State<CustomerShell>
     }
 
     widget.ticketRepository?.requestRefresh();
+    if (!signal.silent) {
+      _inboxRefreshTimer?.cancel();
+      _inboxRefreshTimer = Timer(
+        const Duration(milliseconds: 300),
+        () => unawaited(_inbox?.refresh()),
+      );
+    }
+    final bookingId = bookingIdForPush(signal);
+    if (bookingId != null) {
+      widget.pushSignal?.value = null;
+      unawaited(_openBookingFromPush(signal, bookingId));
+      return;
+    }
     if (signal.eventType != 'developer_ticket_invitation' ||
         signal.notificationId == _lastInvitationNotificationId) {
       return;
     }
     _lastInvitationNotificationId = signal.notificationId;
-    _selectDestination(CustomerDestination.tickets);
+    _selectDestination(CustomerDestination.lists);
+    _openTickets();
     unawaited(_presentTicketInvitation(signal));
+  }
+
+  void _closeOwnedBookingPush() {
+    final route = _bookingPushRoute, navigator = _bookingPushNavigator;
+    _bookingPushRoute = null;
+    _bookingPushNavigator = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (navigator != null &&
+          navigator.mounted &&
+          route != null &&
+          route.isActive) {
+        navigator.removeRoute(route);
+      }
+    });
+  }
+
+  Future<void> _openBookingFromPush(PushSignal signal, String id) async {
+    final repository = _bookingRepository;
+    if (repository == null ||
+        _openedBookingNotifications.contains(signal.notificationId)) {
+      return;
+    }
+    if (_bookingPushOpen) {
+      if (!_pendingBookingTaps.any(
+        (pending) => pending.$1.notificationId == signal.notificationId,
+      )) {
+        _pendingBookingTaps.add((signal, id));
+      }
+      return;
+    }
+    final generation = _bookingPushGeneration;
+    final userId = widget.user?.id;
+    _bookingPushOpen = true;
+    _openedBookingNotifications.add(signal.notificationId);
+    try {
+      final booking = await repository
+          .detail(id)
+          .timeout(const Duration(seconds: 20));
+      if (!mounted ||
+          generation != _bookingPushGeneration ||
+          userId != widget.user?.id) {
+        return;
+      }
+      await _openBookingDetails(booking, fromPush: true);
+    } catch (_) {
+      if (mounted && generation == _bookingPushGeneration) {
+        _openedBookingNotifications.remove(signal.notificationId);
+        showFeedbackToast(
+          context,
+          message:
+              'Could not open this booking. Please check your Bookings list.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted && generation == _bookingPushGeneration) {
+        _bookingPushOpen = false;
+        if (_pendingBookingTaps.isNotEmpty) {
+          final pending = _pendingBookingTaps.removeAt(0);
+          unawaited(_openBookingFromPush(pending.$1, pending.$2));
+        }
+      }
+    }
   }
 
   Future<void> _presentTicketInvitation([PushSignal? signal]) async {
@@ -2215,7 +2443,7 @@ class _CustomerShellState extends State<CustomerShell>
     _ticketRefreshTimer?.cancel();
     final repository = widget.ticketRepository;
     if (repository == null) return;
-    _ticketRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _ticketRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       if (repository.hasActiveTickets) repository.requestRefresh();
     });
@@ -2235,11 +2463,7 @@ class _CustomerShellState extends State<CustomerShell>
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: const Color(0x00000000),
-        systemNavigationBarColor: GetPrioTheme.paper,
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
+      value: GetPrioTheme.systemUi(context),
       child: Scaffold(
         footers: [
           CustomerNavigationBar(
@@ -2247,51 +2471,171 @@ class _CustomerShellState extends State<CustomerShell>
             onDestinationSelected: _selectDestination,
             onJoinQueue: _openJoin,
             exploreEnabled: !widget.sandbox,
+            bookingsEnabled: !widget.sandbox,
           ),
         ],
         child: SafeArea(
           top: true,
           bottom: false,
-          child: IndexedStack(
-            index: _selectedDestination.index,
-            children: [
-              HomePage(
-                directoryRepository: widget.directoryRepository,
-                onOpenVendor: _openFavoriteVendor,
-                user: widget.user,
-                ticketRepository: widget.ticketRepository,
-                onOpenJoin: _openJoin,
-                onOpenTicketDetails: _openTicketDetails,
+          child: Padding(
+            padding: const EdgeInsets.only(
+              top: GetPrioTheme.safeAreaTopSpacing,
+            ),
+            child: _withTopBar(
+              IndexedStack(
+                index: _selectedDestination.index,
+                children: [
+                  HomePage(
+                    directoryRepository: widget.directoryRepository,
+                    onOpenVendor: _openFavoriteVendor,
+                    user: widget.user,
+                    ticketRepository: widget.ticketRepository,
+                    onOpenJoin: _openJoin,
+                    onOpenTicketDetails: _openTicketDetails,
+                  ),
+                  ExplorePage(
+                    customer: widget.user,
+                    bookingRepository: _bookingRepository,
+                    repository: widget.directoryRepository,
+                    queueRepository: widget.queueRepository,
+                    onOpenJoin: (host, vendor, locationSlug) =>
+                        unawaited(_openVendorJoin(host, vendor, locationSlug)),
+                  ),
+                  if (widget.sandbox)
+                    TicketsPage(
+                      ticketRepository: widget.ticketRepository,
+                      queueRepository: widget.queueRepository,
+                      directoryRepository: widget.directoryRepository,
+                      sandbox: true,
+                    )
+                  else
+                    ListsPage(
+                      onTickets: _openTickets,
+                      onBookings: _openBookings,
+                      active: _selectedDestination == CustomerDestination.lists,
+                      ticketRepository: widget.ticketRepository,
+                      bookingRepository: _bookingRepository,
+                      onOpenTicket: _openTicketDetails,
+                      onOpenBooking: _openBookingDetails,
+                    ),
+                  AccountPage(
+                    socialRepository: widget.directoryRepository?.social,
+                    onOpenVendor: _openFavoriteVendor,
+                    user: widget.user,
+                    onSignOut: widget.onSignOut,
+                    settingsRepository: widget.settingsRepository,
+                    securityRepository: widget.securityRepository,
+                    profileRepository: widget.profileRepository,
+                    onUserUpdated: widget.onUserUpdated,
+                    approvedVendorStore: widget.approvedVendorStore,
+                    sandbox: widget.sandbox,
+                  ),
+                ],
               ),
-              ExplorePage(
-                repository: widget.directoryRepository,
-                queueRepository: widget.queueRepository,
-                onOpenJoin: (vendor, locationSlug) =>
-                    unawaited(_openVendorJoin(vendor, locationSlug)),
-              ),
-              TicketsPage(
-                ticketRepository: widget.ticketRepository,
-                queueRepository: widget.queueRepository,
-                directoryRepository: widget.directoryRepository,
-                sandbox: widget.sandbox,
-              ),
-              AccountPage(
-                socialRepository: widget.directoryRepository?.social,
-                onOpenVendor: _openFavoriteVendor,
-                user: widget.user,
-                onSignOut: widget.onSignOut,
-                settingsRepository: widget.settingsRepository,
-                securityRepository: widget.securityRepository,
-                profileRepository: widget.profileRepository,
-                onUserUpdated: widget.onUserUpdated,
-                approvedVendorStore: widget.approvedVendorStore,
-                sandbox: widget.sandbox,
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  void _resetBookingRepository() {
+    final api = widget.directoryRepository?.api;
+    _bookingRepository = !widget.sandbox && api is RestDirectoryApi
+        ? BookingRepository(RestBookingApi(api.client))
+        : null;
+  }
+
+  bool _ticketsOpen = false;
+  void _openTickets() async {
+    if (_ticketsOpen) return;
+    _ticketsOpen = true;
+    widget.ticketRepository?.requestRefresh();
+    await Navigator.of(context).push(
+      SwipeBackPageRoute<void>(
+        builder: (context) => ScrollNotificationObserver(
+          child: ScrollAwareScaffold(
+            headers: [
+              ScrollAwareAppBar(
+                title: const Text('Tickets'),
+                leading: [
+                  GetPrioBackButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ],
+            child: SafeArea(
+              top: false,
+              child: TicketsPage(
+                ticketRepository: widget.ticketRepository,
+                queueRepository: widget.queueRepository,
+                directoryRepository: widget.directoryRepository,
+                sandbox: widget.sandbox,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    _ticketsOpen = false;
+  }
+
+  Future<void> _openBookingDetails(
+    CustomerBooking booking, {
+    bool fromPush = false,
+  }) async {
+    final repository = _bookingRepository;
+    if (repository == null) return;
+    final navigator = Navigator.of(context);
+    final route = SwipeBackPageRoute<void>(
+      builder: (_) => BookingDetailPage(
+        repository: repository,
+        booking: booking,
+        onCheckedIn: widget.ticketRepository?.requestRefresh,
+        onOpenTicket: (item) => _openBookingQueueTicket(
+          context,
+          item,
+          bookingRepository: repository,
+          ticketRepository: widget.ticketRepository,
+          queueRepository: widget.queueRepository,
+          directoryRepository: widget.directoryRepository,
+        ),
+      ),
+    );
+    if (fromPush) {
+      _bookingPushRoute = route;
+      _bookingPushNavigator = navigator;
+    }
+    try {
+      await navigator.push<void>(route);
+    } finally {
+      if (identical(_bookingPushRoute, route)) {
+        _bookingPushRoute = null;
+        _bookingPushNavigator = null;
+      }
+    }
+  }
+
+  Future<void> _openBookings() async {
+    if (widget.sandbox) return;
+    await Navigator.of(context).push(
+      SwipeBackPageRoute<void>(
+        builder: (_) => BookingsPage(
+          repository: _bookingRepository,
+          onCheckedIn: widget.ticketRepository?.requestRefresh,
+          onOpenTicket: (booking) => _openBookingQueueTicket(
+            context,
+            booking,
+            bookingRepository: _bookingRepository!,
+            ticketRepository: widget.ticketRepository,
+            queueRepository: widget.queueRepository,
+            directoryRepository: widget.directoryRepository,
+          ),
+        ),
+      ),
+    );
+    if (mounted) widget.ticketRepository?.requestRefresh();
   }
 
   void _openFavoriteVendor(VendorSummary vendor) {
@@ -2302,9 +2646,11 @@ class _CustomerShellState extends State<CustomerShell>
         builder: (_) => VendorDetailPage(
           vendor: vendor,
           repository: repository,
+          customer: widget.user,
+          bookingRepository: _bookingRepository,
           queueRepository: widget.queueRepository,
-          onJoinLocation: (location) =>
-              unawaited(_openVendorJoin(vendor, location.slug)),
+          onJoinLocationWithContext: (host, location) =>
+              unawaited(_openVendorJoin(host, vendor, location.slug)),
         ),
       ),
     );
@@ -2315,16 +2661,14 @@ class _CustomerShellState extends State<CustomerShell>
     await navigator.push<void>(
       SwipeBackPageRoute<void>(
         builder: (context) => ScrollNotificationObserver(
-          child: Scaffold(
+          child: ScrollAwareScaffold(
             key: const Key('join-flow-shell'),
             headers: [
               ScrollAwareAppBar(
                 title: const Text('Scan to join'),
                 leading: [
-                  GhostButton(
+                  GetPrioBackButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    density: ButtonDensity.icon,
-                    child: const Icon(LucideIcons.arrowLeft),
                   ),
                 ],
               ),
@@ -2345,47 +2689,70 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   Future<void> _openVendorJoin(
+    BuildContext host,
     VendorSummary vendor,
     String? locationSlug,
   ) async {
-    final navigator = Navigator.of(context);
-    await navigator.push<void>(
-      SwipeBackPageRoute<void>(
-        builder: (context) => ScrollNotificationObserver(
-          child: Scaffold(
-            key: const Key('direct-join-flow-shell'),
-            headers: [
-              ScrollAwareAppBar(
-                title: const Text('Join queue'),
-                leading: [
-                  GhostButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    density: ButtonDensity.icon,
-                    child: const Icon(LucideIcons.arrowLeft),
-                  ),
-                ],
+    if (_vendorJoinOpen || widget.joinRepository == null || !host.mounted) {
+      return;
+    }
+    _vendorJoinOpen = true;
+    final navigator = Navigator.of(host);
+    try {
+      final result = await openAppDrawer<JoinResult>(
+        context: host,
+        position: OverlayPosition.bottom,
+        useSafeArea: false,
+        draggable: false,
+        barrierDismissible: false,
+        builder: (_) => DirectQueueJoinDrawer(
+          repository: widget.joinRepository!,
+          tenantSlug: vendor.slug,
+          locationSlug: locationSlug,
+          customerName: widget.user?.customerName ?? 'Customer',
+        ),
+      ).future;
+      if (!mounted || !navigator.mounted || result == null) return;
+      if (result is JoinedTicket) {
+        _openJoinedTicket(navigator, result.ticket, replaceJoinPage: false);
+      } else if (result is PaymentRequired) {
+        await navigator.push<void>(
+          SwipeBackPageRoute<void>(
+            builder: (_) => ScrollAwareScaffold(
+              headers: [
+                ScrollAwareAppBar(
+                  title: const Text('Join queue'),
+                  leading: [GetPrioBackButton(onPressed: navigator.pop)],
+                ),
+              ],
+              child: JoinPage(
+                repository: widget.joinRepository,
+                allowedHosts: widget.allowedHosts,
+                customerName: widget.user?.customerName ?? 'Customer',
+                directTenantSlug: vendor.slug,
+                directLocationSlug: locationSlug,
+                initialResult: result,
+                paymentApi: widget.paymentApi,
+                paymentLinkSource: widget.paymentLinkSource,
+                onJoined: (ticket) => _openJoinedTicket(navigator, ticket),
               ),
-            ],
-            child: JoinPage(
-              repository: widget.joinRepository,
-              allowedHosts: widget.allowedHosts,
-              customerName: widget.user?.customerName ?? 'Customer',
-              directTenantSlug: vendor.slug,
-              directLocationSlug: locationSlug,
-              paymentApi: widget.paymentApi,
-              paymentLinkSource: widget.paymentLinkSource,
-              onJoined: (ticket) => _openJoinedTicket(navigator, ticket),
             ),
           ),
-        ),
-      ),
-    );
-    widget.ticketRepository?.requestRefresh();
+        );
+      }
+      widget.ticketRepository?.requestRefresh();
+    } finally {
+      _vendorJoinOpen = false;
+    }
   }
 
-  void _openJoinedTicket(NavigatorState navigator, QueueTicket ticket) {
+  void _openJoinedTicket(
+    NavigatorState navigator,
+    QueueTicket ticket, {
+    bool replaceJoinPage = true,
+  }) {
     if (!navigator.mounted) return;
-    navigator.pop();
+    if (replaceJoinPage) navigator.pop();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !navigator.mounted) return;
       unawaited(
@@ -2411,8 +2778,8 @@ class _CustomerShellState extends State<CustomerShell>
     });
   }
 
-  void _openTicketDetails(QueueTicket ticket) {
-    Navigator.of(context).push(
+  Future<void> _openTicketDetails(QueueTicket ticket) async {
+    await Navigator.of(context).push(
       SwipeBackPageRoute<void>(
         builder: (context) => TicketDetailsPage(
           ticket: ticket,
@@ -2491,8 +2858,9 @@ class _CustomerShellState extends State<CustomerShell>
 
   void _selectDestination(CustomerDestination destination) {
     if (widget.sandbox && destination == CustomerDestination.explore) return;
+    unawaited(_inbox?.refresh());
     setState(() => _selectedDestination = destination);
-    if (destination == CustomerDestination.tickets) {
+    if (destination == CustomerDestination.lists) {
       widget.ticketRepository?.requestRefresh();
     }
   }
@@ -2561,10 +2929,11 @@ class _HomePageState extends State<HomePage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         children: [
-          Text('$_greeting, ${homeGreetingName(widget.user)}').h2(),
-          const SizedBox(height: 4),
-          const Text('Stay up to date with your queue tickets.'),
-          const SizedBox(height: 20),
+          TabPageHeader(
+            page: 'home',
+            title: '$_greeting, ${homeGreetingName(widget.user)}',
+            description: 'Stay up to date with your queue tickets.',
+          ),
           _ActiveTicketCard(
             ticketRepository: widget.ticketRepository,
             onOpenJoin: widget.onOpenJoin,
@@ -2707,10 +3076,10 @@ class _ActiveTicketCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Text('Active ticket', textAlign: TextAlign.center).h3(),
-          const SizedBox(
+          SizedBox(
             height: 130,
             child: Image(
-              image: AssetImage('assets/illustrations/dashboard-empty.png'),
+              image: AssetImage(GetPrioArtwork.emptyTickets(context)),
               fit: BoxFit.contain,
               semanticLabel: 'Illustration of an empty queue dashboard',
             ),
@@ -2756,7 +3125,7 @@ class _ActiveTicketCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Active ticket').h3(),
-                  _TicketStatusBadge(ticket: ticket),
+                  TicketStatusBadge(ticket: ticket),
                 ],
               ),
               const SizedBox(height: 12),
@@ -2831,40 +3200,21 @@ class _StatMetric extends StatelessWidget {
   }
 }
 
-class _TicketStatusBadge extends StatelessWidget {
-  const _TicketStatusBadge({required this.ticket});
-
-  final QueueTicket ticket;
-
-  @override
-  Widget build(BuildContext context) {
-    final status = ticket.status;
-    final label = ticket.displayStatusLabel.toUpperCase();
-    return switch (status) {
-      TicketStatus.waiting => SecondaryBadge(child: Text(label)),
-      TicketStatus.pendingCarryOver => SecondaryBadge(child: Text(label)),
-      TicketStatus.called => PrimaryBadge(child: Text(label)),
-      TicketStatus.served => SecondaryBadge(child: Text(label)),
-      TicketStatus.skipped => DestructiveBadge(child: Text(label)),
-      TicketStatus.cancelled => DestructiveBadge(child: Text(label)),
-      TicketStatus.unserved => DestructiveBadge(child: Text(label)),
-      TicketStatus.expired => DestructiveBadge(child: Text(label)),
-      TicketStatus.unknown => OutlineBadge(child: Text(label)),
-    };
-  }
-}
-
 class ExplorePage extends StatefulWidget {
   const ExplorePage({
     super.key,
     this.repository,
     this.queueRepository,
     this.onOpenJoin,
+    this.customer,
+    this.bookingRepository,
   });
 
+  final AuthUser? customer;
+  final BookingRepository? bookingRepository;
   final DirectoryRepository? repository;
   final QueueRepository? queueRepository;
-  final void Function(VendorSummary, String?)? onOpenJoin;
+  final void Function(BuildContext, VendorSummary, String?)? onOpenJoin;
 
   @override
   State<ExplorePage> createState() => _ExplorePageState();
@@ -2931,12 +3281,13 @@ class _ExplorePageState extends State<ExplorePage> {
       child: ListView(
         key: const Key('explore-page'),
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + keyboardInsetOf(context)),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         children: [
-          const Text('Explore vendors').h2(),
-          const SizedBox(height: 4),
-          const Text('Browse vendors with queueing available.'),
-          const SizedBox(height: 20),
+          const TabPageHeader(
+            page: 'explore',
+            title: 'Explore vendors',
+            description: 'Browse vendors with queueing available.',
+          ),
           KeyboardAwareInput(
             child: TextField(
               key: const Key('vendor-search-field'),
@@ -2981,9 +3332,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 }
                 final vendors = snapshot.data ?? const <VendorSummary>[];
                 if (vendors.isEmpty) {
-                  return const Card(
-                    child: Text('No queue-capable vendors found.'),
-                  );
+                  return const Card(child: Text('No vendors found.'));
                 }
 
                 final categories =
@@ -3041,6 +3390,8 @@ class _ExplorePageState extends State<ExplorePage> {
                           child: _VendorCard(
                             vendor: vendor,
                             repository: directoryRepository,
+                            customer: widget.customer,
+                            bookingRepository: widget.bookingRepository,
                             queueRepository: widget.queueRepository,
                             onOpenJoin: widget.onOpenJoin,
                           ),
@@ -3076,12 +3427,16 @@ class _VendorCard extends StatelessWidget {
     required this.repository,
     this.queueRepository,
     this.onOpenJoin,
+    this.customer,
+    this.bookingRepository,
   });
 
+  final AuthUser? customer;
+  final BookingRepository? bookingRepository;
   final VendorSummary vendor;
   final DirectoryRepository repository;
   final QueueRepository? queueRepository;
-  final void Function(VendorSummary, String?)? onOpenJoin;
+  final void Function(BuildContext, VendorSummary, String?)? onOpenJoin;
 
   @override
   Widget build(BuildContext context) {
@@ -3091,11 +3446,14 @@ class _VendorCard extends StatelessWidget {
           SwipeBackPageRoute<void>(
             builder: (context) => VendorDetailPage(
               vendor: vendor,
+              customer: customer,
+              bookingRepository: bookingRepository,
               repository: repository,
               queueRepository: queueRepository,
-              onJoinLocation: onOpenJoin == null
+              onJoinLocationWithContext: onOpenJoin == null
                   ? null
-                  : (location) => onOpenJoin!(vendor, location.slug),
+                  : (host, location) =>
+                        onOpenJoin!(host, vendor, location.slug),
             ),
           ),
         );
@@ -3125,9 +3483,7 @@ class _VendorCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        '${vendor.locations.length} queue-capable location(s)',
-                      ),
+                      child: Text('${vendor.locations.length} location(s)'),
                     ),
                     if (vendor.locations.any(
                       (location) => location.queueAvailable,
@@ -3245,14 +3601,15 @@ class _VendorDirectoryMedia extends StatelessWidget {
           width: 64,
           height: 64,
           child: ColoredBox(
-            color: GetPrioTheme.paperAccent,
+            color: GetPrioTheme.colors(context).paperAccent,
             child: imageUrl == null
-                ? _fallback()
+                ? _fallback(context)
                 : Image.network(
                     imageUrl,
-                    fit: _vendorBoxFit(vendor.logoFit, BoxFit.cover),
+                    fit: vendorBoxFit(vendor.logoFit, BoxFit.cover),
                     excludeFromSemantics: true,
-                    errorBuilder: (context, error, stackTrace) => _fallback(),
+                    errorBuilder: (context, error, stackTrace) =>
+                        _fallback(context),
                   ),
           ),
         ),
@@ -3260,11 +3617,11 @@ class _VendorDirectoryMedia extends StatelessWidget {
     );
   }
 
-  Widget _fallback() {
+  Widget _fallback(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(14),
       child: SvgPicture.asset(
-        'assets/branding/logo.svg',
+        GetPrioArtwork.logo(context),
         fit: BoxFit.contain,
         excludeFromSemantics: true,
       ),
@@ -3278,16 +3635,22 @@ class VendorDetailPage extends StatefulWidget {
     required this.vendor,
     required this.repository,
     this.queueRepository,
+    this.bookingRepository,
+    this.customer,
     this.onJoinQueue,
     this.onJoinLocation,
+    this.onJoinLocationWithContext,
     this.contactLauncher = const ExternalVendorContactLauncher(),
   });
 
+  final AuthUser? customer;
   final VendorSummary vendor;
   final DirectoryRepository repository;
   final QueueRepository? queueRepository;
+  final BookingRepository? bookingRepository;
   final VoidCallback? onJoinQueue;
   final ValueChanged<VendorLocation>? onJoinLocation;
+  final void Function(BuildContext, VendorLocation)? onJoinLocationWithContext;
   final VendorContactLauncher contactLauncher;
 
   @override
@@ -3296,17 +3659,30 @@ class VendorDetailPage extends StatefulWidget {
 
 class _VendorDetailPageState extends State<VendorDetailPage> {
   late Future<VendorSummary> _details;
+  BookingRepository? _fallbackBookingRepository;
   int _queueRefreshVersion = 0;
 
   @override
   void initState() {
     super.initState();
     _details = widget.repository.loadVendor(widget.vendor.slug);
+    final api = widget.repository.api;
+    if (api is RestDirectoryApi) {
+      _fallbackBookingRepository = BookingRepository(
+        RestBookingApi(api.client),
+      );
+    }
   }
 
   @override
   void didUpdateWidget(covariant VendorDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository) {
+      final api = widget.repository.api;
+      _fallbackBookingRepository = api is RestDirectoryApi
+          ? BookingRepository(RestBookingApi(api.client))
+          : null;
+    }
     if (oldWidget.repository != widget.repository ||
         oldWidget.vendor.slug != widget.vendor.slug ||
         oldWidget.queueRepository != widget.queueRepository) {
@@ -3338,11 +3714,7 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
 
   Widget _refreshableMessage(Widget child) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: const Color(0x00000000),
-        systemNavigationBarColor: GetPrioTheme.paper,
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
+      value: GetPrioTheme.systemUi(context),
       child: Stack(
         children: [
           CustomScrollView(
@@ -3358,7 +3730,7 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: _VendorBackButton(
+              child: GetPrioBackButton(
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
@@ -3368,98 +3740,16 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
     );
   }
 
-  Future<void> _selectJoinLocation(
-    BuildContext context,
-    VendorSummary vendor,
-  ) async {
-    final locations = vendor.locations;
-    VendorLocation? selected;
-    if (locations.length == 1) {
-      selected = locations.single;
-    } else if (locations.isNotEmpty) {
-      selected = await openDrawerOverlay<VendorLocation>(
-        context: context,
-        position: OverlayPosition.bottom,
-        expands: false,
-        draggable: true,
-        transformBackdrop: false,
-        builder: (sheetContext) => SafeArea(
-          top: false,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(sheetContext).height * .75,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                GetPrioTheme.bottomSheetTopPadding,
-                20,
-                20,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Select a location').h3(),
-                  const SizedBox(height: 16),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: locations.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (_, index) {
-                        final location = locations[index];
-                        return CardButton(
-                          key: ValueKey('join-location-${location.id}'),
-                          onPressed: location.slug?.trim().isNotEmpty == true
-                              ? () => closeDrawer(sheetContext, location)
-                              : null,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(location.name).bold(),
-                              if (location.address != null)
-                                Text(location.address!),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ).future;
-    }
-    if (!mounted) return;
-    if (selected != null && selected.slug?.trim().isNotEmpty == true) {
-      if (widget.onJoinLocation != null) {
-        widget.onJoinLocation!(selected);
-      } else {
-        widget.onJoinQueue?.call();
-      }
-    } else if (locations.isEmpty && context.mounted) {
-      showFeedbackToast(
-        context,
-        message: 'No queue locations are available.',
-        isError: true,
-      );
-    }
-  }
-
   void _openContactSheet(BuildContext context, VendorSummary vendor) {
     final email = vendor.contactEmail;
     if (email == null) return;
-    openDrawerOverlay<void>(
+    openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: true,
       draggable: true,
       useSafeArea: false,
       borderRadius: _VendorContactSheet.borderRadius,
-      transformBackdrop: false,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.82,
       ),
@@ -3514,10 +3804,20 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
                 queueRepository: widget.queueRepository,
                 queueRefreshVersion: _queueRefreshVersion,
                 onBack: () => Navigator.of(context).pop(),
-                onJoinQueue:
-                    widget.onJoinLocation == null && widget.onJoinQueue == null
-                    ? null
-                    : () => _selectJoinLocation(context, details),
+                onJoinLocation:
+                    (widget.onJoinLocationWithContext == null
+                        ? null
+                        : (location) => widget.onJoinLocationWithContext!(
+                            context,
+                            location,
+                          )) ??
+                    widget.onJoinLocation ??
+                    (widget.onJoinQueue == null
+                        ? null
+                        : (_) => widget.onJoinQueue!()),
+                customer: widget.customer,
+                bookingRepository:
+                    widget.bookingRepository ?? _fallbackBookingRepository,
                 onContact: details.contactEmail == null
                     ? null
                     : () => _openContactSheet(context, details),
@@ -3530,7 +3830,7 @@ class _VendorDetailPageState extends State<VendorDetailPage> {
   }
 }
 
-class _VendorProfileView extends StatelessWidget {
+class _VendorProfileView extends StatefulWidget {
   const _VendorProfileView({
     this.socialRepository,
     required this.vendor,
@@ -3538,37 +3838,238 @@ class _VendorProfileView extends StatelessWidget {
     required this.queueRepository,
     required this.queueRefreshVersion,
     required this.onBack,
-    required this.onJoinQueue,
+    required this.onJoinLocation,
+    this.bookingRepository,
+    this.customer,
     required this.onContact,
   });
 
   static const surfaceOverlap = 44.0;
   static const logoSize = 104.0;
 
+  final AuthUser? customer;
   final VendorSocialRepository? socialRepository;
   final VendorSummary vendor;
   final int openLocations;
   final QueueRepository? queueRepository;
   final int queueRefreshVersion;
   final VoidCallback onBack;
-  final VoidCallback? onJoinQueue;
+  final ValueChanged<VendorLocation>? onJoinLocation;
+  final BookingRepository? bookingRepository;
   final VoidCallback? onContact;
 
+  @override
+  State<_VendorProfileView> createState() => _VendorProfileViewState();
+}
+
+class _VendorProfileViewState extends State<_VendorProfileView> {
+  VendorSummary get vendor => widget.vendor;
+  VendorSocialRepository? get socialRepository => widget.socialRepository;
+  QueueRepository? get queueRepository => widget.queueRepository;
+  int get queueRefreshVersion => widget.queueRefreshVersion;
+  int get openLocations => widget.openLocations;
+  VoidCallback get onBack => widget.onBack;
+  VoidCallback? get onContact => widget.onContact;
+  static const surfaceOverlap = _VendorProfileView.surfaceOverlap;
+  static const logoSize = _VendorProfileView.logoSize;
+  final _locationScrollController = ScrollController();
+  final _locationKeys = <String, GlobalKey>{};
+  String? _selectedLocationId;
+  Set<String> _selectedServices = {};
+  List<BookingService> _services = [];
+  bool _servicesLoading = false;
+  String? _servicesError;
+  int _serviceRequest = 0;
+
+  VendorLocation? get _location {
+    for (final location in vendor.locations) {
+      if (location.id == _selectedLocationId) return location;
+    }
+    for (final location in vendor.locations) {
+      if (location.isPrimary) return location;
+    }
+    return vendor.locations.firstOrNull;
+  }
+
+  VoidCallback? get onJoinQueue {
+    final location = _location;
+    if (!vendor.queueAvailable ||
+        widget.onJoinLocation == null ||
+        location?.slug == null ||
+        location?.queueAvailable != true) {
+      return null;
+    }
+    return () => widget.onJoinLocation!(location!);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadServices();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VendorProfileView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.vendor != vendor ||
+        oldWidget.queueRefreshVersion != queueRefreshVersion) {
+      _loadServices();
+    }
+  }
+
+  Future<void> _loadServices() async {
+    final request = ++_serviceRequest;
+    final location = _location;
+    if (!vendor.bookingAvailable ||
+        location?.slug == null ||
+        widget.bookingRepository == null) {
+      _services = [];
+      _selectedServices.clear();
+      _servicesLoading = false;
+      _servicesError = null;
+      return;
+    }
+    setState(() {
+      _servicesLoading = true;
+      _servicesError = null;
+    });
+    try {
+      final services = await widget.bookingRepository!.services(
+        vendor.slug,
+        location!.slug!,
+      );
+      if (mounted && request == _serviceRequest) {
+        setState(() {
+          _services = services;
+          _selectedServices.retainAll(services.map((service) => service.slug));
+        });
+      }
+    } catch (_) {
+      if (mounted && request == _serviceRequest) {
+        setState(() {
+          _services = [];
+          _servicesError = 'Could not load services.';
+        });
+      }
+    } finally {
+      if (mounted && request == _serviceRequest) {
+        setState(() => _servicesLoading = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _locationScrollController.dispose();
+    super.dispose();
+  }
+
+  void _selectLocation(VendorLocation location) {
+    if (_location?.id == location.id) return;
+    final headerKey = _locationKeys[location.id];
+    final header = headerKey?.currentContext?.findRenderObject();
+    final headerTop = header is RenderBox
+        ? header.localToGlobal(Offset.zero).dy
+        : null;
+    setState(() {
+      _selectedLocationId = location.id;
+      _selectedServices = {};
+      _services = [];
+    });
+    _loadServices();
+    // Collapsing content above the tapped header changes its document position.
+    // Keep that header at the same viewport position instead of losing it above
+    // the screen. Clamp only when the shortened page cannot fill the viewport.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          headerTop == null ||
+          !_locationScrollController.hasClients) {
+        return;
+      }
+      final updatedHeader = headerKey?.currentContext?.findRenderObject();
+      if (updatedHeader is! RenderBox) return;
+      final delta = updatedHeader.localToGlobal(Offset.zero).dy - headerTop;
+      final position = _locationScrollController.position;
+      final target = (position.pixels + delta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      if ((target - position.pixels).abs() > 0.5) {
+        _locationScrollController.jumpTo(target);
+      }
+    });
+  }
+
+  bool _openingBooking = false;
+  Future<void> _openBooking() async {
+    if (_openingBooking ||
+        _location == null ||
+        widget.bookingRepository == null) {
+      return;
+    }
+    _openingBooking = true;
+    try {
+      if (!mounted) return;
+      final booking = await Navigator.of(context).push<CustomerBooking>(
+        SwipeBackPageRoute<CustomerBooking>(
+          builder: (_) => BookingPage(
+            repository: widget.bookingRepository!,
+            vendor: vendor,
+            location: _location!,
+            services: _services,
+            selected: _selectedServices,
+            customer: widget.customer,
+          ),
+        ),
+      );
+      if (booking != null && mounted) {
+        await Navigator.of(context).push(
+          SwipeBackPageRoute<void>(
+            builder: (_) => BookingDetailPage(
+              repository: widget.bookingRepository!,
+              booking: booking,
+              openPaymentOnArrival: true,
+              onOpenTicket: (item) => _openBookingQueueTicket(
+                context,
+                item,
+                bookingRepository: widget.bookingRepository!,
+                queueRepository: widget.queueRepository,
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showFeedbackToast(
+          context,
+          message: 'Could not open booking. Please try again.',
+          isError: true,
+        );
+      }
+    } finally {
+      _openingBooking = false;
+    }
+  }
+
   void _openStoreHoursSheet(BuildContext context, VendorLocation location) {
-    openDrawerOverlay<void>(
+    openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: true,
       draggable: true,
       useSafeArea: false,
       borderRadius: _VendorStoreHoursSheet.borderRadius,
-      transformBackdrop: false,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.82,
       ),
       builder: (context) => _VendorStoreHoursSheet(location: location),
     );
   }
+
+  String _selectedServiceTotal() => bookingServiceTotal(
+    _services.where((service) => _selectedServices.contains(service.slug)),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -3583,8 +4084,8 @@ class _VendorProfileView extends StatelessWidget {
         key: const Key('vendor-detail-surface'),
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(24, 30, 24, 48),
-        decoration: const BoxDecoration(
-          color: GetPrioTheme.paper,
+        decoration: BoxDecoration(
+          color: GetPrioTheme.colors(context).paper,
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: [
             BoxShadow(
@@ -3610,7 +4111,7 @@ class _VendorProfileView extends StatelessWidget {
                         Text(
                           vendor.category!,
                           style: theme.typography.p.copyWith(
-                            color: GetPrioTheme.mutedInk,
+                            color: GetPrioTheme.colors(context).mutedInk,
                           ),
                         ),
                       ],
@@ -3654,27 +4155,69 @@ class _VendorProfileView extends StatelessWidget {
               ExpandableVendorDescription(description: vendor.description!),
             ],
             const SizedBox(height: 32),
-            const Text('Queue-capable locations').h3(),
+            const Text('Locations').h3(),
             const SizedBox(height: 8),
             if (vendor.locations.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('No queue-capable locations are listed.'),
+                child: Text('No locations are listed.'),
               )
             else ...[
               for (var index = 0; index < vendor.locations.length; index++) ...[
                 _VendorLocationRow(
+                  key: _locationKeys.putIfAbsent(
+                    vendor.locations[index].id,
+                    GlobalKey.new,
+                  ),
                   location: vendor.locations[index],
+                  selected: _location?.id == vendor.locations[index].id,
+                  showChevron: vendor.locations.length > 1,
+                  onSelect: () => _selectLocation(vendor.locations[index]),
                   onShowStoreHours: () =>
                       _openStoreHoursSheet(context, vendor.locations[index]),
                 ),
-                if (queueRepository != null)
-                  _VendorQueueStatus(
-                    vendor: vendor,
-                    location: vendor.locations[index],
-                    queueRepository: queueRepository!,
-                    refreshVersion: queueRefreshVersion,
-                  ),
+                if (_location?.id == vendor.locations[index].id) ...[
+                  if (queueRepository != null && vendor.queueAvailable)
+                    _VendorQueueStatus(
+                      vendor: vendor,
+                      location: vendor.locations[index],
+                      queueRepository: queueRepository!,
+                      refreshVersion: queueRefreshVersion,
+                    ),
+                  if (vendor.bookingAvailable) ...[
+                    const SizedBox(height: 12),
+                    const Text('Services').h3(),
+                    const SizedBox(height: 8),
+                    if (_servicesLoading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (_servicesError != null) ...[
+                      Text(_servicesError!),
+                      OutlineButton(
+                        onPressed: _loadServices,
+                        child: const Text('Try again'),
+                      ),
+                    ] else if (_services.isEmpty)
+                      const Text('No bookable services at this location.')
+                    else
+                      ServiceSelection(
+                        services: _services,
+                        selected: _selectedServices,
+                        onToggle: (service) => setState(() {
+                          if (!_selectedServices.remove(service.slug)) {
+                            _selectedServices.add(service.slug);
+                          }
+                        }),
+                      ),
+                    if (_selectedServices.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 12),
+                        child: Text(
+                          '${_selectedServices.length} services selected · ${_selectedServiceTotal()}',
+                        ).bold(),
+                      ),
+                  ],
+                  const SizedBox(height: 12),
+                ],
                 if (index < vendor.locations.length - 1) const Divider(),
               ],
             ],
@@ -3692,7 +4235,7 @@ class _VendorProfileView extends StatelessWidget {
               key: const Key('vendor-join-instructions'),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: GetPrioTheme.paperAccent,
+                color: GetPrioTheme.colors(context).paperAccent,
                 borderRadius: BorderRadius.circular(18),
               ),
               child: const Row(
@@ -3715,16 +4258,23 @@ class _VendorProfileView extends StatelessWidget {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: const Color(0x00000000),
-        systemNavigationBarColor: GetPrioTheme.paper,
-        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: GetPrioTheme.colors(context).paper,
+        systemNavigationBarIconBrightness: GetPrioTheme.colors(context).dark
+            ? Brightness.light
+            : Brightness.dark,
       ),
       child: _VendorProfileParallax(
+        scrollController: _locationScrollController,
         socialRepository: socialRepository,
         vendor: vendor,
         coverHeight: coverHeight,
         logoSize: logoSize,
         onBack: onBack,
         onJoinQueue: onJoinQueue,
+        onBook:
+            vendor.bookingAvailable && !_servicesLoading && _services.isNotEmpty
+            ? _openBooking
+            : null,
         surface: surface,
       ),
     );
@@ -3733,21 +4283,25 @@ class _VendorProfileView extends StatelessWidget {
 
 class _VendorProfileParallax extends StatefulWidget {
   const _VendorProfileParallax({
+    required this.scrollController,
     this.socialRepository,
     required this.vendor,
     required this.coverHeight,
     required this.logoSize,
     required this.onBack,
     required this.onJoinQueue,
+    required this.onBook,
     required this.surface,
   });
 
+  final ScrollController scrollController;
   final VendorSocialRepository? socialRepository;
   final VendorSummary vendor;
   final double coverHeight;
   final double logoSize;
   final VoidCallback onBack;
   final VoidCallback? onJoinQueue;
+  final VoidCallback? onBook;
   final Widget surface;
 
   @override
@@ -3759,13 +4313,7 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
   static const logoParallaxFactor = 0.7;
   static const logoFadeViewportFraction = 0.5;
 
-  final _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
+  ScrollController get _scrollController => widget.scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -3788,7 +4336,7 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
                 child: child,
               );
             },
-            child: _VendorProfileCover(
+            child: VendorProfileCover(
               vendor: widget.vendor,
               height: widget.coverHeight,
             ),
@@ -3819,7 +4367,10 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
               );
             },
             child: Center(
-              child: _VendorLogo(vendor: widget.vendor, size: widget.logoSize),
+              child: VendorProfileLogo(
+                vendor: widget.vendor,
+                size: widget.logoSize,
+              ),
             ),
           ),
         ),
@@ -3868,7 +4419,7 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
         Positioned(
           top: MediaQuery.paddingOf(context).top + 12,
           left: 20,
-          child: _VendorBackButton(onPressed: widget.onBack, onImage: true),
+          child: GetPrioBackButton(onPressed: widget.onBack),
         ),
         Positioned(
           left: 0,
@@ -3876,184 +4427,35 @@ class _VendorProfileParallaxState extends State<_VendorProfileParallax> {
           bottom: 0,
           child: Container(
             key: const Key('vendor-join-queue-action-surface'),
-            color: GetPrioTheme.paper,
+            color: GetPrioTheme.colors(context).paper,
             padding: EdgeInsets.fromLTRB(
               20,
               12,
               20,
               MediaQuery.paddingOf(context).bottom + 16,
             ),
-            child: GetPrioActionButton.primary(
-              key: const Key('vendor-join-queue-button'),
-              onPressed: widget.onJoinQueue,
-              child: const Text('Join Queue'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GetPrioActionButton.outline(
+                    key: const Key('vendor-book-button'),
+                    onPressed: widget.onBook,
+                    child: const Text('Book'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GetPrioActionButton.primary(
+                    key: const Key('vendor-join-queue-button'),
+                    onPressed: widget.onJoinQueue,
+                    child: const Text('Join Queue'),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _VendorProfileCover extends StatelessWidget {
-  const _VendorProfileCover({required this.vendor, required this.height});
-
-  final VendorSummary vendor;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    final imageUrl = vendor.coverImageUrl;
-    return SizedBox(
-      key: const Key('vendor-profile-cover'),
-      width: double.infinity,
-      height: height,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (imageUrl == null)
-            _vendorCoverFallback()
-          else
-            Image.network(
-              imageUrl,
-              fit: _vendorBoxFit(vendor.coverImageFit, BoxFit.cover),
-              semanticLabel: '${vendor.name} profile cover',
-              errorBuilder: (context, error, stackTrace) =>
-                  _vendorCoverFallback(),
-            ),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0x75000000), Color(0x00000000)],
-                stops: [0, 0.55],
-              ),
-            ),
-          ),
-          const DecoratedBox(
-            key: Key('profile-cover-surface-fade'),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [GetPrioTheme.paper, Color(0x00FBF7F1)],
-                stops: [0.0, 0.3],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _vendorCoverFallback() {
-    return Container(
-      color: GetPrioTheme.paperAccent,
-      padding: const EdgeInsets.fromLTRB(48, 64, 48, 36),
-      child: const Image(
-        image: AssetImage(
-          'assets/illustrations/hero-queue-scene-transparent.png',
-        ),
-        fit: BoxFit.contain,
-        semanticLabel: 'Illustration of a customer at a queue',
-      ),
-    );
-  }
-}
-
-class _VendorLogo extends StatelessWidget {
-  const _VendorLogo({required this.vendor, required this.size});
-
-  final VendorSummary vendor;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final imageUrl = vendor.logoUrl;
-    return SizedBox(
-      key: const Key('vendor-logo'),
-      width: size,
-      height: size,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: GetPrioTheme.card,
-          shape: BoxShape.circle,
-          border: Border.fromBorderSide(
-            BorderSide(color: Color(0xF2FFFFFF), width: 4),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x3D23180F),
-              blurRadius: 24,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: ClipOval(
-            child: imageUrl == null
-                ? Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: SvgPicture.asset(
-                      'assets/branding/logo.svg',
-                      fit: BoxFit.contain,
-                      semanticsLabel: 'GetPrio vendor logo placeholder',
-                    ),
-                  )
-                : Image.network(
-                    imageUrl,
-                    fit: _vendorBoxFit(vendor.logoFit, BoxFit.cover),
-                    semanticLabel: '${vendor.name} logo',
-                    errorBuilder: (context, error, stackTrace) => Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: SvgPicture.asset(
-                        'assets/branding/logo.svg',
-                        fit: BoxFit.contain,
-                        semanticsLabel: 'GetPrio vendor logo placeholder',
-                      ),
-                    ),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VendorBackButton extends StatelessWidget {
-  const _VendorBackButton({required this.onPressed, this.onImage = false});
-
-  final VoidCallback onPressed;
-  final bool onImage;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Back',
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: onImage ? GetPrioTheme.card.withAlpha(224) : GetPrioTheme.card,
-          shape: BoxShape.circle,
-          border: Border.all(color: GetPrioTheme.line),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x245B422A),
-              blurRadius: 14,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: GhostButton(
-          onPressed: onPressed,
-          density: ButtonDensity.icon,
-          child: const Icon(LucideIcons.arrowLeft, size: 22),
-        ),
-      ),
     );
   }
 }
@@ -4074,10 +4476,12 @@ class _VendorContactButton extends StatelessWidget {
       child: Container(
         width: 52,
         height: 52,
-        decoration: const BoxDecoration(
-          color: GetPrioTheme.card,
+        decoration: BoxDecoration(
+          color: GetPrioTheme.colors(context).card,
           shape: BoxShape.circle,
-          border: Border.fromBorderSide(BorderSide(color: GetPrioTheme.line)),
+          border: Border.fromBorderSide(
+            BorderSide(color: GetPrioTheme.colors(context).line),
+          ),
           boxShadow: [
             BoxShadow(
               color: Color(0x1F5B422A),
@@ -4094,7 +4498,7 @@ class _VendorContactButton extends StatelessWidget {
             LucideIcons.messageCircle,
             size: 23,
             color: onPressed == null
-                ? GetPrioTheme.disabled
+                ? GetPrioTheme.colors(context).disabled
                 : GetPrioTheme.orange,
           ),
         ),
@@ -4187,8 +4591,8 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
     return Container(
       key: const Key('vendor-contact-sheet'),
       clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(
-        color: GetPrioTheme.card,
+      decoration: BoxDecoration(
+        color: appDrawerBackground(context),
         borderRadius: _VendorContactSheet.borderRadius,
       ),
       child: SafeArea(
@@ -4207,19 +4611,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      'Contact ${widget.vendor.name}',
-                      style: theme.typography.h2,
-                    ),
-                  ),
-                  Semantics(
-                    button: true,
-                    label: 'Close contact form',
-                    child: GhostButton(
-                      onPressed: () => closeSheet(context),
-                      density: ButtonDensity.icon,
-                      child: const Icon(LucideIcons.x),
-                    ),
+                    child: AppDrawerTitle('Contact ${widget.vendor.name}'),
                   ),
                 ],
               ),
@@ -4227,7 +4619,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
               Text(
                 'Write your message here, then continue in your email app.',
                 style: theme.typography.p.copyWith(
-                  color: GetPrioTheme.mutedInk,
+                  color: GetPrioTheme.colors(context).mutedInk,
                 ),
               ),
               const SizedBox(height: 18),
@@ -4237,7 +4629,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: GetPrioTheme.paperAccent,
+                  color: GetPrioTheme.colors(context).paperAccent,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
@@ -4289,6 +4681,7 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
                     enabled: !_busy,
                     controller: _message,
                     focusNode: _messageFocusNode,
+                    onTapOutside: (_) => _messageFocusNode.unfocus(),
                     placeholder: const Text('Write your message'),
                     features: const [focusedClearInputFeature],
                     scrollPadding: inputScrollPadding,
@@ -4318,19 +4711,6 @@ class _VendorContactSheetState extends State<_VendorContactSheet>
   }
 }
 
-BoxFit _vendorBoxFit(String? value, BoxFit fallback) {
-  return switch (value?.trim().toLowerCase()) {
-    'contain' => BoxFit.contain,
-    'fill' => BoxFit.fill,
-    'fitwidth' || 'fit-width' => BoxFit.fitWidth,
-    'fitheight' || 'fit-height' => BoxFit.fitHeight,
-    'none' => BoxFit.none,
-    'scaledown' || 'scale-down' => BoxFit.scaleDown,
-    'cover' => BoxFit.cover,
-    _ => fallback,
-  };
-}
-
 class _VendorHighlight extends StatelessWidget {
   const _VendorHighlight({required this.value, required this.label});
 
@@ -4352,76 +4732,102 @@ class _VendorHighlight extends StatelessWidget {
 
 class _VendorLocationRow extends StatelessWidget {
   const _VendorLocationRow({
+    super.key,
     required this.location,
+    required this.selected,
+    required this.showChevron,
+    required this.onSelect,
     required this.onShowStoreHours,
   });
-
   final VendorLocation location;
-  final VoidCallback onShowStoreHours;
-
+  final bool selected, showChevron;
+  final VoidCallback onSelect, onShowStoreHours;
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: GetPrioTheme.paperAccent,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(LucideIcons.mapPin, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Semantics(
+        selected: selected,
+        expanded: showChevron ? selected : null,
+        child: Button(
+          key: ValueKey('vendor-location-${location.id}'),
+          style: const ButtonStyle.ghost(),
+          onPressed: onSelect,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected
+                        ? GetPrioTheme.primary.withValues(alpha: .12)
+                        : GetPrioTheme.colors(context).paperAccent,
+                  ),
+                  child: Icon(
+                    LucideIcons.mapPin,
+                    size: 20,
+                    color: selected
+                        ? GetPrioTheme.primary
+                        : GetPrioTheme.colors(context).mutedInk,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                         location.name,
-                        style: theme.typography.p.copyWith(
+                        style: Theme.of(context).typography.p.copyWith(
                           fontWeight: FontWeight.w600,
+                          color: selected
+                              ? GetPrioTheme.primary
+                              : GetPrioTheme.colors(context).ink,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    location.queueAvailable
-                        ? const SecondaryBadge(child: Text('STORE OPEN'))
-                        : const DestructiveBadge(child: Text('UNAVAILABLE')),
-                  ],
+                      if (location.address != null)
+                        Text(
+                          location.address!,
+                          style: Theme.of(context).typography.textMuted,
+                        ),
+                      if (location.openStatus != null && location.hours.isEmpty)
+                        Text(
+                          location.openStatus!,
+                          style: Theme.of(context).typography.small,
+                        ),
+                    ],
+                  ),
                 ),
-                if (location.address != null) ...[
-                  const SizedBox(height: 5),
-                  Text(location.address!, style: theme.typography.textMuted),
-                ],
-                if (location.openStatus != null ||
-                    location.hours.isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  GetPrioActionButton.outline(
-                    key: ValueKey(
-                      'store-hours-button-${location.slug ?? location.id}',
-                    ),
-                    onPressed: onShowStoreHours,
-                    leading: const Icon(LucideIcons.clock, size: 18),
-                    trailing: const Icon(LucideIcons.chevronRight, size: 18),
-                    child: const Text('Show operating hours'),
+                if (showChevron) ...[
+                  const SizedBox(width: 8),
+                  Icon(
+                    key: ValueKey('vendor-location-chevron-${location.id}'),
+                    selected ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                    size: 18,
                   ),
                 ],
               ],
             ),
           ),
-        ],
+        ),
       ),
-    );
-  }
+      if (selected &&
+          (location.openStatus != null || location.hours.isNotEmpty))
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: GetPrioActionButton.outline(
+            key: ValueKey('store-hours-button-${location.slug ?? location.id}'),
+            onPressed: onShowStoreHours,
+            leading: const Icon(LucideIcons.clock, size: 18),
+            child: const Text('Show operating hours'),
+          ),
+        ),
+    ],
+  );
 }
 
 class _VendorStoreHoursSheet extends StatelessWidget {
@@ -4443,8 +4849,8 @@ class _VendorStoreHoursSheet extends StatelessWidget {
     return Container(
       key: const Key('vendor-store-hours-sheet'),
       clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(
-        color: GetPrioTheme.card,
+      decoration: BoxDecoration(
+        color: appDrawerBackground(context),
         borderRadius: borderRadius,
       ),
       child: SafeArea(
@@ -4466,24 +4872,15 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Operating hours', style: theme.typography.h2),
+                        const AppDrawerTitle('Operating hours'),
                         const SizedBox(height: 4),
                         Text(
                           location.name,
                           style: theme.typography.p.copyWith(
-                            color: GetPrioTheme.mutedInk,
+                            color: GetPrioTheme.colors(context).mutedInk,
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  Semantics(
-                    button: true,
-                    label: 'Close operating hours',
-                    child: GhostButton(
-                      onPressed: () => closeSheet(context),
-                      density: ButtonDensity.icon,
-                      child: const Icon(LucideIcons.x),
                     ),
                   ),
                 ],
@@ -4493,7 +4890,7 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: GetPrioTheme.paperAccent,
+                    color: GetPrioTheme.colors(context).paperAccent,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
@@ -4507,9 +4904,11 @@ class _VendorStoreHoursSheet extends StatelessWidget {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: GetPrioTheme.paper,
+                    color: GetPrioTheme.colors(context).paper,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: GetPrioTheme.line),
+                    border: Border.all(
+                      color: GetPrioTheme.colors(context).line,
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -4572,8 +4971,8 @@ class _VendorStoreHoursRow extends StatelessWidget {
                     color: isToday
                         ? GetPrioTheme.primary
                         : hour.isClosed
-                        ? GetPrioTheme.mutedInk
-                        : GetPrioTheme.ink,
+                        ? GetPrioTheme.colors(context).mutedInk
+                        : GetPrioTheme.colors(context).ink,
                   ),
                 ),
             ],
@@ -4767,6 +5166,7 @@ class _TicketsPageState extends State<TicketsPage> {
   List<QueueTicket>? _visibleTickets;
   List<TicketInvitation>? _visibleInvitations;
   int _loadGeneration = 0;
+  bool _history = false;
   String? _cancellingTicketId;
   String? _acceptingInvitationId;
 
@@ -4849,19 +5249,24 @@ class _TicketsPageState extends State<TicketsPage> {
             _visibleTickets == null &&
             snapshot.connectionState == ConnectionState.waiting;
         final hasInitialError = _visibleTickets == null && snapshot.hasError;
-        return RefreshTrigger(
+        return withPullToRefresh(
+          enabled: !_history,
           key: const Key('tickets-refresh'),
           onRefresh: _refreshTickets,
           child: ListView(
             key: const Key('tickets-page'),
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            padding: listPagePadding,
             children: [
-              const Text('My tickets').h2(),
-              const SizedBox(height: 4),
-              const Text('Active and historical queue tickets.'),
+              const ScrollAwareHeaderSpace(),
+              ListFilterTabs(
+                key: const Key('ticket-tabs'),
+                labels: const ['Active', 'History'],
+                index: _history ? 1 : 0,
+                onChanged: (index) => setState(() => _history = index == 1),
+              ),
               const SizedBox(height: 20),
-              if (_visibleInvitations?.isNotEmpty == true) ...[
+              if (!_history && _visibleInvitations?.isNotEmpty == true) ...[
                 _ticketInvitationCard(_visibleInvitations!),
                 const SizedBox(height: 24),
               ],
@@ -4876,32 +5281,30 @@ class _TicketsPageState extends State<TicketsPage> {
                   onPressed: _reload,
                   child: const Text('Try again'),
                 ),
-              ] else if (tickets.isEmpty)
+              ] else if ((_history ? history : active).isEmpty)
                 Card(
                   child: Column(
                     children: [
                       Icon(LucideIcons.ticket, size: 40),
                       SizedBox(height: 12),
-                      Text('No tickets yet').h3(),
+                      Text(
+                        _history ? 'No past tickets yet' : 'No active tickets',
+                      ).h3(),
                       SizedBox(height: 4),
-                      Text('Your queue tickets will appear here.'),
+                      Text(
+                        _history
+                            ? 'Your past queue tickets will appear here.'
+                            : 'Join a queue to get a ticket.',
+                      ),
                     ],
                   ),
                 )
+              else if (!_history)
+                ...active.map(_activeTicketCard)
               else ...[
-                if (active.isNotEmpty) ...[
-                  const Text('Active').h3(),
-                  const SizedBox(height: 12),
-                  ...active.map(_activeTicketCard),
-                ],
-                if (history.isNotEmpty) ...[
-                  if (active.isNotEmpty) const SizedBox(height: 28),
-                  const Text('History').h3(),
-                  const SizedBox(height: 8),
-                  for (var index = 0; index < history.length; index++) ...[
-                    _historyTicketRow(history[index]),
-                    if (index < history.length - 1) const Divider(),
-                  ],
+                for (var index = 0; index < history.length; index++) ...[
+                  _historyTicketRow(history[index]),
+                  if (index < history.length - 1) const Divider(),
                 ],
               ],
             ],
@@ -5030,7 +5433,7 @@ class _TicketsPageState extends State<TicketsPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(ticket.vendorName ?? 'Queue ticket').h3(),
-                    _TicketStatusBadge(ticket: ticket),
+                    TicketStatusBadge(ticket: ticket),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -5087,50 +5490,11 @@ class _TicketsPageState extends State<TicketsPage> {
     );
   }
 
-  Widget _historyTicketRow(QueueTicket ticket) {
-    return GestureDetector(
-      onTap: () => _openTicketDetails(ticket),
-      child: Semantics(
-        button: true,
-        label: 'Open ticket details for ${ticket.vendorName ?? 'queue'}',
-        child: Padding(
-          key: ValueKey('history-ticket-${ticket.id}'),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: GetPrioTheme.paperAccent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(LucideIcons.ticket, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(ticket.vendorName ?? 'Queue ticket').h4(),
-                    const SizedBox(height: 4),
-                    Text('Ticket #${ticket.ticketNumber ?? ticket.lookupCode}'),
-                    if (ticket.locationName != null) Text(ticket.locationName!),
-                    if (ticket.joinedAt != null) ...[
-                      const SizedBox(height: 4),
-                      Text(_formatTicketDate(ticket.joinedAt!)),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _TicketStatusBadge(ticket: ticket),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _historyTicketRow(QueueTicket ticket) => TicketListRow(
+    key: ValueKey('history-ticket-${ticket.id}'),
+    ticket: ticket,
+    onPressed: () => _openTicketDetails(ticket),
+  );
 
   void _openTicketDetails(QueueTicket ticket) {
     Navigator.of(context).push(
@@ -5147,13 +5511,6 @@ class _TicketsPageState extends State<TicketsPage> {
         ),
       ),
     );
-  }
-
-  String _formatTicketDate(DateTime date) {
-    final local = date.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return '${local.year}-$month-$day';
   }
 
   Future<QueueTicket?> _confirmCancellation(QueueTicket ticket) async {
@@ -5222,6 +5579,47 @@ class _TicketsPageState extends State<TicketsPage> {
   }
 }
 
+Future<void> _openBookingQueueTicket(
+  BuildContext context,
+  CustomerBooking booking, {
+  required BookingRepository bookingRepository,
+  QueueTicketRepository? ticketRepository,
+  QueueRepository? queueRepository,
+  DirectoryRepository? directoryRepository,
+}) async {
+  final linked = booking.linkedTicket;
+  if (linked == null || '${linked['lookupCode'] ?? ''}'.isEmpty) {
+    throw StateError('The linked queue ticket is unavailable.');
+  }
+  final api = bookingRepository.api;
+  final client = api is RestBookingApi ? api.client : null;
+  final ticket = QueueTicket.fromJson({
+    ...linked,
+    'tenantSlug': booking.data['tenantSlug'],
+    'locationSlug': booking.data['locationSlug'],
+    'tenantName': booking.vendorName,
+    'locationName': booking.locationName,
+    'customerName': booking.data['customerName'],
+  });
+  ticketRepository?.requestRefresh();
+  await Navigator.of(context).push<void>(
+    SwipeBackPageRoute<void>(
+      builder: (_) => TicketDetailsPage(
+        ticket: ticket,
+        ticketRepository: ticketRepository,
+        queueRepository:
+            queueRepository ??
+            (client == null ? null : QueueRepository(RestQueueApi(client))),
+        directoryRepository:
+            directoryRepository ??
+            (client == null
+                ? null
+                : DirectoryRepository(RestDirectoryApi(client))),
+      ),
+    ),
+  );
+}
+
 class TicketDetailsPage extends StatefulWidget {
   const TicketDetailsPage({
     super.key,
@@ -5248,13 +5646,31 @@ class TicketDetailsPage extends StatefulWidget {
 
 class _TicketDetailsPageState extends State<TicketDetailsPage> {
   late Future<_TicketDetailsData> _details;
+  TicketBarcodeState? _barcode;
+  bool _barcodeModalOpen = false;
   QueueTicket? _displayedTicket;
   bool _isCancelling = false;
+  Timer? _statusPoll;
+  bool _pollingStatus = false;
+  bool _ticketRefreshPending = false;
+  int _detailsRevision = 0;
+  _TicketDetailsData? _lastDetails;
+  VendorSummary? _vendorCache;
+  final _activity = DetailAutoUpdate();
+  String? _syncError;
+  void _activityChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
     super.initState();
+    _activity.addListener(_activityChanged);
     _details = _loadDetails();
+    _statusPoll = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _pollStatus(),
+    );
     widget.ticketRepository?.refreshVersion.addListener(
       _handleTicketRepositoryRefresh,
     );
@@ -5262,6 +5678,8 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
 
   @override
   void dispose() {
+    _activity.dispose();
+    _statusPoll?.cancel();
     widget.ticketRepository?.refreshVersion.removeListener(
       _handleTicketRepositoryRefresh,
     );
@@ -5269,15 +5687,84 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   void _handleTicketRepositoryRefresh() {
-    if (!mounted) return;
-    final details = _loadDetails(refreshTicket: true);
-    setState(() {
-      _details = details;
-    });
+    if (!mounted || (_activity.paused && !_barcodeModalOpen)) return;
+    unawaited(_refreshFromSignal());
+  }
+
+  void _replayTicketRefresh() {
+    if (!mounted || !_ticketRefreshPending || _isCancelling) return;
+    _ticketRefreshPending = false;
+    _handleTicketRepositoryRefresh();
+  }
+
+  Future<void> _refreshFromSignal() async {
+    if (_pollingStatus || _isCancelling) {
+      _ticketRefreshPending = true;
+      return;
+    }
+    _pollingStatus = true;
+    try {
+      final data = await _loadDetails(refreshTicket: true)
+          .timeout(const Duration(seconds: 20));
+      if (mounted) {
+        setState(() {
+          _details = SynchronousFuture(data);
+          _syncError = null;
+        });
+      }
+    } catch (_) {
+      _detailsRevision++;
+      if (mounted) {
+        setState(
+          () => _syncError =
+              'Could not update. Showing the last available ticket details.',
+        );
+      }
+    } finally {
+      _pollingStatus = false;
+      _replayTicketRefresh();
+    }
+  }
+
+  Future<void> _pollStatus() async {
+    if ((_activity.paused && !_barcodeModalOpen) ||
+        _pollingStatus ||
+        !mounted ||
+        _isCancelling ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        (ModalRoute.of(context)?.isCurrent != true && !_barcodeModalOpen) ||
+        (widget.queueRepository == null && widget.ticketRepository == null)) {
+      return;
+    }
+    _pollingStatus = true;
+    try {
+      final pending = _loadDetails(refreshTicket: true)
+          .timeout(const Duration(seconds: 20));
+      final revision = _detailsRevision;
+      final details = await pending;
+      if (mounted && revision == _detailsRevision && !_isCancelling) {
+        setState(() {
+          _details = SynchronousFuture(details);
+          _syncError = null;
+        });
+      }
+    } catch (_) {
+      _detailsRevision++;
+      if (mounted) {
+        setState(
+          () => _syncError =
+              'Could not update. Showing the last available ticket details.',
+        );
+      }
+    } finally {
+      _pollingStatus = false;
+      _replayTicketRefresh();
+    }
   }
 
   Future<_TicketDetailsData> _loadDetails({bool refreshTicket = false}) async {
-    var ticket = widget.ticket;
+    final revision = ++_detailsRevision;
+    var ticket = _lastDetails?.ticket ?? widget.ticket;
     if (refreshTicket) {
       final ticketRepository = widget.ticketRepository;
       if (ticketRepository != null) {
@@ -5296,7 +5783,12 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     final repository = widget.queueRepository;
     final tenantSlug = ticket.tenantSlug;
     if (repository == null || tenantSlug == null || ticket.lookupCode.isEmpty) {
-      return _TicketDetailsData(ticket: ticket, vendor: vendor);
+      if (mounted && revision == _detailsRevision) {
+        _barcode?.updateTicket(_displayedTicket ?? ticket);
+      }
+      final data = _TicketDetailsData(ticket: ticket, vendor: vendor);
+      if (mounted && revision == _detailsRevision) _lastDetails = data;
+      return data;
     }
 
     final snapshot = await repository.loadQueueSnapshot(
@@ -5304,29 +5796,42 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       locationSlug: ticket.locationSlug,
       lookupCode: ticket.lookupCode,
     );
-    final snapshotTicket =
-        snapshot.focusTicket?.copyWith(
-          vendorName: ticket.vendorName,
-          locationName: ticket.locationName,
-          tenantSlug: ticket.tenantSlug,
-          locationSlug: ticket.locationSlug,
-        ) ??
-        ticket;
-    return _TicketDetailsData(
+    // Preserve account progress over lagging public snapshots, but accept later progress.
+    final accountTerminal =
+        ticket.progressRank > 0 &&
+        ticket.progressRank >= (snapshot.focusTicket?.progressRank ?? 0);
+    final snapshotTicket = accountTerminal
+        ? ticket
+        : snapshot.focusTicket?.copyWith(
+                vendorName: ticket.vendorName,
+                locationName: ticket.locationName,
+                tenantSlug: ticket.tenantSlug,
+                locationSlug: ticket.locationSlug,
+              ) ??
+              ticket;
+    if (mounted && revision == _detailsRevision) {
+      _barcode?.updateTicket(_displayedTicket ?? snapshotTicket);
+    }
+    final data = _TicketDetailsData(
       ticket: snapshotTicket,
       snapshot: snapshot,
       vendor: vendor,
     );
+    if (mounted && revision == _detailsRevision) _lastDetails = data;
+    return data;
   }
 
   Future<VendorSummary> _loadVendor(QueueTicket ticket) async {
+    if (_vendorCache != null) return _vendorCache!;
     final repository = widget.directoryRepository;
     final tenantSlug = ticket.tenantSlug?.trim();
     if (repository == null || tenantSlug == null || tenantSlug.isEmpty) {
       return _fallbackVendor(ticket);
     }
     try {
-      return await repository.loadVendor(tenantSlug);
+      final vendor = await repository.loadVendor(tenantSlug);
+      _vendorCache = vendor;
+      return vendor;
     } catch (_) {
       return _fallbackVendor(ticket);
     }
@@ -5354,23 +5859,30 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   }
 
   Future<void> _refresh() async {
-    final details = _loadDetails(refreshTicket: true);
-    setState(() {
-      _details = details;
-    });
+    if (_pollingStatus) return;
+    _pollingStatus = true;
     try {
-      await details;
+      final data = await _loadDetails(refreshTicket: true)
+          .timeout(const Duration(seconds: 20));
       if (mounted) {
+        setState(() {
+          _details = SynchronousFuture(data);
+          _syncError = null;
+        });
+        _activity.resume();
         showFeedbackToast(context, message: 'Ticket status refreshed.');
       }
     } catch (_) {
+      _detailsRevision++;
       if (mounted) {
-        showFeedbackToast(
-          context,
-          message: 'Could not refresh ticket status.',
-          isError: true,
+        setState(
+          () => _syncError =
+              'Could not refresh. Showing the last available ticket details.',
         );
       }
+    } finally {
+      _pollingStatus = false;
+      _replayTicketRefresh();
     }
   }
 
@@ -5385,244 +5897,344 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
         _displayedTicket = cancelled ?? _displayedTicket;
         _isCancelling = false;
       });
+      _barcode?.updateTicket(_displayedTicket ?? widget.ticket);
     } catch (_) {
       if (mounted) setState(() => _isCancelling = false);
     }
   }
 
+  Future<void> _openQr(QueueTicket ticket) async {
+    if (_barcodeModalOpen ||
+        !ticket.isActive ||
+        ticket.isServiceCompleted ||
+        ticket.customerConfirmedAt != null) {
+      return;
+    }
+    final barcode = TicketBarcodeState(
+      ticket: ticket,
+      sandbox: widget.sandbox,
+      load: (id) async {
+        // A QR request is explicit activity, even after details auto-updates
+        // pause. Reconcile status on opening/retrying before issuing a token.
+        await _refreshFromSignal();
+        if (!mounted || _barcode?.arrivalUnavailable == true) {
+          throw StateError('Ticket no longer needs an arrival QR code');
+        }
+        final token =
+            await (widget.ticketRepository?.loadTicketBarcode(id) ??
+                Future.error(StateError('Ticket QR API unavailable')));
+        return token;
+      },
+    );
+    _barcode = barcode;
+    _barcodeModalOpen = true;
+    try {
+      await showTicketBarcode(context, '', state: barcode);
+    } finally {
+      barcode.dispose();
+      if (identical(_barcode, barcode)) _barcode = null;
+      _barcodeModalOpen = false;
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: const Color(0x00000000),
-        systemNavigationBarColor: GetPrioTheme.paper,
-        systemNavigationBarIconBrightness: Brightness.dark,
-      ),
-      child: ScrollNotificationObserver(
-        child: Scaffold(
-          headers: [
-            ScrollAwareAppBar(
-              title: const Text('Ticket details'),
-              leading: [
-                GhostButton(
-                  key: const Key('ticket-details-back'),
-                  onPressed: () => Navigator.of(context).pop(),
-                  density: ButtonDensity.icon,
-                  child: const Icon(LucideIcons.arrowLeft),
-                ),
-              ],
-            ),
-          ],
-          child: FutureBuilder<_TicketDetailsData>(
-            future: _details,
-            builder: (context, snapshot) {
-              final details = snapshot.data;
-              final ticket =
-                  _displayedTicket ?? details?.ticket ?? widget.ticket;
-              return RefreshTrigger(
-                key: const Key('ticket-details-refresh'),
-                onRefresh: _refresh,
-                child: ListView(
-                  key: const Key('ticket-details-page'),
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.zero,
-                  children: [
-                    Container(
-                      key: const Key('ticket-details-surface'),
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(20, 28, 20, 36),
-                      decoration: const BoxDecoration(
-                        color: GetPrioTheme.paper,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0x245B422A),
-                            blurRadius: 28,
-                            offset: Offset(0, -6),
+  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+    value: GetPrioTheme.systemUi(context),
+    child: ScrollAwareScaffold(
+      headers: const [
+        DetailPassAppBar(
+          title: 'Ticket details',
+          backKey: Key('ticket-details-back'),
+        ),
+      ],
+      child: FutureBuilder<_TicketDetailsData>(
+        future: _details,
+        builder: (context, snapshot) {
+          final details = snapshot.data ?? _lastDetails;
+          final ticket = _displayedTicket ?? details?.ticket ?? widget.ticket;
+          final vendor = details?.vendor ?? _fallbackVendor(ticket);
+          final completed =
+              ticket.status == TicketStatus.served || ticket.isServiceCompleted;
+          final showQr =
+              ticket.isActive &&
+              !ticket.isServiceCompleted &&
+              !ticket.isServiceInterrupted &&
+              ticket.serviceStartedAt == null &&
+              ticket.serviceEndedAt == null &&
+              ticket.customerConfirmedAt == null;
+          return DetailActivityBoundary(
+            activity: _activity,
+            child: Stack(
+              children: [
+                withPullToRefresh(
+                  enabled: ticket.isActive && !completed,
+                  key: const Key('ticket-details-refresh'),
+                  onRefresh: _refresh,
+                  child: ListView(
+                    key: const Key('ticket-details-page'),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, showQr ? 100 : 20),
+                    children: [
+                      const ScrollAwareHeaderSpace(),
+                      if (_activity.paused)
+                        DetailAutoUpdateNotice(onRefresh: _refresh),
+                      if (_syncError != null) Text(_syncError!),
+                      if (ticket.needsArrival &&
+                          !ticket.isServiceCompleted) ...[
+                        Container(
+                          key: const Key('ticket-called-alert'),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: GetPrioTheme.orange.withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (widget.showJoinConfirmation) ...[
-                            _TicketJoinSuccessNotice(ticket: ticket),
-                            const SizedBox(height: 20),
-                          ],
-                          Container(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: Theme.of(context).colorScheme.border,
+                          child: const Text(
+                            'Your ticket was called. Proceed to the vendor.',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      DetailPassCard(
+                        key: const Key('ticket-details-card'),
+                        ticketCutouts: true,
+                        vendor: vendor,
+                        footer: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (ticket.canBeCancelled &&
+                                widget.onCancel != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  0,
+                                  20,
+                                  20,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (ticket.canBeCancelled &&
+                                        widget.onCancel != null) ...[
+                                      const SizedBox(height: 20),
+                                      GetPrioActionButton.destructive(
+                                        key: const Key('ticket-details-cancel'),
+                                        onPressed: _isCancelling
+                                            ? null
+                                            : _cancelTicket,
+                                        child: Text(
+                                          _isCancelling
+                                              ? 'Cancelling...'
+                                              : 'Cancel ticket',
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
-                            ),
-                            child: Text(
-                              'Your queue ticket',
-                              style: Theme.of(context).typography.h2,
+                          ],
+                        ),
+                        children: [
+                          Row(
+                            key: const Key('ticket-vendor-heading'),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(ticket.vendorName ?? vendor.name)
+                                    .h3(),
+                              ),
+                              const SizedBox(width: 12),
+                              _TicketDetailStatus(ticket: ticket),
+                            ],
+                          ),
+                          if (ticket.locationName != null)
+                            Text(ticket.locationName!),
+                          const SizedBox(height: 12),
+                          const Divider(key: Key('ticket-heading-divider')),
+                          const SizedBox(height: 16),
+                          IntrinsicHeight(
+                            child: Row(
+                              key: const Key('ticket-customer-grid'),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Ticket number'),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        ticket.ticketNumber ??
+                                            ticket.lookupCode,
+                                        style: GetPrioTheme.ticketStyle(
+                                          Theme.of(context),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                const VerticalDivider(width: 1, thickness: 1),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: DetailPassField(
+                                    label: 'Customer',
+                                    value: ticket.customerName,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(ticket.vendorName ?? 'Queue ticket'),
-                          if (ticket.status == TicketStatus.served &&
+                          if (widget.showJoinConfirmation &&
+                              (ticket.isActive || completed)) ...[
+                            const SizedBox(height: 16),
+                            if (completed)
+                              _TicketQueueStatusCard(
+                                ticket: ticket,
+                                completedWhileOpen: true,
+                              )
+                            else
+                              _TicketJoinSuccessNotice(ticket: ticket),
+                          ],
+                          const DetailPassDivider(),
+                          _TicketDetailRow(
+                            label: 'Joined',
+                            value: ticket.joinedAt == null
+                                ? 'Unavailable'
+                                : _formatTicketDateTime(ticket.joinedAt!),
+                          ),
+                          if (ticket.position != null)
+                            _TicketDetailRow(
+                              label: 'Position',
+                              value: '#${ticket.position}',
+                            ),
+                          _TicketDetailRow(
+                            label: ticket.isActive
+                                ? 'Estimated wait'
+                                : 'Total waiting time',
+                            value: ticket.isActive
+                                ? (ticket.estimatedWaitMinutes == null
+                                      ? 'Unavailable'
+                                      : '${ticket.estimatedWaitMinutes} min')
+                                : ticket.actualWaitingTimeLabel,
+                          ),
+                          if (ticket.queueLength != null)
+                            _TicketDetailRow(
+                              label: 'Queue length',
+                              value: '${ticket.queueLength} waiting',
+                            ),
+                          if (ticket.queueUpdatedAt != null)
+                            _TicketDetailRow(
+                              label: 'Last queue update',
+                              value: _formatTicketDateTime(
+                                ticket.queueUpdatedAt!,
+                              ),
+                            ),
+                          if (ticket.customerFriendlyStatusReason != null)
+                            _TicketDetailRow(
+                              label: 'Note',
+                              value: ticket.customerFriendlyStatusReason!,
+                              textAlign: TextAlign.left,
+                            ),
+                          if (ticket.serviceStartedAt != null)
+                            _TicketDetailRow(
+                              label: 'Service started',
+                              value: _formatTicketDateTime(
+                                ticket.serviceStartedAt!,
+                              ),
+                            ),
+                          if (ticket.serviceEndedAt != null)
+                            _TicketDetailRow(
+                              label: 'Service ended',
+                              value: _formatTicketDateTime(
+                                ticket.serviceEndedAt!,
+                              ),
+                            ),
+                          const SizedBox(height: 16),
+                          if (!(widget.showJoinConfirmation && completed) &&
+                              (ticket.serviceMessage != null ||
+                                  ticket.status != TicketStatus.called ||
+                                  ticket.isConfirmed ||
+                                  details?.snapshot != null))
+                            _TicketQueueStatusCard(
+                              ticket: ticket,
+                              completedWhileOpen: widget.ticket.isActive,
+                              snapshot: details?.snapshot,
+                              showMessage:
+                                  ticket.serviceMessage != null ||
+                                  ticket.status != TicketStatus.called ||
+                                  ticket.isConfirmed,
+                            ),
+                          if (completed &&
                               widget.directoryRepository?.social != null) ...[
                             const SizedBox(height: 16),
                             TicketReviewAction(
                               key: ValueKey('review-${ticket.lookupCode}'),
                               repository: widget.directoryRepository!.social!,
                               ticket: ticket,
-                              prompt:
-                                  widget.ticket.status != TicketStatus.served,
+                              prompt: widget.ticket.isActive,
                             ),
                           ],
-                          if (ticket.locationName != null) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              ticket.locationName!,
-                              style: TextStyle(color: GetPrioTheme.mutedInk),
-                            ),
-                          ],
-                          const SizedBox(height: 20),
-                          Card(
-                            key: const Key('ticket-details-card'),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text('Ticket number'),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          ticket.ticketNumber ??
-                                              ticket.lookupCode,
-                                          style: GetPrioTheme.ticketStyle(
-                                            Theme.of(context),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    _TicketDetailStatus(ticket: ticket),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-                                const Divider(),
-                                const SizedBox(height: 16),
-                                _TicketDetailRow(
-                                  label: 'Joined',
-                                  value: ticket.joinedAt == null
-                                      ? 'Unavailable'
-                                      : _formatTicketDateTime(ticket.joinedAt!),
-                                ),
-                                if (ticket.position != null)
-                                  _TicketDetailRow(
-                                    label: 'Position',
-                                    value: '#${ticket.position}',
-                                  ),
-                                _TicketDetailRow(
-                                  label: 'Estimated wait',
-                                  value: ticket.estimatedWaitMinutes == null
-                                      ? 'Unavailable'
-                                      : '${ticket.estimatedWaitMinutes} min',
-                                ),
-                                if (ticket.queueLength != null)
-                                  _TicketDetailRow(
-                                    label: 'Queue length',
-                                    value: '${ticket.queueLength} waiting',
-                                  ),
-                                if (ticket.queueUpdatedAt != null)
-                                  _TicketDetailRow(
-                                    label: 'Last queue update',
-                                    value: _formatTicketDateTime(
-                                      ticket.queueUpdatedAt!,
-                                    ),
-                                  ),
-                                if (ticket.customerFriendlyStatusReason != null)
-                                  _TicketDetailRow(
-                                    label: 'Note',
-                                    value: ticket.customerFriendlyStatusReason!,
-                                    textAlign: TextAlign.left,
-                                  ),
-                                const SizedBox(height: 16),
-                                const Divider(),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'Show this barcode when your ticket is called.',
-                                ),
-                                const SizedBox(height: 12),
-                                Container(
-                                  key: const Key('ticket-details-barcode'),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 12,
-                                  ),
-                                  color: Colors.white,
-                                  child: BarcodeWidget(
-                                    data:
-                                        ticket.verificationCode ??
-                                        ticket.lookupCode,
-                                    barcode: Barcode.code128(),
-                                    height: 72,
-                                    drawText: false,
-                                    color: GetPrioTheme.ink,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Center(
-                                  child: Text(
-                                    ticket.verificationCode ??
-                                        ticket.lookupCode,
-                                    style: const TextStyle(
-                                      letterSpacing: 2,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (ticket.canBeCancelled &&
-                              widget.onCancel != null) ...[
-                            const SizedBox(height: 16),
-                            GetPrioActionButton.destructive(
-                              key: const Key('ticket-details-cancel'),
-                              onPressed: _isCancelling ? null : _cancelTicket,
-                              child: Text(
-                                _isCancelling
-                                    ? 'Cancelling...'
-                                    : 'Cancel ticket',
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 20),
-                          _TicketQueueStatusCard(
-                            ticket: ticket,
-                            snapshot: details?.snapshot,
-                          ),
-                          if (snapshot.hasError) ...[
+                          if (snapshot.hasError && ticket.isActive) ...[
                             const SizedBox(height: 12),
                             const Text(
                               'Live queue details are temporarily unavailable.',
                             ),
                           ],
+                          const SizedBox(height: 20),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              );
-            },
-          ),
-        ),
+                if (showQr)
+                  Positioned(
+                    right: 20,
+                    bottom: 20,
+                    child: SafeArea(
+                      top: false,
+                      child: Semantics(
+                        label: 'Show ticket QR code',
+                        button: true,
+                        child: GestureDetector(
+                          key: const Key('ticket-qr-fab'),
+                          onTap: () => _openQr(ticket),
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: GetPrioTheme.orange,
+                                width: 2,
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x44000000),
+                                  blurRadius: 14,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              LucideIcons.qrCode,
+                              color: GetPrioTheme.ink,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _TicketJoinSuccessNotice extends StatelessWidget {
@@ -5637,7 +6249,9 @@ class _TicketJoinSuccessNotice extends StatelessWidget {
       key: const Key('ticket-join-success-notice'),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: GetPrioTheme.teal,
+        color: GetPrioTheme.colors(context).dark
+            ? const Color(0xFF115E59)
+            : GetPrioTheme.colors(context).teal,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -5691,7 +6305,7 @@ class _TicketDetailStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _TicketStatusBadge(ticket: ticket);
+    return TicketStatusBadge(ticket: ticket);
   }
 }
 
@@ -5699,7 +6313,7 @@ class _TicketDetailRow extends StatelessWidget {
   const _TicketDetailRow({
     required this.label,
     required this.value,
-    this.textAlign = TextAlign.end,
+    this.textAlign = TextAlign.left,
   });
 
   final String label;
@@ -5716,11 +6330,17 @@ class _TicketDetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(color: GetPrioTheme.mutedInk),
+              style: TextStyle(color: GetPrioTheme.colors(context).mutedInk),
             ),
           ),
           const SizedBox(width: 16),
-          Flexible(child: Text(value, textAlign: textAlign)),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: textAlign,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );
@@ -5728,28 +6348,43 @@ class _TicketDetailRow extends StatelessWidget {
 }
 
 class _TicketQueueStatusCard extends StatelessWidget {
-  const _TicketQueueStatusCard({required this.ticket, this.snapshot});
+  const _TicketQueueStatusCard({
+    required this.ticket,
+    this.snapshot,
+    this.showMessage = true,
+    this.completedWhileOpen = false,
+  });
+  final bool showMessage;
+  final bool completedWhileOpen;
 
   final QueueTicket ticket;
   final QueueSnapshot? snapshot;
 
   @override
   Widget build(BuildContext context) {
-    final message = switch (ticket.status) {
-      TicketStatus.waiting => 'You are in the queue. Keep this ticket ready.',
-      TicketStatus.called when ticket.customerConfirmedAt != null =>
-        'Your arrival was confirmed. Please wait for staff to begin service.',
-      TicketStatus.called => 'Your ticket was called. Proceed to the vendor.',
-      TicketStatus.served => 'This ticket has already been served.',
-      TicketStatus.pendingCarryOver =>
-        'Your ticket is saved for the next eligible queue day.',
-      _ => 'This ticket is no longer active.',
-    };
+    final completed =
+        ticket.status == TicketStatus.served || ticket.isServiceCompleted;
+    final message = completed
+        ? completedWhileOpen
+              ? 'Thank you for your business! We hope to see you again soon.'
+              : 'This ticket has already been served.'
+        : ticket.serviceMessage ??
+              switch (ticket.status) {
+                TicketStatus.waiting =>
+                  'You are in the queue. Keep this ticket ready.',
+                TicketStatus.called when ticket.customerConfirmedAt != null => 'Your arrival was confirmed. Please wait for staff to begin service.',
+                TicketStatus.called =>
+                  'Your ticket was called. Proceed to the vendor.',
+                TicketStatus.served => 'This ticket has already been served.',
+                TicketStatus.pendingCarryOver =>
+                  'Your ticket is saved for the next eligible queue day.',
+                _ => 'This ticket is no longer active.',
+              };
     return Container(
       key: const Key('ticket-details-queue-status'),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: GetPrioTheme.paperAccent,
+        color: GetPrioTheme.colors(context).paperAccent,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -5761,8 +6396,8 @@ class _TicketQueueStatusCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(message),
-                if (snapshot != null) ...[
+                if (showMessage) Text(message),
+                if (ticket.isActive && !completed && snapshot != null) ...[
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 12),
@@ -5883,7 +6518,7 @@ class _TicketProgress extends StatelessWidget {
                     : LucideIcons.circleDot)
               : null,
           caption: _statusCaption(ticket),
-          color: _statusColor(ticket.status),
+          color: _statusColor(context, ticket),
           isLast: true,
         ),
       ],
@@ -5900,6 +6535,7 @@ class _TicketProgress extends StatelessWidget {
       }
       return 'Position ${ticket.position} in line';
     }
+    if (ticket.serviceMessage != null) return ticket.serviceMessage!;
     return switch (ticket.status) {
       TicketStatus.waiting => 'Queue position is temporarily unavailable',
       TicketStatus.called when ticket.isConfirmed =>
@@ -5910,17 +6546,20 @@ class _TicketProgress extends StatelessWidget {
     };
   }
 
-  Color _statusColor(TicketStatus status) {
-    return switch (status) {
+  Color _statusColor(BuildContext context, QueueTicket ticket) {
+    if (ticket.isInService) return GetPrioTheme.orange;
+    if (ticket.isServiceInterrupted) return GetPrioTheme.destructive;
+    if (ticket.isServiceCompleted) return GetPrioTheme.success;
+    return switch (ticket.status) {
       TicketStatus.called => GetPrioTheme.orange,
       TicketStatus.pendingCarryOver => GetPrioTheme.warning,
-      TicketStatus.waiting => GetPrioTheme.teal,
+      TicketStatus.waiting => GetPrioTheme.colors(context).teal,
       TicketStatus.served => GetPrioTheme.success,
       TicketStatus.skipped ||
       TicketStatus.cancelled ||
       TicketStatus.unserved ||
       TicketStatus.expired => GetPrioTheme.destructive,
-      TicketStatus.unknown => GetPrioTheme.disabled,
+      TicketStatus.unknown => GetPrioTheme.colors(context).disabled,
     };
   }
 
@@ -5975,7 +6614,7 @@ class _TimelineStep extends StatelessWidget {
                       width: 2,
                       margin: const EdgeInsets.only(bottom: 4),
                       decoration: BoxDecoration(
-                        color: GetPrioTheme.line,
+                        color: GetPrioTheme.colors(context).line,
                         borderRadius: BorderRadius.circular(1),
                       ),
                     ),
@@ -5998,7 +6637,9 @@ class _TimelineStep extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     caption,
-                    style: const TextStyle(color: GetPrioTheme.mutedInk),
+                    style: TextStyle(
+                      color: GetPrioTheme.colors(context).mutedInk,
+                    ),
                   ),
                 ],
               ),
@@ -6025,7 +6666,11 @@ class _TimelineStep extends StatelessWidget {
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
               if (!isLast)
-                Container(width: 2, height: 34, color: GetPrioTheme.line),
+                Container(
+                  width: 2,
+                  height: 34,
+                  color: GetPrioTheme.colors(context).line,
+                ),
             ],
           ),
         ),
@@ -6056,9 +6701,11 @@ class AccountPage extends StatefulWidget {
     this.profileRepository,
     this.onUserUpdated,
     this.approvedVendorStore,
+    this.pickAvatar,
     this.sandbox = false,
   });
 
+  final Future<XFile?> Function()? pickAvatar;
   final VendorSocialRepository? socialRepository;
   final ValueChanged<VendorSummary>? onOpenVendor;
   final AuthUser? user;
@@ -6077,21 +6724,25 @@ class AccountPage extends StatefulWidget {
 class _AccountPageState extends State<AccountPage> {
   AuthUser? _user;
   bool _avatarBusy = false;
-  Future<NotificationSettings?>? _notificationSettingsFuture;
+  UploadImage? _pendingAvatar;
+  int _avatarGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _user = widget.user;
-    _primeNotificationSettings();
   }
 
   @override
   void didUpdateWidget(covariant AccountPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.user != oldWidget.user) _user = widget.user;
-    if (widget.settingsRepository != oldWidget.settingsRepository) {
-      _primeNotificationSettings();
+    if (widget.user != oldWidget.user) {
+      if (widget.user?.id != oldWidget.user?.id) {
+        _avatarGeneration++;
+        _pendingAvatar = null;
+        _avatarBusy = false;
+      }
+      _user = widget.user;
     }
   }
 
@@ -6107,10 +6758,11 @@ class _AccountPageState extends State<AccountPage> {
             key: const Key('account-page'),
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
-              const Text('Profile').h2(),
-              const SizedBox(height: 4),
-              const Text('Manage your profile and app preferences.'),
-              const SizedBox(height: 20),
+              const TabPageHeader(
+                page: 'account',
+                title: 'Profile',
+                description: 'Manage your profile and app preferences.',
+              ),
               Card(
                 child: Row(
                   children: [
@@ -6140,6 +6792,32 @@ class _AccountPageState extends State<AccountPage> {
                   ],
                 ),
               ),
+              if (_pendingAvatar != null)
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    OutlineButton(
+                      key: const Key('profile-avatar-retry'),
+                      onPressed: _avatarBusy ? null : _pickAvatar,
+                      child: const Text('Retry photo upload'),
+                    ),
+                    GhostButton(
+                      onPressed: _avatarBusy
+                          ? null
+                          : () {
+                              setState(() => _pendingAvatar = null);
+                              _pickAvatar();
+                            },
+                      child: const Text('Change photo'),
+                    ),
+                    GhostButton(
+                      onPressed: _avatarBusy
+                          ? null
+                          : () => setState(() => _pendingAvatar = null),
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                ),
               const SizedBox(height: 28),
               const Text('Account').h3(),
               const SizedBox(height: 8),
@@ -6178,14 +6856,33 @@ class _AccountPageState extends State<AccountPage> {
                 ),
                 const Divider(),
               ],
+              if (widget.sandbox) ...[
+                _AccountAction(
+                  key: const Key('profile-notifications'),
+                  icon: LucideIcons.bell,
+                  title: 'Notifications',
+                  subtitle: 'Manage queue alerts.',
+                  onPressed: () => openAppDrawer<void>(
+                    context: overlayContext,
+                    position: OverlayPosition.bottom,
+                    builder: (_) => SocialSheet(
+                      title: 'Notifications',
+                      child: NotificationSettingsCard(
+                        repository: widget.settingsRepository,
+                      ),
+                    ),
+                  ),
+                ),
+                const Divider(),
+              ],
               _AccountAction(
-                key: const Key('profile-notifications'),
-                icon: LucideIcons.bell,
-                title: 'Notifications',
-                subtitle: widget.settingsRepository == null
-                    ? 'Queue alerts unavailable'
-                    : 'Manage queue alerts and app preferences.',
-                onPressed: () => _openNotificationsSheet(overlayContext),
+                key: const Key('profile-appearance'),
+                icon: LucideIcons.palette,
+                title: 'Appearance',
+                subtitle: 'Light, Dark, or follow your device.',
+                onPressed: AppearanceScope.maybeOf(context) == null
+                    ? null
+                    : () => showAppearanceSheet(overlayContext),
               ),
               const Divider(),
               const SizedBox(height: 20),
@@ -6253,14 +6950,13 @@ class _AccountPageState extends State<AccountPage> {
   }
 
   Future<void> _openPersonalInfoSheet(BuildContext context) async {
-    final completer = openDrawerOverlay<AuthUser>(
+    final completer = openAppDrawer<AuthUser>(
       context: context,
       position: OverlayPosition.bottom,
       expands: false,
       draggable: true,
       useSafeArea: false,
       borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: false,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.92,
       ),
@@ -6281,39 +6977,14 @@ class _AccountPageState extends State<AccountPage> {
     showFeedbackToast(this.context, message: 'Profile updated.');
   }
 
-  Future<void> _openNotificationsSheet(BuildContext context) async {
-    final settings = await (_notificationSettingsFuture ??=
-        _loadNotificationSettings());
-    if (!mounted || !context.mounted) return;
-    final completer = openDrawerOverlay<void>(
-      context: context,
-      position: OverlayPosition.bottom,
-      expands: false,
-      draggable: true,
-      useSafeArea: false,
-      borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: false,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.78,
-      ),
-      builder: (sheetContext) => _NotificationsSheet(
-        repository: widget.settingsRepository,
-        initialSettings: settings,
-      ),
-    );
-    await completer.future;
-    if (mounted) _primeNotificationSettings();
-  }
-
   Future<void> _openApprovedVendorsSheet(BuildContext context) async {
     final store = widget.approvedVendorStore;
     final accountId = _user?.id ?? widget.user?.id;
     if (store == null || accountId == null) return;
-    await openDrawerOverlay<void>(
+    await openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: false,
-      transformBackdrop: false,
       builder: (sheetContext) => SocialSheet(
         key: const Key('profile-approved-vendors-sheet'),
         title: 'Approved Vendors',
@@ -6324,22 +6995,6 @@ class _AccountPageState extends State<AccountPage> {
     ).future;
   }
 
-  void _primeNotificationSettings() {
-    _notificationSettingsFuture = widget.settingsRepository == null
-        ? null
-        : _loadNotificationSettings();
-  }
-
-  Future<NotificationSettings?> _loadNotificationSettings() async {
-    final repository = widget.settingsRepository;
-    if (repository == null) return null;
-    try {
-      return await repository.loadNotificationSettings();
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _openSecuritySheet(
     BuildContext context,
     SecuritySection section,
@@ -6348,14 +7003,13 @@ class _AccountPageState extends State<AccountPage> {
         .findAncestorWidgetOfExactType<AuthGate>()
         ?.authRepository
         .biometricLogin;
-    final completer = openDrawerOverlay<void>(
+    final completer = openAppDrawer<void>(
       context: context,
       position: OverlayPosition.bottom,
       expands: false,
       draggable: true,
       useSafeArea: false,
       borderRadius: _ProfileSheetContent.borderRadius,
-      transformBackdrop: false,
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.8,
       ),
@@ -6382,58 +7036,60 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _pickAvatar() async {
     final repository = widget.profileRepository;
     if (repository == null || _avatarBusy) return;
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1600,
-    );
-    if (picked == null || !mounted) return;
-    final bytes = await picked.readAsBytes();
-    if (!mounted) return;
-    final contentType =
-        picked.mimeType ?? _profileImageContentType(picked.name);
-    if (!['image/jpeg', 'image/png', 'image/webp'].contains(contentType)) {
-      showFeedbackToast(
-        context,
-        message: 'Choose a JPEG, PNG, or WebP image.',
-        isError: true,
-      );
-      return;
-    }
-    if (bytes.length > 5 * 1024 * 1024) {
-      showFeedbackToast(
-        context,
-        message: 'Choose an image no larger than 5 MB.',
-        isError: true,
-      );
-      return;
-    }
-
     setState(() => _avatarBusy = true);
+    final userId = widget.user?.id;
+    final generation = _avatarGeneration;
+    bool isCurrent() =>
+        mounted && _avatarGeneration == generation && widget.user?.id == userId;
     try {
+      if (_pendingAvatar == null) {
+        final picked =
+            await (widget.pickAvatar?.call() ??
+                ImagePicker().pickImage(
+                  source: ImageSource.gallery,
+                  imageQuality: 95,
+                  maxWidth: 2400,
+                  maxHeight: 2400,
+                ));
+        if (picked == null || !isCurrent()) return;
+        if (await picked.length() > 8 * 1024 * 1024) {
+          throw ArgumentError('Choose an image up to 8 MB.');
+        }
+        final bytes = await picked.readAsBytes();
+        if (!isCurrent()) return;
+        _pendingAvatar = UploadImage(
+          bytes,
+          picked.name,
+          picked.mimeType ?? _profileImageContentType(picked.name),
+        );
+      }
+      final selected = _pendingAvatar!;
+      if (!isCurrent()) return;
       final updated = await repository.uploadAvatar(
-        fileName: picked.name,
-        contentType: contentType,
-        bytes: bytes,
+        fileName: selected.fileName,
+        contentType: selected.contentType,
+        bytes: selected.bytes,
+        isCurrent: isCurrent,
       );
+      if (!isCurrent()) return;
+      _pendingAvatar = null;
       if (mounted) {
         setState(() => _user = updated);
         widget.onUserUpdated?.call(updated);
         showFeedbackToast(context, message: 'Profile photo updated.');
       }
     } catch (error) {
-      if (mounted) {
+      if (mounted && isCurrent()) {
         showFeedbackToast(
           context,
-          message: _profileErrorMessage(
-            error,
-            'Could not upload profile photo.',
-          ),
+          message: error is ArgumentError
+              ? '${error.message}'
+              : _profileErrorMessage(error, 'Could not upload profile photo.'),
           isError: true,
         );
       }
     } finally {
-      if (mounted) setState(() => _avatarBusy = false);
+      if (isCurrent()) setState(() => _avatarBusy = false);
     }
   }
 
@@ -6645,7 +7301,7 @@ class _ProfileAvatar extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: GetPrioTheme.paperAccent,
+                color: GetPrioTheme.colors(context).paperAccent,
                 shape: BoxShape.circle,
                 image: hasAvatar
                     ? DecorationImage(
@@ -6671,7 +7327,10 @@ class _ProfileAvatar extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: GetPrioTheme.orange,
                   shape: BoxShape.circle,
-                  border: Border.all(color: GetPrioTheme.paper, width: 3),
+                  border: Border.all(
+                    color: GetPrioTheme.colors(context).paper,
+                    width: 3,
+                  ),
                 ),
                 child: Icon(
                   busy ? LucideIcons.loaderCircle : LucideIcons.camera,
@@ -6691,7 +7350,6 @@ class _ProfileSheetContent extends StatelessWidget {
   const _ProfileSheetContent({
     super.key,
     required this.title,
-    required this.closeLabel,
     required this.child,
     this.maxHeight,
   });
@@ -6699,7 +7357,6 @@ class _ProfileSheetContent extends StatelessWidget {
   static const borderRadius = BorderRadius.vertical(top: Radius.circular(28));
 
   final String title;
-  final String closeLabel;
   final Widget child;
   final double? maxHeight;
 
@@ -6716,30 +7373,13 @@ class _ProfileSheetContent extends StatelessWidget {
             24,
             GetPrioTheme.bottomSheetTopPadding,
             24,
-            12 + keyboardInsetOf(context),
+            12,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(child: Text(title).h3()),
-                  Semantics(
-                    button: true,
-                    label: closeLabel,
-                    child: GhostButton(
-                      key: ValueKey(closeLabel),
-                      onPressed: () {
-                        _dismissKeyboard();
-                        closeOverlay(context);
-                      },
-                      density: ButtonDensity.icon,
-                      child: const Icon(LucideIcons.x),
-                    ),
-                  ),
-                ],
-              ),
+              AppDrawerTitle(title),
               const SizedBox(height: 12),
               if (maxHeight == null)
                 ConstrainedBox(
@@ -6824,8 +7464,8 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
       title: _step == _PersonalInfoStep.form
           ? 'Personal info'
           : 'Verify your changes',
-      closeLabel: 'Close personal info',
       child: KeyboardAwareScrollView(
+        reserveKeyboardSpace: false,
         child: switch (_step) {
           _PersonalInfoStep.form => _buildForm(context),
           _PersonalInfoStep.currentEmailCode => _buildEmailCode(
@@ -6912,7 +7552,7 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
                     : 'This email address is not verified yet.',
                 style: Theme.of(context).typography.small.copyWith(
                   color: _currentUser.emailVerified
-                      ? GetPrioTheme.mutedInk
+                      ? GetPrioTheme.colors(context).mutedInk
                       : GetPrioTheme.destructive,
                 ),
               ),
@@ -6956,12 +7596,11 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
         const SizedBox(height: 8),
         Text('$description It expires in 10 minutes.'),
         const SizedBox(height: 20),
-        _LabeledTextField(
+        _LabeledOtpField(
           inputKey: const Key('profile-email-code'),
+          onCompleted: (_) => unawaited(onSubmit()),
           controller: _code,
           label: '6-digit code',
-          placeholder: 'Enter the code',
-          keyboardType: TextInputType.number,
           onChanged: (value) => _limitDigits(_code, value),
         ),
         if (_error != null) ...[
@@ -6997,12 +7636,13 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
           'Enter the code sent to ${_challenge?.deliveryTarget ?? 'your email address'} and your current password.',
         ),
         const SizedBox(height: 20),
-        _LabeledTextField(
+        _LabeledOtpField(
           inputKey: const Key('profile-phone-code'),
+          onCompleted: (_) {
+            if (_password.text.isNotEmpty) unawaited(_verifyPhone());
+          },
           controller: _code,
           label: '6-digit code',
-          placeholder: 'Enter the code',
-          keyboardType: TextInputType.number,
           onChanged: (value) => _limitDigits(_code, value),
         ),
         const SizedBox(height: 16),
@@ -7276,121 +7916,6 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
   }
 }
 
-class _NotificationsSheet extends StatefulWidget {
-  const _NotificationsSheet({required this.repository, this.initialSettings});
-
-  final AccountSettingsRepository? repository;
-  final NotificationSettings? initialSettings;
-
-  @override
-  State<_NotificationsSheet> createState() => _NotificationsSheetState();
-}
-
-class _NotificationsSheetState extends State<_NotificationsSheet> {
-  bool? _queueAlerts;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _queueAlerts = widget.initialSettings?.queueAlerts;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = widget.initialSettings;
-    return _ProfileSheetContent(
-      key: const Key('profile-notifications-sheet'),
-      title: 'Notifications',
-      closeLabel: 'Close notifications',
-      child: settings == null
-          ? const SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(LucideIcons.bellOff, size: 40),
-                  SizedBox(height: 12),
-                  Text('Queue alerts unavailable'),
-                  SizedBox(height: 4),
-                  Text('Notification settings could not be loaded.'),
-                ],
-              ),
-            )
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Choose which updates you want to receive.'),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      const Icon(LucideIcons.bell),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Queue alerts'),
-                            SizedBox(height: 4),
-                            Text(
-                              'Receive notifications about your queue tickets.',
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        key: const Key('profile-queue-alerts'),
-                        value: _queueAlerts ?? settings.queueAlerts,
-                        onChanged: _saving ? null : _updateQueueAlerts,
-                      ),
-                    ],
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 16),
-                    DestructiveBadge(child: Text(_error!)),
-                  ],
-                ],
-              ),
-            ),
-    );
-  }
-
-  Future<void> _updateQueueAlerts(bool enabled) async {
-    if (_saving) return;
-    final repository = widget.repository;
-    if (repository == null) return;
-    final previous = _queueAlerts;
-    setState(() {
-      _saving = true;
-      _queueAlerts = enabled;
-      _error = null;
-    });
-    try {
-      final settings = await repository.updateNotificationSettings(
-        queueAlerts: enabled,
-      );
-      if (mounted) {
-        setState(() => _queueAlerts = settings.queueAlerts);
-        showFeedbackToast(context, message: 'Notification preferences saved.');
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _queueAlerts = previous;
-          _error = _profileErrorMessage(
-            error,
-            'Could not save notification settings.',
-          );
-        });
-        showFeedbackToast(context, message: _error!, isError: true);
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-}
-
 class _AccountAction extends StatelessWidget {
   const _AccountAction({
     super.key,
@@ -7409,7 +7934,9 @@ class _AccountAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = destructive ? GetPrioTheme.destructive : GetPrioTheme.ink;
+    final color = destructive
+        ? GetPrioTheme.destructive
+        : GetPrioTheme.colors(context).ink;
     return SizedBox(
       width: double.infinity,
       child: GhostButton(
@@ -7532,10 +8059,12 @@ class _SecurityPageState extends State<SecurityPage>
       null => 'Privacy and security',
     };
     final content = KeyboardAwareScrollView(
+      reserveKeyboardSpace: widget.asSheet,
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!widget.asSheet) const ScrollAwareHeaderSpace(),
           if (section == null || section == SecuritySection.biometrics) ...[
             if (widget.biometricLogin != null)
               _BiometricLoginSetting(
@@ -7609,14 +8138,10 @@ class _SecurityPageState extends State<SecurityPage>
                       child: Semantics(
                         image: true,
                         label: 'MFA setup QR code',
-                        child: BarcodeWidget(
+                        child: BrandedQrCode(
                           key: const Key('mfa-enrollment-qr'),
                           data: _enrollment!.otpauthUri.toString(),
-                          barcode: Barcode.qrCode(),
-                          backgroundColor: Colors.white,
-                          drawText: false,
-                          width: 220,
-                          height: 220,
+                          brandKey: const Key('mfa-qr-brand'),
                         ),
                       ),
                     ),
@@ -7652,12 +8177,11 @@ class _SecurityPageState extends State<SecurityPage>
                 ),
               ),
               const SizedBox(height: 12),
-              _LabeledTextField(
+              _LabeledOtpField(
                 controller: _mfaCode,
                 inputKey: const Key('mfa-enrollment-code'),
+                onCompleted: (_) => unawaited(_confirmMfa()),
                 label: 'Authenticator code',
-                placeholder: 'Enter your 6-digit code',
-                keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 12),
               GetPrioActionButton.primary(
@@ -7726,26 +8250,22 @@ class _SecurityPageState extends State<SecurityPage>
               : 'profile-${section.name}-sheet',
         ),
         title: title,
-        closeLabel: 'Close $title',
         maxHeight: MediaQuery.sizeOf(context).height * 0.8,
         child: content,
       );
     }
     return ScrollNotificationObserver(
-      child: Scaffold(
+      child: ScrollAwareScaffold(
+        resizeToAvoidBottomInset: true,
         headers: [
           ScrollAwareAppBar(
             title: const Text('Security and MFA'),
             leading: [
-              GhostButton(
-                onPressed: () => Navigator.of(context).pop(),
-                density: ButtonDensity.icon,
-                child: const Icon(LucideIcons.arrowLeft),
-              ),
+              GetPrioBackButton(onPressed: () => Navigator.of(context).pop()),
             ],
           ),
         ],
-        child: content,
+        child: SafeArea(top: false, child: content),
       ),
     );
   }
@@ -7855,19 +8375,26 @@ class _SecurityPageState extends State<SecurityPage>
             ),
             const SizedBox(height: 12),
           ],
-          _LabeledTextField(
-            inputKey: const Key('mfa-current-code'),
-            controller: _currentMfaCode,
-            label: removing && _useMfaRecoveryCode
-                ? 'Recovery code'
-                : 'Current authenticator code',
-            placeholder: removing && _useMfaRecoveryCode
-                ? 'Enter a recovery code'
-                : 'Enter your 6-digit code',
-            keyboardType: removing && _useMfaRecoveryCode
-                ? TextInputType.text
-                : TextInputType.number,
-          ),
+          if (removing && _useMfaRecoveryCode)
+            _LabeledTextField(
+              inputKey: const Key('mfa-current-code'),
+              controller: _currentMfaCode,
+              label: 'Recovery code',
+              placeholder: 'Enter a recovery code',
+            )
+          else
+            _LabeledOtpField(
+              inputKey: const Key('mfa-current-code'),
+              onCompleted: (_) {
+                if (removing) {
+                  if (_mfaPassword.text.isNotEmpty) unawaited(_removeMfa());
+                } else {
+                  unawaited(_replaceMfa());
+                }
+              },
+              controller: _currentMfaCode,
+              label: 'Current authenticator code',
+            ),
           if (removing)
             GetPrioActionButton.outline(
               key: const Key('mfa-toggle-recovery'),

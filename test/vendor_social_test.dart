@@ -1,3 +1,5 @@
+import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
 import 'package:getprio_mobile/queue/auth_queue_api.dart';
@@ -78,6 +80,52 @@ class SocialClient implements AuthenticatedApiClient {
 }
 
 void main() {
+  testWidgets(
+    'reviewed history ticket has no pull refresh and 16px alert gap',
+    (tester) async {
+      final client = SocialClient()..rating = 5;
+      final ticket = QueueTicket.fromJson({
+        'id': '1',
+        'lookupCode': 'OLD',
+        'status': 'served',
+        'tenantSlug': 'vendor-0',
+        'tenantName': 'Business 0',
+      });
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: ticket,
+            directoryRepository: DirectoryRepository(
+              _ReviewDirectoryApi(),
+              social: VendorSocialRepository(client),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(RefreshTrigger), findsNothing);
+      final alert = find.byKey(const Key('ticket-review-thank-you-alert'));
+      expect(alert, findsOneWidget);
+      await tester.ensureVisible(alert);
+      await tester.pumpAndSettle();
+      final servedText = find.text('This ticket has already been served.');
+      final statusAlert = find
+          .ancestor(of: servedText, matching: find.byType(Container))
+          .first;
+      expect(
+        tester.getTopLeft(alert).dy - tester.getBottomLeft(statusAlert).dy,
+        closeTo(16, .1),
+      );
+      await tester.drag(
+        find.byKey(const Key('ticket-details-page')),
+        const Offset(0, 500),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(RefreshTrigger), findsNothing);
+      expect(find.text('Thank you for reviewing this visit.'), findsOneWidget);
+    },
+  );
+
   test(
     'favorites persist only after successful deletion and notify all consumers',
     () async {
@@ -180,6 +228,15 @@ void main() {
     await tester.enterText(find.byType(TextField), 'x' * 510);
     await tester.pump();
     expect(find.text('500/500'), findsOneWidget);
+    expect(tester.testTextInput.isVisible, isTrue);
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.focusNode!.hasFocus, isTrue);
+    await tester.tap(find.text('Rate Clinic'));
+    await tester.pumpAndSettle();
+    expect(field.focusNode!.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(field.controller!.text, hasLength(500));
+
     await tester.tap(find.text('Rate vendor'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 4));
@@ -335,4 +392,17 @@ class TicketApi implements AccountQueueApi {
       {'id': '1', 'lookupCode': 'TICKET', 'status': 'served'},
     ],
   };
+}
+
+class _ReviewDirectoryApi implements DirectoryApi {
+  @override
+  Future<Map<String, dynamic>> loadVendor(String tenantSlug) async => {
+    'slug': tenantSlug,
+    'name': 'Business 0',
+  };
+  @override
+  Future<Map<String, dynamic>> loadVendors({
+    String? search,
+    int limit = 20,
+  }) async => {'vendors': []};
 }

@@ -85,7 +85,7 @@ class _ActiveTicketCarouselState extends State<ActiveTicketCarousel> {
                     decoration: BoxDecoration(
                       color: index == _index
                           ? GetPrioTheme.primary
-                          : GetPrioTheme.line,
+                          : GetPrioTheme.colors(context).line,
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),

@@ -1,3 +1,5 @@
+import '../navigation/app_drawer.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart' show Icons;
@@ -16,11 +18,10 @@ Future<void> showFavoritesSheet(
   VendorSocialRepository repository, {
   ValueChanged<VendorSummary>? onOpen,
 }) async {
-  await openDrawerOverlay<void>(
+  await openAppDrawer<void>(
     context: context,
     position: OverlayPosition.bottom,
     expands: false,
-    transformBackdrop: false,
     builder: (context) => SocialSheet(
       title: 'Favorites',
       topPadding: GetPrioTheme.bottomSheetTopPadding,
@@ -71,16 +72,7 @@ class SocialSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(child: Text(title).h3()),
-                GhostButton(
-                  density: ButtonDensity.icon,
-                  onPressed: () => closeDrawer(context),
-                  child: const Icon(LucideIcons.x),
-                ),
-              ],
-            ),
+            AppDrawerTitle(title),
             SizedBox(height: headerSpacing),
             Expanded(child: child),
             ?footer,
@@ -197,9 +189,10 @@ class _FavoritesListState extends State<FavoritesList> {
                                   if (vendor.category?.isNotEmpty == true)
                                     Text(
                                       vendor.category!,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: GetPrioTypography.labelSize,
-                                        color: GetPrioTheme.mutedInk,
+                                        color: GetPrioTheme.colors(context)
+                                            .mutedInk,
                                       ),
                                     ),
                                 ],
@@ -348,7 +341,6 @@ class _VendorSocialHeaderState extends State<VendorSocialHeader> {
   }
 
   static const _orange = Color(0xFFFF8800);
-  static const _ink = Color(0xFF080808);
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -360,7 +352,7 @@ class _VendorSocialHeaderState extends State<VendorSocialHeader> {
         height: 48,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: GetPrioTheme.card.withAlpha(224),
+          color: GetPrioTheme.colors(context).card.withAlpha(224),
           borderRadius: BorderRadius.circular(999),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -401,7 +393,9 @@ class _VendorSocialHeaderState extends State<VendorSocialHeader> {
                   child: Icon(
                     favorite ? Icons.favorite : Icons.favorite_border,
                     size: 26,
-                    color: favorite ? _orange : _ink,
+                    color: favorite
+                        ? _orange
+                        : GetPrioTheme.colors(context).ink,
                     semanticLabel: favorite
                         ? 'Remove favorite'
                         : 'Add favorite',
@@ -409,12 +403,12 @@ class _VendorSocialHeaderState extends State<VendorSocialHeader> {
                 ),
               ),
             ),
-            const SizedBox(
+            SizedBox(
               height: 30,
               child: VerticalDivider(
                 width: 1,
                 thickness: 1,
-                color: Color(0x40000000),
+                color: GetPrioTheme.colors(context).line,
               ),
             ),
             FutureBuilder<VendorReviewsPage>(
@@ -439,16 +433,18 @@ class _VendorSocialHeaderState extends State<VendorSocialHeader> {
                           Icon(
                             unrated ? Icons.star_border : Icons.star,
                             size: 27,
-                            color: unrated ? _ink : _orange,
+                            color: unrated
+                                ? GetPrioTheme.colors(context).ink
+                                : _orange,
                           ),
                           const SizedBox(width: 6),
                           if (unrated)
-                            const Text(
+                            Text(
                               'Not yet rated',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w400,
-                                color: _ink,
+                                color: GetPrioTheme.colors(context).ink,
                               ),
                             )
                           else ...[
@@ -456,10 +452,10 @@ class _VendorSocialHeaderState extends State<VendorSocialHeader> {
                               snapshot.hasData
                                   ? snapshot.data!.average.toStringAsFixed(1)
                                   : '—',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 21,
                                 fontWeight: FontWeight.w800,
-                                color: _ink,
+                                color: GetPrioTheme.colors(context).ink,
                               ),
                             ),
                             const SizedBox(width: 5),
@@ -467,10 +463,10 @@ class _VendorSocialHeaderState extends State<VendorSocialHeader> {
                               snapshot.hasData
                                   ? '(${compactRatingCount(snapshot.data!.count)})'
                                   : '(—)',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w400,
-                                color: _ink,
+                                color: GetPrioTheme.colors(context).ink,
                               ),
                             ),
                           ],
@@ -493,11 +489,10 @@ Future<void> showReviewsSheet(
   VendorSocialRepository repository,
   String slug,
 ) async {
-  await openDrawerOverlay<void>(
+  await openAppDrawer<void>(
     context: context,
     position: OverlayPosition.bottom,
     expands: false,
-    transformBackdrop: false,
     builder: (context) => SocialSheet(
       title: 'Reviews',
       topPadding: GetPrioTheme.bottomSheetTopPadding,
@@ -713,7 +708,7 @@ class _ReviewCarouselState extends State<_ReviewCarousel> {
               decoration: BoxDecoration(
                 color: index == _index
                     ? GetPrioTheme.primary
-                    : GetPrioTheme.mutedInk.withAlpha(80),
+                    : GetPrioTheme.colors(context).mutedInk.withAlpha(80),
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -828,11 +823,12 @@ class _VendorRatingFormState extends State<VendorRatingForm> {
                 child: TextField(
                   controller: comment,
                   focusNode: _commentFocus,
+                  onTapOutside: (_) => _commentFocus.unfocus(),
                   enabled: !busy,
                   maxLines: 5,
                   maxLength: 500,
                   features: const [focusedClearInputFeature],
-                  scrollPadding: const EdgeInsets.only(top: 24, bottom: 96),
+                  scrollPadding: inputScrollPadding,
                   inputFormatters: [LengthLimitingTextInputFormatter(500)],
                   placeholder: const Text('Share your experience (optional)'),
                   onChanged: (_) => setState(() {}),
@@ -911,7 +907,22 @@ class _TicketReviewActionState extends State<TicketReviewAction> {
       }
       if (!snapshot.hasData) return const SizedBox.shrink();
       if (snapshot.data!['rating'] != null) {
-        return const Text('Thank you for reviewing this visit.');
+        return Container(
+          key: const Key('ticket-review-thank-you-alert'),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: GetPrioTheme.colors(context).paperAccent,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.circleCheck, size: 20),
+              SizedBox(width: 12),
+              Expanded(child: Text('Thank you for reviewing this visit.')),
+            ],
+          ),
+        );
       }
       if (snapshot.data!['eligible'] != true) return const SizedBox.shrink();
       if (widget.prompt) {

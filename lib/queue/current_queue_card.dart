@@ -125,7 +125,7 @@ class _Metric extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).typography.xSmall
-              .copyWith(color: GetPrioTheme.mutedInk),
+              .copyWith(color: GetPrioTheme.colors(context).mutedInk),
         ),
         const SizedBox(height: 4),
         Text(value, style: Theme.of(context).typography.h2),

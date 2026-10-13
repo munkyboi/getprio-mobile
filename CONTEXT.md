@@ -1,6 +1,6 @@
 # GetPrio Customer Mobile
 
-This context defines the customer-facing language for the GetPrio mobile app. It covers discovering vendors, joining live queues, and managing queue tickets.
+This context defines the customer-facing language for the GetPrio mobile app. It covers discovering vendors, joining live queues, managing queue tickets, and planning service bookings.
 
 ## Language
 
@@ -37,7 +37,7 @@ The customer’s record and place in one vendor location’s live queue, with a 
 _Avoid_: Queue entry, booking, appointment
 
 **Active queue ticket**:
-A queue ticket whose lifecycle is still relevant to the customer, including waiting, called, or carry-over states.
+A queue ticket whose lifecycle is still relevant to the customer, including waiting, called, or carry-over states. Called tickets may be arrival-confirmed or in service; these display states are derived from API timing fields. Completion and interruption are service outcomes, separate from the persisted queue status.
 _Avoid_: Current ticket when historical tickets are also visible
 
 **Queue ticket status**:
@@ -51,3 +51,17 @@ _Avoid_: Ticket number, rank
 **Estimated wait**:
 An approximate number of minutes returned with a waiting ticket's current position. It is a planning estimate, not a service-time promise or a guarantee of being served before closing.
 _Avoid_: Appointment time, guarantee
+
+
+**Lists**:
+The bottom-navigation destination containing clickable Tickets and Bookings cards.
+
+**Booking**:
+A scheduled service request at one vendor location. Booking status and payment status are separate server-authoritative values. A queue ticket is created only after vendor check-in.
+
+**Manual payment evidence**:
+A payment reference and private receipt supplied by the customer for vendor review. Receipt submission is not payment verification or booking confirmation.
+
+The approved mobile booking scope and delivery stages are in `docs/specs/mobile-booking-plan.md`.
+
+Booking development targets the main GetPrio customer app, not the separate Sandbox app. Zero32 is the primary development device (iOS device ID `00008120-001A3D101E68C01E`), replacing Zero32 Domain as of 9 October 2026.

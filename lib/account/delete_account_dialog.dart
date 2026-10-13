@@ -205,7 +205,7 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
               enabled: !_submitting,
               placeholder: const Text('Enter your current password'),
               features: const [InputFeature.passwordToggle()],
-              scrollPadding: const EdgeInsets.only(top: 24, bottom: 96),
+              scrollPadding: inputScrollPadding,
             ),
           ),
         ],

@@ -1,17 +1,15 @@
+import '../navigation/app_drawer.dart';
+import 'join_otp_drawer.dart';
 import '../directory/expandable_vendor_description.dart';
 
 import 'dart:async';
-
-import 'package:flutter/services.dart';
 
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 import '../app_theme.dart';
 import '../form_validation.dart';
-import '../feedback_toast.dart';
 import '../auth/auth_repository.dart';
-import '../keyboard_avoidance.dart';
 import '../navigation/scroll_aware_app_bar.dart';
 import 'join_repository.dart';
 import 'payment_flow.dart';
@@ -25,6 +23,7 @@ class JoinPage extends StatefulWidget {
     required this.allowedHosts,
     required this.customerName,
     this.directTenantSlug,
+    this.initialResult,
     this.directLocationSlug,
     this.onJoined,
     this.paymentBrowser,
@@ -36,6 +35,7 @@ class JoinPage extends StatefulWidget {
   final Set<String> allowedHosts;
   final String customerName;
   final String? directTenantSlug;
+  final JoinResult? initialResult;
   final String? directLocationSlug;
   final ValueChanged<QueueTicket>? onJoined;
   final PaymentBrowser? paymentBrowser;
@@ -55,9 +55,7 @@ class _JoinPageState extends State<JoinPage>
   JoinedTicket? _joinedTicket;
   PaymentRequired? _payment;
   JoinEmailVerification? _emailChallenge;
-  final _otpController = TextEditingController();
-  final _otpFocusNode = FocusNode();
-  Timer? _otpTimer;
+  bool _otpDrawerOpen = false;
   Timer? _queueRefreshTimer;
   StreamSubscription<void>? _queueEvents;
   int _queueWatchGeneration = 0;
@@ -76,7 +74,11 @@ class _JoinPageState extends State<JoinPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (_isDirectJoin) {
+    if (widget.initialResult != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handleJoinResult(widget.initialResult!);
+      });
+    } else if (_isDirectJoin) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_joinDirect());
       });
@@ -94,9 +96,6 @@ class _JoinPageState extends State<JoinPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopQueueUpdates();
-    _otpTimer?.cancel();
-    _otpFocusNode.dispose();
-    _otpController.dispose();
     super.dispose();
   }
 
@@ -180,159 +179,43 @@ class _JoinPageState extends State<JoinPage>
     }
   }
 
-  Widget _buildEmailVerification(JoinEmailVerification challenge) {
-    final resendAt = challenge.resendAvailableAt;
-    final seconds = resendAt == null
-        ? 0
-        : resendAt.difference(DateTime.now()).inSeconds + 1;
-    final expired = challenge.expiresAt?.isBefore(DateTime.now()) ?? false;
-    return Center(
-      child: KeyboardAwareScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Verify your email').h3(),
-              const SizedBox(height: 12),
-              Text(
-                'Enter the 6-digit code sent to ${challenge.email} to join this queue.',
-              ),
-              const SizedBox(height: 24),
-              ValidatedField(
-                validation: formValidation,
-                controller: _otpController,
-                child: KeyboardAwareInput(
-                  child: TextField(
-                    key: const Key('queue-join-otp'),
-                    controller: _otpController,
-                    focusNode: _otpFocusNode,
-                    enabled: !_isBusy && !expired,
-                    keyboardType: TextInputType.number,
-                    autofillHints: const [AutofillHints.oneTimeCode],
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
-                    ],
-                    features: const [focusedClearInputFeature],
-                    scrollPadding: const EdgeInsets.only(top: 24, bottom: 96),
-                    onChanged: (value) {
-                      setState(() {});
-                      if (value.length == 6) unawaited(_verifyEmail());
-                    },
-                  ),
-                ),
-              ),
-              if (expired)
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text('This code has expired. Request a new code.'),
-                ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(_error!),
-                ),
-              const SizedBox(height: 20),
-              GetPrioActionButton.primary(
-                key: const Key('queue-join-otp-verify'),
-                onPressed: _isBusy || expired || _otpController.text.length != 6
-                    ? null
-                    : _verifyEmail,
-                child: Text(
-                  _isBusy ? 'Please wait...' : 'Verify and join queue',
-                ),
-              ),
-              const SizedBox(height: 12),
-              GetPrioActionButton.outline(
-                key: const Key('queue-join-otp-resend'),
-                onPressed:
-                    _isBusy || seconds > 0 || challenge.resendsRemaining <= 0
-                    ? null
-                    : _resendEmail,
-                child: Text(
-                  challenge.resendsRemaining <= 0
-                      ? 'Resend limit reached'
-                      : seconds > 0
-                      ? 'Resend code in ${seconds}s'
-                      : 'Resend code',
-                ),
-              ),
-            ],
-          ),
+  Future<void> _showOtpDrawer(JoinEmailVerification challenge) async {
+    final host = _drawerAnchorKey.currentContext;
+    if (_otpDrawerOpen || !mounted || host == null || !host.mounted) return;
+    _otpDrawerOpen = true;
+    JoinResult? result;
+    try {
+      result = await openAppDrawer<JoinResult>(
+        context: host,
+        position: OverlayPosition.bottom,
+        useSafeArea: false,
+        draggable: false,
+        barrierDismissible: false,
+        builder: (_) => JoinOtpDrawer(
+          repository: widget.repository!,
+          challenge: challenge,
+          messageFor: _messageFor,
         ),
-      ),
-    );
-  }
-
-  Future<void> _verifyEmail() async {
-    final challenge = _emailChallenge;
-    if (_isBusy || challenge == null || _otpController.text.length != 6) return;
-    setState(() {
-      _isBusy = true;
-      _error = null;
-    });
-    try {
-      final result = await widget.repository!.verifyEmail(
-        challenge,
-        _otpController.text,
-      );
-      if (mounted) {
-        setState(() => _emailChallenge = null);
-        _otpTimer?.cancel();
-        _handleJoinResult(result);
-      }
-    } catch (error) {
-      if (mounted) {
-        showFormError(
-          error,
-          _messageFor(error),
-          field: error is ApiException && error.statusCode == 400
-              ? _otpController
-              : null,
-        );
-      }
+      ).future;
     } finally {
-      if (mounted) setState(() => _isBusy = false);
+      _otpDrawerOpen = false;
     }
-  }
-
-  Future<void> _resendEmail() async {
-    if (_isBusy || _emailChallenge == null) return;
-    setState(() {
-      _isBusy = true;
-      _error = null;
-    });
-    try {
-      final challenge = await widget.repository!.resendEmail(_emailChallenge!);
-      if (mounted) {
-        _otpController.clear();
-        setState(() => _emailChallenge = challenge);
-        formValidation.setErrors({});
-        showFeedbackToast(
-          context,
-          message: 'A new verification code has been sent.',
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        showFormError(
-          error,
-          _messageFor(error),
-          field: error is ApiException && error.statusCode == 400
-              ? _otpController
-              : null,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isBusy = false);
+    if (!mounted) return;
+    setState(() => _emailChallenge = null);
+    if (result != null) {
+      _handleJoinResult(result);
+    } else if (_isDirectJoin) {
+      _closeJoinFlow();
+    } else {
+      _scanAgain();
     }
   }
 
   Widget _buildContent(BuildContext context) {
     final challenge = _emailChallenge;
-    if (challenge != null) return _buildEmailVerification(challenge);
+    if (challenge != null) {
+      return const Center(child: Text('Verify your email to join this queue.'));
+    }
     final preview = _preview;
     final joinedTicket = _joinedTicket;
     final payment = _payment;
@@ -409,7 +292,7 @@ class _JoinPageState extends State<JoinPage>
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: GetPrioTheme.paperAccent,
+                    color: GetPrioTheme.colors(context).paperAccent,
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Icon(LucideIcons.scanLine, size: 32),
@@ -591,10 +474,7 @@ class _JoinPageState extends State<JoinPage>
     switch (result) {
       case JoinEmailVerification challenge:
         setState(() => _emailChallenge = challenge);
-        _otpTimer?.cancel();
-        _otpTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-          if (mounted) setState(() {});
-        });
+        unawaited(_showOtpDrawer(challenge));
       case JoinedTicket(:final ticket):
         final onJoined = widget.onJoined;
         setState(() => _joinedTicket = JoinedTicket(ticket));
@@ -618,14 +498,13 @@ class _JoinPageState extends State<JoinPage>
     _checkoutSheetOpen = true;
     final preview = _preview;
     try {
-      final completer = openDrawerOverlay<void>(
+      final completer = openAppDrawer<void>(
         context: overlayContext,
         position: OverlayPosition.bottom,
         expands: false,
         draggable: true,
         useSafeArea: false,
         borderRadius: CheckoutBottomSheet.borderRadius,
-        transformBackdrop: false,
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.78,
         ),
@@ -884,8 +763,8 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
         label: 'Secure checkout',
         child: Container(
           clipBehavior: Clip.antiAlias,
-          decoration: const BoxDecoration(
-            color: GetPrioTheme.card,
+          decoration: BoxDecoration(
+            color: appDrawerBackground(context),
             borderRadius: CheckoutBottomSheet.borderRadius,
           ),
           child: SafeArea(
@@ -903,29 +782,14 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          'Secure checkout',
-                          style: theme.typography.h2,
-                        ),
-                      ),
-                      Semantics(
-                        button: true,
-                        label: 'Close checkout',
-                        child: GhostButton(
-                          key: const Key('checkout-close'),
-                          onPressed: _isBusy ? null : () => closeSheet(context),
-                          density: ButtonDensity.icon,
-                          child: const Icon(LucideIcons.x),
-                        ),
-                      ),
+                      Expanded(child: const AppDrawerTitle('Secure checkout')),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Text(
                     'Your ticket is created only after the server confirms payment.',
                     style: theme.typography.p.copyWith(
-                      color: GetPrioTheme.mutedInk,
+                      color: GetPrioTheme.colors(context).mutedInk,
                     ),
                   ),
                   const SizedBox(height: 22),
@@ -935,7 +799,7 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
                       vertical: 16,
                     ),
                     decoration: BoxDecoration(
-                      color: GetPrioTheme.paperAccent,
+                      color: GetPrioTheme.colors(context).paperAccent,
                       borderRadius: BorderRadius.circular(18),
                     ),
                     child: Row(
@@ -949,7 +813,7 @@ class _CheckoutBottomSheetState extends State<CheckoutBottomSheet> {
                               Text(
                                 'Queue fee',
                                 style: theme.typography.small.copyWith(
-                                  color: GetPrioTheme.mutedInk,
+                                  color: GetPrioTheme.colors(context).mutedInk,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -1041,8 +905,8 @@ class JoinPreviewContent extends StatelessWidget {
                 key: const Key('join-preview-surface'),
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(24, 30, 24, 32),
-                decoration: const BoxDecoration(
-                  color: GetPrioTheme.paper,
+                decoration: BoxDecoration(
+                  color: GetPrioTheme.colors(context).paper,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
                   boxShadow: [
                     BoxShadow(
@@ -1116,7 +980,7 @@ class JoinPreviewContent extends StatelessWidget {
         ),
         Container(
           key: const Key('join-preview-bottom-action'),
-          color: GetPrioTheme.paper,
+          color: GetPrioTheme.colors(context).paper,
           child: SafeArea(
             top: false,
             child: Padding(
@@ -1211,7 +1075,7 @@ class _JoinProfileScrollState extends State<_JoinProfileScroll> {
           controller: _controller,
           padding: EdgeInsets.zero,
           physics: const AlwaysScrollableScrollPhysics(),
-          children: [widget.surface],
+          children: [const ScrollAwareHeaderSpace(), widget.surface],
         ),
       ],
     );
@@ -1258,7 +1122,7 @@ class _JoinVendorProfileMedia extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _cover(),
+                  _cover(context),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -1269,13 +1133,17 @@ class _JoinVendorProfileMedia extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const DecoratedBox(
+                  DecoratedBox(
                     key: Key('join-profile-cover-surface-fade'),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
-                        colors: [GetPrioTheme.paper, Color(0x00FBF7F1)],
+                        colors: [
+                          GetPrioTheme.colors(context).paper,
+                          GetPrioTheme.colors(context).paper
+                              .withValues(alpha: 0),
+                        ],
                         stops: [0.0, 0.3],
                       ),
                     ),
@@ -1312,8 +1180,8 @@ class _JoinVendorProfileMedia extends StatelessWidget {
                   width: logoSize,
                   height: logoSize,
                   padding: const EdgeInsets.all(5),
-                  decoration: const BoxDecoration(
-                    color: GetPrioTheme.card,
+                  decoration: BoxDecoration(
+                    color: GetPrioTheme.colors(context).card,
                     shape: BoxShape.circle,
                     border: Border.fromBorderSide(
                       BorderSide(color: Color(0xF2FFFFFF), width: 4),
@@ -1326,7 +1194,7 @@ class _JoinVendorProfileMedia extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: ClipOval(child: _logo()),
+                  child: ClipOval(child: _logo(context)),
                 ),
               ),
             ),
@@ -1336,11 +1204,11 @@ class _JoinVendorProfileMedia extends StatelessWidget {
     );
   }
 
-  Widget _cover() {
+  Widget _cover(BuildContext context) {
     final imageUrl = profile?.coverImageUrl;
     if (imageUrl == null) {
       return Container(
-        color: GetPrioTheme.paperAccent,
+        color: GetPrioTheme.colors(context).paperAccent,
         padding: const EdgeInsets.all(24),
         child: const Image(
           image: AssetImage(
@@ -1356,17 +1224,17 @@ class _JoinVendorProfileMedia extends StatelessWidget {
       fit: _joinProfileBoxFit(profile?.coverImageFit, BoxFit.cover),
       semanticLabel: '$vendorName profile cover',
       errorBuilder: (context, error, stackTrace) => Container(
-        color: GetPrioTheme.paperAccent,
+        color: GetPrioTheme.colors(context).paperAccent,
         child: const Icon(LucideIcons.store, size: 48),
       ),
     );
   }
 
-  Widget _logo() {
+  Widget _logo(BuildContext context) {
     final logoUrl = profile?.logoUrl;
     if (logoUrl == null) {
-      return const ColoredBox(
-        color: GetPrioTheme.card,
+      return ColoredBox(
+        color: GetPrioTheme.colors(context).card,
         child: Icon(LucideIcons.store, size: 38),
       );
     }
@@ -1374,8 +1242,8 @@ class _JoinVendorProfileMedia extends StatelessWidget {
       logoUrl,
       fit: _joinProfileBoxFit(profile?.logoFit, BoxFit.cover),
       semanticLabel: '$vendorName logo',
-      errorBuilder: (context, error, stackTrace) => const ColoredBox(
-        color: GetPrioTheme.card,
+      errorBuilder: (context, error, stackTrace) => ColoredBox(
+        color: GetPrioTheme.colors(context).card,
         child: Icon(LucideIcons.store, size: 38),
       ),
     );
@@ -1447,17 +1315,11 @@ class _QrScannerPageState extends State<QrScannerPage> {
     );
     if (!widget.showAppBar) return body;
     return ScrollNotificationObserver(
-      child: Scaffold(
+      child: ScrollAwareScaffold(
         headers: [
           ScrollAwareAppBar(
             title: const Text('Scan to join'),
-            leading: [
-              GhostButton(
-                onPressed: _handleBack,
-                density: ButtonDensity.icon,
-                child: const Icon(LucideIcons.arrowLeft),
-              ),
-            ],
+            leading: [GetPrioBackButton(onPressed: _handleBack)],
           ),
         ],
         child: body,

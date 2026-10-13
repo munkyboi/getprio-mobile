@@ -37,7 +37,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('STORE OPEN'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('vendor-location-main-clinic')),
+      findsOneWidget,
+    );
     expect(find.text('QUEUE OPEN'), findsNothing);
     expect(find.text('Sun 09:00-17:00, Mon 09:00-17:00'), findsNothing);
     expect(
@@ -81,7 +84,7 @@ void main() {
     expect(find.text('Open 24 hours'), findsOneWidget);
     expect(find.text('Closed'), findsOneWidget);
 
-    await tester.tap(find.bySemanticsLabel('Close operating hours'));
+    await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('vendor-store-hours-sheet')), findsNothing);
   });

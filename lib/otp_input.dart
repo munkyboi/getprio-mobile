@@ -1,0 +1,197 @@
+import 'package:flutter/services.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart';
+
+import 'form_validation.dart';
+
+/// The shadcn obscured display with one editor for paste, autofill and deletion.
+class GetPrioOtpInput extends StatefulWidget {
+  const GetPrioOtpInput({
+    super.key,
+    required this.controller,
+    this.inputKey,
+    this.focusNode,
+    this.label = 'Verification code',
+    this.enabled = true,
+    this.validation,
+    this.onChanged,
+    this.onCompleted,
+    this.onTap,
+    this.trailing,
+  });
+
+  final TextEditingController controller;
+  final Key? inputKey;
+  final FocusNode? focusNode;
+  final String label;
+  final bool enabled;
+  final FormValidation? validation;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onCompleted;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+
+  @override
+  State<GetPrioOtpInput> createState() => _GetPrioOtpInputState();
+}
+
+class _GetPrioOtpInputState extends State<GetPrioOtpInput> {
+  String? _completed;
+
+  void _changed(String code) {
+    widget.onChanged?.call(code);
+    if (code.length != 6) {
+      _completed = null;
+      return;
+    }
+    if (_completed == code) return;
+    _completed = code;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !widget.enabled ||
+          widget.controller.text != code ||
+          _completed != code) {
+        return;
+      }
+      FocusManager.instance.primaryFocus?.unfocus();
+      widget.onCompleted?.call(code);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        if (widget.controller.text.length < 6) _completed = null;
+        final field = KeyboardAwareInput(
+          child: Center(
+            child: IntrinsicWidth(
+              child: Stack(
+                children: [
+                  ExcludeSemantics(
+                    child: ExcludeFocus(
+                      child: IgnorePointer(
+                        child: InputOTP(
+                          // InputOTP initialValue does not update existing digits.
+                          key: ValueKey(widget.controller.text),
+                          initialValue: List.generate(
+                            6,
+                            (index) => index < widget.controller.text.length
+                                ? widget.controller.text.codeUnitAt(index)
+                                : null,
+                          ),
+                          children: [
+                            for (var i = 0; i < 6; i++)
+                              InputOTPChild.character(
+                                allowDigit: true,
+                                obscured: true,
+                                readOnly: true,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: 0,
+                      alwaysIncludeSemantics: true,
+                      child: TextField(
+                        key: widget.inputKey,
+                        controller: widget.controller,
+                        focusNode: widget.focusNode,
+                        enabled: widget.enabled,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        autofillHints: const [AutofillHints.oneTimeCode],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
+                        onChanged: _changed,
+                        onTap: widget.onTap,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.label,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).typography.small
+                  .copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Semantics(
+              label: '${widget.label}, 6 digits',
+              child: widget.validation == null
+                  ? _withTrailing(field)
+                  : ValidatedField(
+                      validation: widget.validation!,
+                      controller: widget.controller,
+                      child: _withTrailing(field),
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _withTrailing(Widget field) => widget.trailing == null
+      ? field
+      : Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: FittedBox(fit: BoxFit.scaleDown, child: field),
+            ),
+            const SizedBox(width: 8),
+            widget.trailing!,
+          ],
+        );
+}
+
+/// Shared compact resend action for every OTP flow that supports resending.
+class OtpResendButton extends StatelessWidget {
+  const OtpResendButton({
+    super.key,
+    required this.onPressed,
+    this.secondsRemaining = 0,
+    this.limitReached = false,
+  });
+  final VoidCallback? onPressed;
+  final int secondsRemaining;
+  final bool limitReached;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: limitReached
+        ? 'Resend limit reached'
+        : secondsRemaining > 0
+        ? 'Resend code in $secondsRemaining seconds'
+        : 'Resend code',
+    child: GhostButton(
+      onPressed: secondsRemaining > 0 || limitReached ? null : onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(LucideIcons.history, size: 18),
+          const SizedBox(width: 4),
+          Text(
+            limitReached
+                ? 'Limit reached'
+                : secondsRemaining > 0
+                ? '${secondsRemaining}s'
+                : 'Resend',
+          ),
+        ],
+      ),
+    ),
+  );
+}

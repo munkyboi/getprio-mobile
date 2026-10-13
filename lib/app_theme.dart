@@ -1,4 +1,5 @@
 import 'package:shadcn_flutter/shadcn_flutter.dart';
+import 'package:flutter/services.dart';
 
 /// Shared typography tokens for the customer-facing app.
 ///
@@ -40,6 +41,9 @@ class GetPrioTypography {
 
 /// GetPrio's shared customer-facing visual language, based on the web app.
 class GetPrioTheme {
+  // Extra breathing room below system insets on the main tab screens.
+  static const safeAreaTopSpacing = 20.0;
+
   // The drawer already reserves vertical space for its drag indicator.
   static const bottomSheetTopPadding = 0.0;
 
@@ -73,66 +77,109 @@ class GetPrioTheme {
         : null;
   }
 
-  static Widget wrap(Widget child) {
-    return ComponentTheme<CardTheme>(
-      data: CardTheme(
-        padding: const EdgeInsets.all(20),
-        borderRadius: BorderRadius.circular(20),
-        borderColor: line,
-        borderWidth: 1,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x145B422A),
-            blurRadius: 24,
-            offset: Offset(0, 6),
+  static Widget wrap(Widget child) => Builder(
+    builder: (context) {
+      return Actions(
+        actions: {
+          EditableTextTapOutsideIntent:
+              CallbackAction<EditableTextTapOutsideIntent>(
+                onInvoke: (intent) {
+                  intent.focusNode.unfocus();
+                  return null;
+                },
+              ),
+        },
+        child: ComponentTheme<CardTheme>(
+          data: CardTheme(
+            padding: const EdgeInsets.all(20),
+            borderRadius: BorderRadius.circular(20),
+            borderColor: colors(context).line,
+            borderWidth: 1,
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x145B422A),
+                blurRadius: 24,
+                offset: Offset(0, 6),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ComponentTheme<TextFieldTheme>(
-        data: TextFieldTheme(
-          borderRadius: BorderRadius.circular(16),
-          filled: true,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-        child: ComponentTheme<PrimaryButtonTheme>(
-          data: PrimaryButtonTheme(
-            decoration: _buttonDecoration(
-              radius: 16,
-              shadow: const [primaryActionShadow],
+          child: ComponentTheme<TextFieldTheme>(
+            data: TextFieldTheme(
+              borderRadius: BorderRadius.circular(16),
+              filled: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            child: ComponentTheme<PrimaryButtonTheme>(
+              data: PrimaryButtonTheme(
+                decoration: _buttonDecoration(
+                  radius: 16,
+                  shadow: const [primaryActionShadow],
+                ),
+              ),
+              child: ComponentTheme<OutlineButtonTheme>(
+                data: OutlineButtonTheme(
+                  decoration: _buttonDecoration(radius: 16),
+                ),
+                child: child,
+              ),
             ),
           ),
-          child: ComponentTheme<OutlineButtonTheme>(
-            data: OutlineButtonTheme(decoration: _buttonDecoration(radius: 16)),
-            child: child,
-          ),
         ),
-      ),
-    );
+      );
+    },
+  );
+
+  static GetPrioPalette colors(BuildContext context) => GetPrioPalette(
+    Theme.of(context).colorScheme.brightness == Brightness.dark,
+  );
+
+  static SystemUiOverlayStyle systemUi(BuildContext context) {
+    final dark = colors(context).dark;
+    return (dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+        .copyWith(
+          statusBarColor: const Color(0x00000000),
+          systemNavigationBarColor: colors(context).paper,
+          systemNavigationBarIconBrightness: dark
+              ? Brightness.light
+              : Brightness.dark,
+        );
   }
 
-  static ThemeData light() {
+  static ThemeData light() => _theme(false);
+  static ThemeData dark() => _theme(true);
+
+  static ThemeData _theme(bool isDark) {
+    final palette = GetPrioPalette(isDark);
+    final paper = palette.paper,
+        paperAccent = palette.paperAccent,
+        card = palette.card;
+    final ink = palette.ink, mutedInk = palette.mutedInk, line = palette.line;
     final base = ThemeData(
-      colorScheme: LegacyColorSchemes.lightZinc().copyWith(
-        background: () => paper,
-        foreground: () => ink,
-        card: () => card,
-        cardForeground: () => ink,
-        popover: () => card,
-        popoverForeground: () => ink,
-        primary: () => primary,
-        primaryForeground: () => onPrimary,
-        secondary: () => teal,
-        secondaryForeground: () => onPrimary,
-        muted: () => const Color(0xFFF6EDE3),
-        mutedForeground: () => mutedInk,
-        accent: () => highlight,
-        accentForeground: () => ink,
-        destructive: () => destructive,
-        destructiveForeground: () => onPrimary,
-        border: () => line,
-        input: () => line,
-        ring: () => primary,
-      ),
+      colorScheme:
+          (isDark
+                  ? LegacyColorSchemes.darkZinc()
+                  : LegacyColorSchemes.lightZinc())
+              .copyWith(
+                background: () => paper,
+                foreground: () => ink,
+                card: () => card,
+                cardForeground: () => ink,
+                popover: () => card,
+                popoverForeground: () => ink,
+                primary: () => primary,
+                primaryForeground: () => onPrimary,
+                secondary: () => isDark ? const Color(0xFF115E59) : teal,
+                secondaryForeground: () => onPrimary,
+                muted: () => isDark ? paperAccent : const Color(0xFFF6EDE3),
+                mutedForeground: () => mutedInk,
+                accent: () => highlight,
+                accentForeground: () => ink,
+                destructive: () => destructive,
+                destructiveForeground: () => onPrimary,
+                border: () => line,
+                input: () => line,
+                ring: () => primary,
+              ),
       radius: 1.0,
     );
     final typography = base.typography;
@@ -440,4 +487,19 @@ ButtonStatePropertyDelegate<Decoration> _buttonDecoration({
       boxShadow: shadow,
     );
   };
+}
+
+/// Surface and text colors shared by custom widgets and the shadcn theme.
+class GetPrioPalette {
+  const GetPrioPalette(this.dark);
+  final bool dark;
+  Color get paper => dark ? const Color(0xFF181613) : GetPrioTheme.paper;
+  Color get paperAccent =>
+      dark ? const Color(0xFF342C24) : GetPrioTheme.paperAccent;
+  Color get card => dark ? const Color(0xFF24201B) : GetPrioTheme.card;
+  Color get ink => dark ? const Color(0xFFF8EFE5) : GetPrioTheme.ink;
+  Color get mutedInk => dark ? const Color(0xFFC3B4A4) : GetPrioTheme.mutedInk;
+  Color get line => dark ? const Color(0xFF51473D) : GetPrioTheme.line;
+  Color get teal => dark ? const Color(0xFF64D5C5) : GetPrioTheme.teal;
+  Color get disabled => dark ? const Color(0xFF9A8D80) : GetPrioTheme.disabled;
 }

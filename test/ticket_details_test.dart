@@ -1,6 +1,8 @@
+import 'package:getprio_mobile/app_theme.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:barcode_widget/barcode_widget.dart';
+import 'package:getprio_mobile/details/ticket_barcode_viewer.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
+import 'package:getprio_mobile/details/ticket_barcode_state.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
@@ -9,6 +11,637 @@ import 'package:getprio_mobile/queue/queue_repository.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  testWidgets('keeps confirmed ticket when refreshed snapshot omits it', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final ticket = QueueTicket.fromJson({
+      'id': 'stable',
+      'lookupCode': 'STABLE',
+      'status': 'waiting',
+      'tenantSlug': 'city-clinic',
+    });
+    final directory = _RetainedVendorRepository();
+    final api = FakeQueueApi(
+      snapshot: {
+        'focusTicket': {
+          'id': 'stable',
+          'lookupCode': 'STABLE',
+          'status': 'called',
+          'customerConfirmedAt': '2026-10-12T00:00:00Z',
+          'serviceStartedAt': '2026-10-12T00:01:00Z',
+        },
+      },
+    );
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: ticket,
+          queueRepository: QueueRepository(api),
+          directoryRepository: directory,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    api.snapshot = {};
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    expect(directory.calls, 1);
+    api.failure = true;
+    await tester
+        .widget<RefreshTrigger>(find.byKey(const Key('ticket-details-refresh')))
+        .onRefresh!();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+  });
+
+  testWidgets('idle ticket pauses and successful manual refresh resumes', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final ticket = QueueTicket.fromJson({
+      'id': 'idle',
+      'lookupCode': 'IDLE',
+      'status': 'served',
+      'tenantSlug': 'city-clinic',
+    });
+    final api = FakeQueueApi(snapshot: {});
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: ticket,
+          queueRepository: QueueRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-auto-update-paused')), findsOneWidget);
+    final calls = api.loadCalls;
+    await tester.pump(const Duration(minutes: 1));
+    expect(api.loadCalls, calls);
+    api.failure = true;
+    await tester.tap(find.text('Refresh and resume'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-auto-update-paused')), findsOneWidget);
+    api.failure = false;
+    await tester.tap(find.text('Refresh and resume'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-auto-update-paused')), findsNothing);
+    final resumed = api.loadCalls;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(api.loadCalls, resumed + 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  test('actual wait formats whole hours and remaining minutes', () {
+    for (final entry in {
+      0: '0mins',
+      1: '1min',
+      59: '59mins',
+      60: '1hr',
+      80: '1hr 20mins',
+      120: '2hrs',
+      151: '2hrs 31mins',
+    }.entries) {
+      final joined = DateTime.utc(2026, 10, 11);
+      final ticket = QueueTicket(
+        id: 'history',
+        lookupCode: 'HISTORY',
+        ticketNumber: 'H001',
+        customerName: 'Customer',
+        status: TicketStatus.served,
+        joinedAt: joined,
+        serviceStartedAt: joined.add(Duration(minutes: entry.key)),
+      );
+      expect(ticket.actualWaitingTimeLabel, entry.value);
+    }
+  });
+
+  testWidgets('served history shows actual wait without live stats or QR', (
+    tester,
+  ) async {
+    final ticket = QueueTicket.fromJson({
+      'id': 'history-1',
+      'lookupCode': 'HISTORY',
+      'ticketNumber': 'H001',
+      'customerName': 'Test Customer',
+      'vendorName': 'City Clinic',
+      'locationName': 'Main location',
+      'tenantSlug': 'city-clinic',
+      'status': 'served',
+      'serviceOutcome': 'completed',
+      'joinedAt': '2026-10-11T01:00:00Z',
+      'serviceStartedAt': '2026-10-11T02:20:00Z',
+      'serviceEndedAt': '2026-10-11T03:00:00Z',
+    });
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: ticket,
+          queueRepository: QueueRepository(
+            FakeQueueApi(
+              snapshot: {
+                'stats': {
+                  'servedToday': 99,
+                  'waitingCount': 6,
+                  'estimatedWaitMinutes': 999,
+                },
+                'current': {'ticketNumber': 'LIVE001'},
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('This ticket has already been served.'), findsOneWidget);
+    expect(find.text('Completed today'), findsNothing);
+    expect(find.text('Currently serving LIVE001'), findsNothing);
+    expect(find.text('Waiting now'), findsNothing);
+    expect(find.text('Estimated wait'), findsNothing);
+    expect(find.text('Total waiting time'), findsOneWidget);
+    expect(find.text('1hr 20mins'), findsOneWidget);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    final joinedValue = find
+        .byWidgetPredicate(
+          (w) => w is Text && (w.data?.startsWith('2026-10-11,') ?? false),
+        )
+        .first;
+    final waitValue = find.text('1hr 20mins');
+    expect(tester.widget<Text>(joinedValue).textAlign, TextAlign.left);
+    expect(tester.widget<Text>(joinedValue).style?.fontWeight, FontWeight.w600);
+    expect(
+      tester.getTopLeft(joinedValue).dx,
+      closeTo(tester.getTopLeft(waitValue).dx, 1),
+    );
+    expect(tester.widget<Text>(waitValue).textAlign, TextAlign.left);
+    expect(tester.widget<Text>(waitValue).style?.fontWeight, FontWeight.w600);
+    expect(
+      tester
+          .widget<ListView>(find.byKey(const Key('ticket-details-page')))
+          .padding,
+      const EdgeInsets.fromLTRB(16, 12, 16, 20),
+    );
+    expect(
+      tester.getTopLeft(find.text('H001')).dx,
+      lessThan(tester.getTopLeft(find.text('Test Customer')).dx),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('ticket-heading-divider'))).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const Key('ticket-customer-grid'))).dy,
+      ),
+    );
+
+    expect(find.text('Your queue ticket'), findsNothing);
+    final heading = find.byKey(const Key('ticket-vendor-heading'));
+    expect(
+      find.descendant(of: heading, matching: find.text('City Clinic')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: heading, matching: find.text('COMPLETED')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.text('Main location')).dy,
+      greaterThan(tester.getTopLeft(heading).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Test Customer')).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('ticket-cutout-1'))).dy,
+      ),
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  test('actual wait never substitutes completion or confirmation for service start', () {
+    for (final start in [null, '2026-10-11T00:59:00Z']) {
+      final ticket = QueueTicket.fromJson({
+        'status': 'served',
+        'joinedAt': '2026-10-11T01:00:00Z',
+        'customerConfirmedAt': '2026-10-11T01:10:00Z',
+        'serviceStartedAt': start,
+        'serviceEndedAt': '2026-10-11T03:00:00Z',
+      });
+      expect(ticket.actualWaitingTime, isNull);
+    }
+  });
+
+  testWidgets('service start without confirmation hides arrival QR action', (
+    tester,
+  ) async {
+    final ticket = {
+      'id': 'active-1',
+      'lookupCode': 'A0C18AF',
+      'ticketNumber': 'AH002',
+      'tenantSlug': 'city-clinic',
+      'status': 'called',
+      'serviceStartedAt': '2026-10-13T01:00:00Z',
+    };
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson(ticket),
+          queueRepository: QueueRepository(
+            FakeQueueApi(snapshot: {'focusTicket': ticket}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+  });
+
+  for (final status in ['cancelled', 'unserved', 'skipped', 'expired']) {
+    testWidgets('$status history hides QR action', (tester) async {
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson({
+              'lookupCode': 'HISTORY',
+              'status': status,
+            }),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+      expect(find.text('Total waiting time'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('arrival confirmation closes QR dialog and hides its button', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final ticket = QueueTicket.fromJson({
+      'id': 'active-1',
+      'lookupCode': 'REFERENCE',
+      'status': 'called',
+      'tenantSlug': 'city-clinic',
+    });
+    final queueApi = FakeQueueApi(
+      snapshot: {
+        'focusTicket': {
+          'id': 'active-1',
+          'lookupCode': 'REFERENCE',
+          'status': 'called',
+        },
+      },
+    );
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: ticket,
+          ticketRepository: QueueTicketRepository(FakeAccountQueueApi()),
+          queueRepository: QueueRepository(queueApi),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<BrandedTicketQr>(find.byType(BrandedTicketQr)).code,
+      'QB0123456789ABCDEF0123456789ABCDEF',
+    );
+    queueApi.snapshot = {
+      'focusTicket': {
+        'id': 'active-1',
+        'lookupCode': 'REFERENCE',
+        'status': 'called',
+        'customerConfirmedAt': '2026-10-11T00:00:00Z',
+      },
+    };
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    expect(find.byKey(const Key('ticket-barcode-countdown')), findsNothing);
+    expect(find.byType(BrandedTicketQr), findsNothing);
+  });
+
+  testWidgets('QR retry after idle pause refreshes status and recovers', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final api = FakeAccountQueueApi()..barcodeFailure = true;
+    final queueApi = FakeQueueApi(snapshot: {});
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson({
+            'id': 'active-1',
+            'lookupCode': 'A0C18AF',
+            'status': 'waiting',
+            'tenantSlug': 'city-clinic',
+          }),
+          ticketRepository: QueueTicketRepository(api),
+          queueRepository: QueueRepository(queueApi),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('detail-auto-update-paused')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-retry')), findsOneWidget);
+    final beforeRetry = queueApi.loadCalls;
+    api.barcodeFailure = false;
+    await tester.tap(find.byKey(const Key('ticket-barcode-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BrandedTicketQr), findsOneWidget);
+    expect(queueApi.loadCalls, greaterThan(beforeRetry));
+    queueApi.snapshot = {
+      'focusTicket': {
+        'id': 'active-1',
+        'lookupCode': 'A0C18AF',
+        'status': 'called',
+        'customerConfirmedAt': '2026-10-12T00:00:00Z',
+      },
+    };
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'QR retry closes a paused stale ticket once arrival is confirmed',
+    (tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final api = FakeAccountQueueApi()..barcodeFailure = true;
+      final queueApi = FakeQueueApi(snapshot: {});
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson({
+              'id': 'active-1',
+              'lookupCode': 'A0C18AF',
+              'status': 'waiting',
+              'tenantSlug': 'city-clinic',
+            }),
+            ticketRepository: QueueTicketRepository(api),
+            queueRepository: QueueRepository(queueApi),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(minutes: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-barcode-retry')), findsOneWidget);
+      final issued = api.barcodeCalls;
+      queueApi.snapshot = {
+        'focusTicket': {
+          'id': 'active-1',
+          'lookupCode': 'A0C18AF',
+          'status': 'called',
+          'customerConfirmedAt': '2026-10-12T00:00:00Z',
+        },
+      };
+      await tester.tap(find.byKey(const Key('ticket-barcode-retry')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+      expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+      expect(api.barcodeCalls, issued);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('QR issuance exists only while floating-button dialog is open', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final api = FakeAccountQueueApi();
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson({
+            'id': 'active-1',
+            'lookupCode': 'REF',
+            'status': 'waiting',
+          }),
+          ticketRepository: QueueTicketRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 3));
+    expect(api.barcodeCalls, 0);
+    expect(
+      find.byKey(const Key('ticket-details-barcode-section')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('ticket-cutout-1')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    expect(api.barcodeCalls, 1);
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 3));
+    expect(api.barcodeCalls, 1);
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    expect(api.barcodeCalls, 2);
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('polls service transitions without showing the called alert', (
+    tester,
+  ) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final api = FakeQueueApi(
+      snapshot: {
+        'focusTicket': {
+          'id': 'service-1',
+          'lookupCode': 'SERVICE1',
+          'status': 'called',
+          'serviceStartedAt': '2026-10-09T04:01:00Z',
+        },
+      },
+    );
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson({
+            'id': 'service-1',
+            'lookupCode': 'SERVICE1',
+            'status': 'called',
+            'tenantSlug': 'clinic',
+          }),
+          queueRepository: QueueRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('IN SERVICE'), findsOneWidget);
+    expect(find.byKey(const Key('ticket-called-alert')), findsNothing);
+    expect(find.text('Your service is in progress.'), findsOneWidget);
+    api.snapshot = {
+      'focusTicket': {
+        'id': 'service-1',
+        'lookupCode': 'SERVICE1',
+        'status': 'unserved',
+        'serviceStartedAt': '2026-10-09T04:01:00Z',
+        'serviceEndedAt': '2026-10-09T04:10:00Z',
+        'serviceOutcome': 'interrupted',
+      },
+    };
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    await tester.pump();
+    expect(api.loadCalls, 2);
+    await tester.pumpAndSettle();
+    expect(find.text('INTERRUPTED'), findsOneWidget);
+    expect(
+      find.text(
+        'Your service was interrupted. Contact the vendor about the next step.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('ticket-details-cancel')), findsNothing);
+    await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+  });
+
+  for (final status in ['cancelled', 'skipped', 'expired', 'unserved']) {
+    testWidgets('stale live snapshot cannot revive $status account ticket', (
+      tester,
+    ) async {
+      final terminal = {
+        'id': 'active-1',
+        'lookupCode': 'A0C18AF',
+        'ticketNumber': 'AH002',
+        'tenantSlug': 'city-clinic',
+        'status': status,
+      };
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson(terminal),
+            ticketRepository: QueueTicketRepository(
+              FakeAccountQueueApi()..completedTicket = terminal,
+            ),
+            queueRepository: QueueRepository(
+              FakeQueueApi(
+                snapshot: {
+                  'focusTicket': {...terminal, 'status': 'called'},
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+      expect(find.text('CALLED'), findsNothing);
+      expect(find.byKey(const Key('ticket-details-refresh')), findsNothing);
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    });
+  }
+
+  for (final completionSource in ['snapshot', 'account']) {
+    testWidgets('thanks the customer after completion from $completionSource', (
+      tester,
+    ) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      final waiting = <String, dynamic>{
+        'id': 'active-1',
+        'lookupCode': 'A0C18AF',
+        'ticketNumber': 'AH002',
+        'tenantSlug': 'city-clinic',
+        'status': 'waiting',
+      };
+      final completed = <String, dynamic>{
+        ...waiting,
+        'status': 'served',
+        'serviceOutcome': 'completed',
+      };
+      final accountApi = FakeAccountQueueApi();
+      final queueApi = FakeQueueApi(
+        snapshot: {
+          'focusTicket': waiting,
+          'stats': {'waitingCount': 5, 'servedToday': 8},
+        },
+      );
+      await tester.pumpWidget(
+        ShadcnApp(
+          theme: completionSource == 'account'
+              ? GetPrioTheme.dark()
+              : GetPrioTheme.light(),
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson(waiting),
+            showJoinConfirmation: true,
+            ticketRepository: QueueTicketRepository(accountApi),
+            queueRepository: QueueRepository(queueApi),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('You are in the queue. Keep this ticket ready.'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('ticket-join-success-notice')),
+        findsOneWidget,
+      );
+      if (completionSource == 'account') {
+        final notice = tester.widget<Container>(
+          find.byKey(const Key('ticket-join-success-notice')),
+        );
+        final color = (notice.decoration! as BoxDecoration).color!;
+        final contrast = (1.0 + .05) / (color.computeLuminance() + .05);
+        expect(contrast, greaterThanOrEqualTo(4.5));
+      }
+      if (completionSource == 'snapshot') {
+        queueApi.snapshot = {'focusTicket': completed};
+      } else {
+        // The live snapshot intentionally still contains the waiting ticket.
+        accountApi.completedTicket = completed;
+      }
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-details-refresh')), findsNothing);
+      expect(
+        find.text(
+          'Thank you for your business! We hope to see you again soon.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('You are in the queue. Keep this ticket ready.'),
+        findsNothing,
+      );
+      expect(find.text('Completed today'), findsNothing);
+      expect(find.text('Waiting now'), findsNothing);
+      expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+      expect(find.text('COMPLETED'), findsOneWidget);
+      expect(find.text('You are in the queue'), findsNothing);
+      expect(find.byKey(const Key('ticket-join-success-notice')), findsNothing);
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    });
+  }
+
   testWidgets('opens the active Home ticket in ticket details', (tester) async {
     await tester.pumpWidget(
       ShadcnApp(
@@ -88,6 +721,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('tickets-refresh')), findsOneWidget);
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tickets-refresh')), findsNothing);
+    await tester.tap(find.text('Active'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tickets-refresh')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('active-ticket-active-1')));
     await tester.pumpAndSettle();
 
@@ -101,8 +741,23 @@ void main() {
     expect(find.text('10 min'), findsWidgets);
     expect(find.text('Queue length'), findsOneWidget);
     expect(find.text('4 waiting'), findsOneWidget);
-    expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
-    expect(find.text('A0C18AF'), findsOneWidget);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsOneWidget);
+    expect(
+      find.byKey(const Key('ticket-details-barcode-section')),
+      findsNothing,
+    );
+    await tester.ensureVisible(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ticket-qr-fab')));
+    await tester.pumpAndSettle();
+    final enlarged = tester.widget<BrandedTicketQr>(
+      find.byType(BrandedTicketQr),
+    );
+    expect(enlarged.code, 'QB0123456789ABCDEF0123456789ABCDEF');
+    await tester.tap(find.byKey(const Key('ticket-barcode-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-barcode-modal')), findsNothing);
+
     await tester.fling(
       find.byKey(const Key('ticket-details-page')),
       const Offset(0, -700),
@@ -152,6 +807,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('ticket-details-cancel'))),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('ticket-details-cancel')));
     await tester.pump();
     expect(cancelCalls, 1);
@@ -250,6 +909,43 @@ void main() {
     expect(find.text('Currently serving AH004'), findsOneWidget);
   });
 
+  testWidgets(
+    'called alert is above the single ticket card and contains no queue metrics',
+    (tester) async {
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson({
+              'id': 'called',
+              'lookupCode': 'CALLED',
+              'ticketNumber': 'A01',
+              'tenantName': 'Clinic',
+              'status': 'called',
+            }),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final alert = find.byKey(const Key('ticket-called-alert'));
+      expect(
+        find.descendant(of: alert, matching: find.byType(Text)),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Your ticket was called. Proceed to the vendor.'),
+        findsOneWidget,
+      );
+      expect(
+        tester.getBottomLeft(alert).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('ticket-details-card'))).dy,
+        ),
+      );
+      expect(find.byKey(const Key('ticket-details-card')), findsOneWidget);
+      expect(find.byKey(const Key('ticket-qr-fab')), findsOneWidget);
+      expect(find.byKey(const Key('ticket-barcode-unavailable')), findsNothing);
+    },
+  );
   testWidgets('shows vendor confirmation when a ticket has been called', (
     tester,
   ) async {
@@ -297,7 +993,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('Your arrival was confirmed'), findsOneWidget);
-    expect(find.byKey(const Key('ticket-details-barcode')), findsOneWidget);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
   });
 
   testWidgets('refreshes open ticket details when the repository signals', (
@@ -375,6 +1071,7 @@ void main() {
     await tester.pumpWidget(
       ShadcnApp(
         home: TicketDetailsPage(
+          sandbox: true,
           ticket: QueueTicket.fromJson({
             'id': 'developer-ticket-1',
             'lookupCode': 'QUEUE1-0019',
@@ -391,14 +1088,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('WAITING'), findsOneWidget);
-    final barcode = tester.widget<BarcodeWidget>(
-      find.descendant(
-        of: find.byKey(const Key('ticket-details-barcode')),
-        matching: find.byType(BarcodeWidget),
-      ),
-    );
-    expect(String.fromCharCodes(barcode.data), 'VERIFY-0019');
-    expect(find.text('VERIFY-0019'), findsOneWidget);
+    expect(find.byType(BrandedTicketQr), findsNothing);
 
     api.status = 'called';
     ticketRepository.requestRefresh();
@@ -411,37 +1101,41 @@ void main() {
     );
   });
 
-  testWidgets('restores the ticket details surface without a vendor hero', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ShadcnApp(
-        home: TicketDetailsPage(
-          ticket: QueueTicket.fromJson({
-            'id': 'active-1',
-            'lookupCode': 'A0C18AF',
-            'ticketNumber': 'AH002',
-            'tenantName': 'City Clinic',
-            'tenantSlug': 'city-clinic',
-            'locationName': 'Main location',
-            'locationSlug': 'main',
-            'status': 'waiting',
-          }),
-          directoryRepository: DirectoryRepository(_TicketCoverDirectoryApi()),
+  testWidgets(
+    'shows a single selected ticket with the vendor cover and centered logo',
+    (tester) async {
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson({
+              'id': 'active-1',
+              'lookupCode': 'A0C18AF',
+              'ticketNumber': 'AH002',
+              'tenantName': 'City Clinic',
+              'tenantSlug': 'city-clinic',
+              'locationName': 'Main location',
+              'locationSlug': 'main',
+              'status': 'waiting',
+            }),
+            directoryRepository: DirectoryRepository(
+              _TicketCoverDirectoryApi(),
+            ),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('ticket-details-page')), findsOneWidget);
-    expect(find.byKey(const Key('ticket-details-surface')), findsOneWidget);
-    final surface = tester.widget<Container>(
-      find.byKey(const Key('ticket-details-surface')),
-    );
-    expect((surface.decoration! as BoxDecoration).borderRadius, isNull);
-    expect(find.byKey(const Key('ticket-details-profile-cover')), findsNothing);
-    expect(find.byKey(const Key('profile-cover-surface-fade')), findsNothing);
-  });
+      expect(find.byKey(const Key('ticket-details-page')), findsOneWidget);
+      expect(find.byKey(const Key('ticket-details-card')), findsOneWidget);
+      expect(find.byKey(const Key('detail-pass-hero')), findsOneWidget);
+      expect(find.byKey(const Key('vendor-profile-cover')), findsOneWidget);
+      expect(find.byKey(const Key('vendor-logo')), findsOneWidget);
+      expect(
+        find.byKey(const Key('profile-cover-surface-fade')),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 class FakeDirectoryRepository extends DirectoryRepository {
@@ -501,29 +1195,48 @@ class _TicketCoverDirectoryApi implements DirectoryApi {
   }) async => const {'vendors': []};
 }
 
-class FakeAccountQueueApi implements AccountQueueApi {
+class FakeAccountQueueApi implements AccountQueueApi, TicketBarcodeApi {
+  int barcodeCalls = 0;
+  bool barcodeFailure = false;
+  Map<String, dynamic>? completedTicket;
+  @override
+  Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) async {
+    barcodeCalls++;
+    if (barcodeFailure) throw StateError('temporarily unavailable');
+    final now = DateTime.now().toUtc();
+    return TicketBarcodeToken(
+      code: 'QB0123456789ABCDEF0123456789ABCDEF',
+      expiresAt: now.add(const Duration(minutes: 2)),
+      serverNow: now,
+    );
+  }
+
   @override
   Future<Map<String, dynamic>> loadHistory({
     required int page,
     required int limit,
-  }) async => const {'tickets': []};
+  }) async => {
+    'tickets': [?completedTicket],
+  };
 
   @override
-  Future<Map<String, dynamic>> loadOverview() async => const {
-    'tickets': [
-      {
-        'id': 'active-1',
-        'lookupCode': 'A0C18AF',
-        'ticketNumber': 'AH002',
-        'tenantName': 'City Clinic',
-        'tenantSlug': 'city-clinic',
-        'locationName': 'Main location',
-        'locationSlug': 'main',
-        'status': 'waiting',
-        'createdAt': '2026-09-02T03:42:00Z',
-      },
-    ],
-  };
+  Future<Map<String, dynamic>> loadOverview() async => completedTicket != null
+      ? const {'tickets': []}
+      : const {
+          'tickets': [
+            {
+              'id': 'active-1',
+              'lookupCode': 'A0C18AF',
+              'ticketNumber': 'AH002',
+              'tenantName': 'City Clinic',
+              'tenantSlug': 'city-clinic',
+              'locationName': 'Main location',
+              'locationSlug': 'main',
+              'status': 'waiting',
+              'createdAt': '2026-09-02T03:42:00Z',
+            },
+          ],
+        };
 }
 
 class _ChangingSandboxAccountQueueApi implements AccountQueueApi {
@@ -562,6 +1275,7 @@ class FakeQueueApi implements QueueApi {
 
   Map<String, dynamic> snapshot;
   int loadCalls = 0;
+  bool failure = false;
 
   @override
   Future<Map<String, dynamic>> cancelTicket({
@@ -577,6 +1291,18 @@ class FakeQueueApi implements QueueApi {
     String? lookupCode,
   }) async {
     loadCalls++;
+    if (failure) throw StateError('429');
     return snapshot;
+  }
+}
+
+class _RetainedVendorRepository extends DirectoryRepository {
+  _RetainedVendorRepository() : super(_TicketCoverDirectoryApi());
+  int calls = 0;
+  @override
+  Future<VendorSummary> loadVendor(String slug) async {
+    calls++;
+    if (calls > 1) throw StateError('rate limited');
+    return super.loadVendor(slug);
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:async/async.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -20,14 +21,21 @@ class PushSignal {
     required this.notificationId,
     this.ticketRef,
     this.route,
+    this.silent = false,
+    this.opened = false,
   });
 
   final String eventType;
   final String notificationId;
   final String? ticketRef;
   final String? route;
+  final bool silent;
+  final bool opened;
 
-  factory PushSignal.fromData(Map<String, dynamic> data) {
+  factory PushSignal.fromData(
+    Map<String, dynamic> data, {
+    bool opened = false,
+  }) {
     final eventType = data['eventType'];
     final notificationId = data['notificationId'];
     if (eventType is! String ||
@@ -43,7 +51,51 @@ class PushSignal {
       notificationId: notificationId,
       ticketRef: data['ticketRef'] as String?,
       route: data['route'] as String?,
+      silent: data['silent'] == true || data['silent'] == 'true',
+      opened: opened,
     );
+  }
+}
+
+/// Only relative account-booking routes from an explicit notification tap.
+String? bookingIdForPush(PushSignal signal) {
+  if (!signal.opened ||
+      signal.silent ||
+      !signal.eventType.startsWith('customer_booking_')) {
+    return null;
+  }
+  final uri = Uri.tryParse(signal.route ?? '');
+  if (uri == null ||
+      uri.hasScheme ||
+      uri.hasAuthority ||
+      uri.hasQuery ||
+      uri.hasFragment) {
+    return null;
+  }
+  try {
+    final parts = uri.pathSegments;
+    if (!uri.path.startsWith('/') ||
+        parts.length != 3 ||
+        parts[0] != 'account' ||
+        parts[1] != 'bookings') {
+      return null;
+    }
+    final id = parts[2];
+    return RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(id) ? id : null;
+  } on FormatException {
+    return null;
+  }
+}
+
+PushSignal? openedPushPayload(String? payload) {
+  if (payload == null) return null;
+  try {
+    final data = jsonDecode(payload);
+    return data is Map<String, dynamic>
+        ? _tryParseSignal(data, opened: true)
+        : null;
+  } catch (_) {
+    return null;
   }
 }
 
@@ -296,12 +348,20 @@ class FirebaseMessagingPort implements PushMessagingPort {
   FirebaseMessagingPort({
     FirebaseMessaging? messaging,
     ForegroundNotificationPresenter? foregroundPresenter,
-  }) : _messaging = messaging ?? FirebaseMessaging.instance,
-       _foregroundPresenter =
-           foregroundPresenter ?? NativeForegroundNotificationPresenter();
+  }) : _messaging = messaging ?? FirebaseMessaging.instance {
+    _foregroundPresenter =
+        foregroundPresenter ??
+        NativeForegroundNotificationPresenter(
+          onTap: (payload) {
+            final signal = openedPushPayload(payload);
+            if (signal != null) _localTaps.add(signal);
+          },
+        );
+  }
 
   final FirebaseMessaging _messaging;
-  final ForegroundNotificationPresenter _foregroundPresenter;
+  late final ForegroundNotificationPresenter _foregroundPresenter;
+  final _localTaps = StreamController<PushSignal>.broadcast();
 
   @override
   Future<PushPermission> requestPermission() async {
@@ -342,32 +402,31 @@ class FirebaseMessagingPort implements PushMessagingPort {
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
   @override
-  Stream<PushSignal> get onSignal => StreamGroup.merge<RemoteMessage>([
-    FirebaseMessaging.onMessage.asyncMap(_presentForegroundMessage),
-    FirebaseMessaging.onMessageOpenedApp,
-  ]).expand(_parseSignal);
+  Stream<PushSignal> get onSignal => StreamGroup.merge<PushSignal>([
+    FirebaseMessaging.onMessage
+        .asyncMap(_presentForegroundMessage)
+        .expand(_parseSignal),
+    FirebaseMessaging.onMessageOpenedApp.expand((message) {
+      final signal = _tryParseSignal(message.data, opened: true);
+      return signal == null ? <PushSignal>[] : [signal];
+    }),
+    _localTaps.stream,
+  ]);
 
   @override
   Future<PushSignal?> get initialSignal async {
     final message = await _messaging.getInitialMessage();
-    if (message == null) return null;
-    return _tryParseSignal(message.data);
+    if (message != null) return _tryParseSignal(message.data, opened: true);
+    final presenter = _foregroundPresenter;
+    return presenter is ForegroundNotificationTapSource
+        ? openedPushPayload(
+            await (presenter as ForegroundNotificationTapSource).initialPayload,
+          )
+        : null;
   }
 
   Future<RemoteMessage> _presentForegroundMessage(RemoteMessage message) async {
-    final signal = _tryParseSignal(message.data);
-    if (signal != null) {
-      try {
-        await _foregroundPresenter.show(
-          notificationId: signal.notificationId,
-          ticketRef: signal.ticketRef,
-          title: message.notification?.title,
-          body: message.notification?.body,
-        );
-      } catch (_) {
-        // A banner failure must not prevent the ticket refresh signal.
-      }
-    }
+    await presentForegroundPush(message, _foregroundPresenter);
     return message;
   }
 
@@ -384,15 +443,40 @@ class FirebaseMessagingPort implements PushMessagingPort {
   }
 }
 
+/// Silent signals refresh data without creating a user-visible fallback banner.
+Future<void> presentForegroundPush(
+  RemoteMessage message,
+  ForegroundNotificationPresenter presenter,
+) async {
+  final signal = _tryParseSignal(message.data);
+  if (signal == null || signal.silent) return;
+  try {
+    await presenter.show(
+      notificationId: signal.notificationId,
+      ticketRef: signal.ticketRef,
+      payload: jsonEncode({
+        'eventType': signal.eventType,
+        'notificationId': signal.notificationId,
+        'route': signal.route,
+        'ticketRef': signal.ticketRef,
+      }),
+      title: message.notification?.title,
+      body: message.notification?.body,
+    );
+  } catch (_) {
+    // A banner failure must not prevent the ticket refresh signal.
+  }
+}
+
 Iterable<PushSignal> _parseSignal(RemoteMessage message) {
   final signal = _tryParseSignal(message.data);
   return signal == null ? const [] : [signal];
 }
 
-PushSignal? _tryParseSignal(Map<String, dynamic> data) {
+PushSignal? _tryParseSignal(Map<String, dynamic> data, {bool opened = false}) {
   try {
-    return PushSignal.fromData(data);
-  } on FormatException {
+    return PushSignal.fromData(data, opened: opened);
+  } catch (_) {
     return null;
   }
 }

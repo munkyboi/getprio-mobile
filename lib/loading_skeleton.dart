@@ -47,7 +47,9 @@ class SkeletonBlock extends StatelessWidget {
       height: height,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: color ?? GetPrioTheme.paperAccent.withValues(alpha: 0.58),
+          color:
+              color ??
+              GetPrioTheme.colors(context).paperAccent.withValues(alpha: 0.58),
           borderRadius: borderRadius,
         ),
       ),

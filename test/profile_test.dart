@@ -1,3 +1,5 @@
+import 'package:getprio_mobile/uploads/image_upload_policy.dart';
+
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -78,7 +80,7 @@ void main() {
     expect(find.text('Personal info'), findsWidgets);
     expect(find.text('(0917) 123-4567'), findsWidgets);
 
-    await tester.tap(find.byKey(const ValueKey('Close personal info')));
+    await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('profile-personal-info')));
     await tester.pumpAndSettle();
@@ -186,20 +188,30 @@ void main() {
     expect(find.text('Verify your current email'), findsOneWidget);
 
     await tester.enterText(
-      find.byKey(const Key('profile-email-code')),
+      find
+          .descendant(
+            of: find.byKey(const Key('profile-email-code')),
+            matching: find.byType(EditableText),
+          )
+          .first,
       '111111',
     );
     await tester.pump();
-    await tester.tap(find.byKey(const Key('profile-verify-code')));
+
     await tester.pumpAndSettle();
     expect(find.text('Verify your new email'), findsOneWidget);
 
     await tester.enterText(
-      find.byKey(const Key('profile-email-code')),
+      find
+          .descendant(
+            of: find.byKey(const Key('profile-email-code')),
+            matching: find.byType(EditableText),
+          )
+          .first,
       '222222',
     );
     await tester.pump();
-    await tester.tap(find.byKey(const Key('profile-verify-code')));
+
     await tester.pumpAndSettle();
 
     expect(api.emailChangeVerifications, 2);
@@ -215,7 +227,7 @@ void main() {
     );
     expect(find.text('Email address updated.'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
-    await tester.tap(find.byKey(const ValueKey('Close personal info')));
+    await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     expect(find.text('new@example.com'), findsOneWidget);
     await tester.tap(find.byKey(const Key('profile-personal-info')));
@@ -226,36 +238,21 @@ void main() {
     );
   });
 
-  testWidgets('opens notifications as a bottom sheet and saves the toggle', (
+  testWidgets('notification controls have moved out of Profile settings', (
     tester,
   ) async {
-    final settingsApi = FakeAccountSettingsApi();
     await tester.pumpWidget(
       ShadcnApp(
         home: AccountPage(
           user: FakeAccountProfileApi().user,
-          settingsRepository: AccountSettingsRepository(settingsApi),
+          settingsRepository: AccountSettingsRepository(
+            FakeAccountSettingsApi(),
+          ),
         ),
       ),
     );
-
-    await tester.tap(find.byKey(const Key('profile-notifications')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('profile-notifications-sheet')),
-      findsOneWidget,
-    );
-    final sheet = find.byKey(const Key('profile-notifications-sheet'));
-    expect(tester.widget(sheet), isNot(isA<Container>()));
-    expect(
-      tester.getSize(sheet).height,
-      lessThan(MediaQuery.sizeOf(tester.element(sheet)).height * 0.7),
-    );
-    await tester.tap(find.byKey(const Key('profile-queue-alerts')));
-    await tester.pumpAndSettle();
-    expect(settingsApi.lastQueueAlerts, isFalse);
-    expect(find.text('Notification preferences saved.'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 4));
+    expect(find.byKey(const Key('profile-notifications')), findsNothing);
+    expect(find.byKey(const Key('profile-appearance')), findsOneWidget);
   });
 
   testWidgets('shows approved vendors and confirms before removing one', (
@@ -316,35 +313,6 @@ void main() {
       findsOneWidget,
     );
     await tester.pump(const Duration(seconds: 4));
-  });
-
-  testWidgets('waits for notification content before starting its animation', (
-    tester,
-  ) async {
-    final settingsApi = FakeAccountSettingsApi();
-    final load = Completer<Map<String, dynamic>>();
-    settingsApi.loadCompleter = load;
-    await tester.pumpWidget(
-      ShadcnApp(
-        home: AccountPage(
-          user: FakeAccountProfileApi().user,
-          settingsRepository: AccountSettingsRepository(settingsApi),
-        ),
-      ),
-    );
-
-    await tester.tap(find.byKey(const Key('profile-notifications')));
-    await tester.pump();
-    expect(find.byKey(const Key('profile-notifications-sheet')), findsNothing);
-
-    load.complete({
-      'notificationSettings': {'queueAlerts': true},
-    });
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('profile-notifications-sheet')),
-      findsOneWidget,
-    );
   });
 
   testWidgets(
@@ -522,7 +490,12 @@ void main() {
   });
 }
 
-class FakeAccountProfileApi implements AccountProfileApi {
+class FakeAccountProfileApi implements AccountProfileApi, ImageUploadPolicyApi {
+  @override
+  Future<Map<String, dynamic>> loadImageUploadPolicy() async => {
+    'maxImageBytes': 200 * 1024,
+  };
+
   AuthUser user = const AuthUser(
     id: 'user-1',
     email: 'customer@example.com',

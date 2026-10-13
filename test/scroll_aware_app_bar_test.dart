@@ -1,40 +1,74 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:getprio_mobile/app_theme.dart';
 import 'package:getprio_mobile/navigation/scroll_aware_app_bar.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
-  testWidgets('app bar keeps a stable surface background while scrolling', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ShadcnApp(
-        home: ScrollNotificationObserver(
-          child: Scaffold(
-            headers: const [ScrollAwareAppBar(title: Text('Ticket details'))],
-            child: ListView(
-              key: const Key('scroll-aware-content'),
-              children: [
-                for (var index = 0; index < 20; index++)
-                  const SizedBox(height: 80),
+  for (final dark in [false, true]) {
+    testWidgets('transparent app bar title slides over 100px (dark $dark)', (
+      tester,
+    ) async {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        ShadcnApp(
+          theme: ThemeData(
+            colorScheme: dark ? ColorSchemes.darkZinc : ColorSchemes.lightZinc,
+          ),
+          home: ScrollNotificationObserver(
+            child: ScrollAwareScaffold(
+              headers: [
+                ScrollAwareAppBar(
+                  title: const Text('Ticket details'),
+                  leading: [GetPrioBackButton(onPressed: () {})],
+                ),
               ],
+              child: ListView(
+                controller: controller,
+                children: [
+                  const ScrollAwareHeaderSpace(),
+                  const SizedBox(key: Key('scroll-content-start'), height: 120),
+                  for (var index = 0; index < 20; index++)
+                    const SizedBox(height: 80),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    AppBar appBar() => tester.widget<AppBar>(find.byType(AppBar));
-
-    expect(appBar().backgroundColor, GetPrioTheme.paper);
-
-    await tester.drag(
-      find.byKey(const Key('scroll-aware-content')),
-      const Offset(0, -160),
-    );
-    await tester.pumpAndSettle();
-
-    expect(appBar().backgroundColor, GetPrioTheme.paper);
-  });
+      );
+      await tester.pumpAndSettle();
+      final title = find.text('Ticket details');
+      final back = find.byType(GetPrioBackButton);
+      final original = tester.getRect(title);
+      final backRect = tester.getRect(back);
+      final headerBottom = tester.getBottomLeft(find.byType(AppBar)).dy;
+      final content = find.byKey(const Key('scroll-content-start'));
+      expect(tester.getTopLeft(content).dy, closeTo(headerBottom, .1));
+      expect(
+        tester.widget<AppBar>(find.byType(AppBar)).backgroundColor,
+        Colors.transparent,
+      );
+      controller.jumpTo(50);
+      await tester.pump();
+      expect(
+        tester.getTopLeft(title).dy,
+        closeTo(original.top - original.height / 2, .1),
+      );
+      expect(tester.getRect(back), backRect);
+      // The viewport starts at the top of the screen; content passes beneath
+      // the header instead of being clipped at its bottom edge.
+      expect(tester.getTopLeft(content).dy, closeTo(headerBottom - 50, .1));
+      expect(tester.getTopLeft(find.byType(ListView)).dy, 0);
+      controller.jumpTo(100);
+      await tester.pump();
+      expect(tester.getBottomLeft(title).dy, closeTo(original.top, .1));
+      controller.jumpTo(200);
+      await tester.pump();
+      expect(tester.getBottomLeft(title).dy, closeTo(original.top, .1));
+      controller.jumpTo(0);
+      await tester.pump();
+      expect(tester.getRect(title), original);
+      expect(tester.getRect(back), backRect);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

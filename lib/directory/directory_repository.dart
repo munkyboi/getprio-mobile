@@ -28,7 +28,7 @@ class DirectoryRepository {
     return rawVendors
         .whereType<Map<String, dynamic>>()
         .map(VendorSummary.fromJson)
-        .where((vendor) => vendor.queueAvailable)
+        .where((vendor) => vendor.queueAvailable || vendor.bookingAvailable)
         .toList(growable: false);
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/main.dart';
+import 'package:getprio_mobile/app_theme.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
@@ -26,6 +27,9 @@ void main() {
       ),
     );
 
+    expect(GetPrioTheme.safeAreaTopSpacing, 20);
+    expect(tester.getTopLeft(find.byKey(const Key('home-page'))).dy, 44);
+
     final navigationBar = tester.widget<NavigationBar>(
       find.byKey(const Key('customer-main-menu')),
     );
@@ -36,7 +40,7 @@ void main() {
     );
     expect(homePage.padding, const EdgeInsets.fromLTRB(20, 0, 20, 20));
 
-    for (final key in const ['explore-page', 'tickets-page', 'account-page']) {
+    for (final key in const ['explore-page', 'lists-page', 'account-page']) {
       final page = tester.widget<ListView>(
         find.byKey(Key(key), skipOffstage: false),
       );
@@ -63,6 +67,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('account-page')), findsOneWidget);
-    expect(find.text('Manage your profile and app preferences.'), findsOneWidget);
+    expect(
+      find.text('Manage your profile and app preferences.'),
+      findsOneWidget,
+    );
   });
 }

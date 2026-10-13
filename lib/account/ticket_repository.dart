@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../queue/auth_queue_api.dart';
+import '../details/ticket_barcode_state.dart';
 import '../queue/queue_models.dart';
 
 abstract interface class AccountQueueApi {
@@ -10,6 +11,10 @@ abstract interface class AccountQueueApi {
     required int page,
     required int limit,
   });
+}
+
+abstract interface class TicketBarcodeApi {
+  Future<TicketBarcodeToken> loadTicketBarcode(String ticketId);
 }
 
 abstract interface class TicketInvitationApi {
@@ -51,15 +56,24 @@ class QueueTicketRepository {
   QueueTicketRepository(this.api);
 
   final AccountQueueApi api;
+  Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) {
+    if (api is! TicketBarcodeApi) {
+      return Future.error(StateError('Ticket barcode API unavailable'));
+    }
+    return (api as TicketBarcodeApi).loadTicketBarcode(ticketId);
+  }
+
+  final overviewTickets = ValueNotifier<List<QueueTicket>>(const []);
   final ticketStats = ValueNotifier<CustomerTicketStats?>(null);
   final refreshVersion = ValueNotifier<int>(0);
   final servedTicket = ValueNotifier<QueueTicket?>(null);
   final Set<String> _observedActive = {};
+  int _sessionGeneration = 0;
 
   void _observeTickets(List<QueueTicket> tickets) {
     for (final ticket in tickets) {
       if (ticket.isActive) _observedActive.add(ticket.lookupCode);
-      if (ticket.status == TicketStatus.served &&
+      if ((ticket.status == TicketStatus.served || ticket.isServiceCompleted) &&
           _observedActive.remove(ticket.lookupCode)) {
         servedTicket.value = ticket;
       }
@@ -72,31 +86,38 @@ class QueueTicketRepository {
 
   void requestRefresh() => refreshVersion.value++;
   void clearSession() {
+    _sessionGeneration++;
     ticketStats.value = null;
     _latestTickets = const [];
+    overviewTickets.value = const [];
     _observedActive.clear();
     servedTicket.value = null;
   }
 
   Future<List<QueueTicket>> loadOverview() async {
+    final generation = _sessionGeneration;
     late final Map<String, dynamic> response;
     try {
       response = await api.loadOverview();
     } catch (_) {
-      ticketStats.value = null;
+      if (generation == _sessionGeneration) ticketStats.value = null;
       rethrow;
     }
+    if (generation != _sessionGeneration) throw StateError('Account changed');
     ticketStats.value = CustomerTicketStats.fromJson(response['ticketStats']);
     final tickets = _ticketsFrom(response);
     _observeTickets(tickets);
     _latestTickets = tickets;
+    overviewTickets.value = List.unmodifiable(tickets);
     return tickets;
   }
 
   Future<List<QueueTicket>> loadHistory({int page = 1, int limit = 20}) async {
+    final generation = _sessionGeneration;
     final tickets = _ticketsFrom(
       await api.loadHistory(page: page, limit: limit),
     );
+    if (generation != _sessionGeneration) throw StateError('Account changed');
     _observeTickets(tickets);
     return tickets;
   }
@@ -140,8 +161,11 @@ class QueueTicketRepository {
     int historyPage = 1,
     int historyLimit = 20,
   }) async {
+    final generation = _sessionGeneration;
     final overview = await loadOverview();
+    if (generation != _sessionGeneration) throw StateError('Account changed');
     final history = await loadHistory(page: historyPage, limit: historyLimit);
+    if (generation != _sessionGeneration) throw StateError('Account changed');
     final ticketsByKey = <String, QueueTicket>{};
 
     for (final ticket in [...overview, ...history]) {
@@ -154,6 +178,7 @@ class QueueTicketRepository {
     final tickets = ticketsByKey.values.toList(growable: false);
     _observeTickets(tickets);
     _latestTickets = tickets;
+    overviewTickets.value = List.unmodifiable(tickets);
     return tickets;
   }
 
@@ -180,6 +205,10 @@ Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
     'customerName': 'Sandbox test user',
     'status': ticket['status'],
     'statusReason': ticket['status_reason'],
+    'customerConfirmedAt': ticket['customer_confirmed_at'],
+    'serviceStartedAt': ticket['service_started_at'],
+    'serviceEndedAt': ticket['service_ended_at'],
+    'serviceOutcome': ticket['service_outcome'],
     'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
     'tenantSlug':
         ticket['tenant_slug'] ??
@@ -197,11 +226,40 @@ Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
   };
 }
 
-class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
+class RestAccountQueueApi
+    implements AccountQueueApi, TicketInvitationApi, TicketBarcodeApi {
   RestAccountQueueApi(this.client, {this.sandbox = false});
 
   final AuthenticatedApiClient client;
   final bool sandbox;
+
+  @override
+  Future<TicketBarcodeToken> loadTicketBarcode(String ticketId) async {
+    if (sandbox) throw StateError('Sandbox rotating barcodes are unsupported');
+    final raw = await client.post(
+      '/api/account/queue/tickets/${Uri.encodeComponent(ticketId)}/barcode',
+      const {},
+      additionalHeaders: const {'Cache-Control': 'no-store'},
+    );
+    final code = raw['barcodeToken'];
+    final issued = DateTime.tryParse(raw['issuedAt']?.toString() ?? '');
+    final expires = DateTime.tryParse(raw['expiresAt']?.toString() ?? '');
+    final server = DateTime.tryParse(raw['serverNow']?.toString() ?? '');
+    if (code is! String ||
+        !RegExp(r'^QB[A-F0-9]{32}$').hasMatch(code) ||
+        issued == null ||
+        expires == null ||
+        server == null ||
+        !expires.isAfter(issued) ||
+        expires.difference(issued) > const Duration(minutes: 2)) {
+      throw StateError('Invalid ticket barcode response');
+    }
+    return TicketBarcodeToken(
+      code: code,
+      expiresAt: expires,
+      serverNow: server,
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> loadOverview() async {
@@ -215,8 +273,19 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
         tickets.map((raw) async {
           if (raw is! Map<String, dynamic>) return raw;
           final ticket = QueueTicket.fromJson(raw);
-          if (ticket.status != TicketStatus.waiting ||
-              ticket.position != null ||
+          final needsPosition =
+              ticket.status == TicketStatus.waiting && ticket.position == null;
+          // Older account responses omit confirmation/service fields. Resolve
+          // called tickets against their live snapshot until that API catches up.
+          final needsServiceProgress =
+              ticket.status == TicketStatus.called &&
+              [
+                'customerConfirmedAt',
+                'serviceStartedAt',
+                'serviceEndedAt',
+                'serviceOutcome',
+              ].any((key) => !raw.containsKey(key));
+          if ((!needsPosition && !needsServiceProgress) ||
               ticket.tenantSlug == null ||
               ticket.tenantSlug!.isEmpty ||
               ticket.lookupCode.isEmpty) {
@@ -233,6 +302,11 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
                 focus['lookupCode'] != ticket.lookupCode) {
               return raw;
             }
+            if (ticket.progressRank > 0 &&
+                ticket.progressRank >=
+                    QueueTicket.fromJson(focus).progressRank) {
+              return raw;
+            }
             // Retain account metadata while using the queue's live lifecycle data.
             return {
               ...raw,
@@ -241,6 +315,9 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
                 'position',
                 'estimatedWaitMinutes',
                 'customerConfirmedAt',
+                'serviceStartedAt',
+                'serviceEndedAt',
+                'serviceOutcome',
                 'statusReason',
               ])
                 if (focus.containsKey(key)) key: focus[key],
@@ -267,6 +344,7 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
       queryParameters: {'page': '$page', 'limit': '$limit'},
     );
   }
+
   @override
   Future<Map<String, dynamic>> loadInvitations() async {
     if (!sandbox) return const {'invitations': <dynamic>[]};
@@ -282,6 +360,7 @@ class RestAccountQueueApi implements AccountQueueApi, TicketInvitationApi {
     }
     return client.post('/api/mobile/ticket-invitations/$ticketId/accept', {});
   }
+
   Future<Map<String, dynamic>> _loadSandboxTickets({
     required String view,
     int limit = 20,

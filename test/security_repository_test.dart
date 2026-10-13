@@ -1,6 +1,6 @@
-import 'dart:convert';
-
-import 'package:barcode_widget/barcode_widget.dart';
+import 'package:getprio_mobile/branded_qr_code.dart';
+import 'package:getprio_mobile/app_theme.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:getprio_mobile/account/security_repository.dart';
@@ -21,29 +21,36 @@ void main() {
     },
   );
 
-  testWidgets('shows a QR code and manual setup key in the setup flow', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ShadcnApp(
-        home: SecurityPage(repository: SecurityRepository(FakeSecurityApi())),
-      ),
-    );
+  for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+    testWidgets('shows a branded QR code and manual setup key in $mode', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ShadcnApp(
+          theme: GetPrioTheme.light(),
+          darkTheme: GetPrioTheme.dark(),
+          themeMode: mode,
+          home: SecurityPage(repository: SecurityRepository(FakeSecurityApi())),
+        ),
+      );
 
-    await tester.ensureVisible(find.text('Set up MFA'));
-    await tester.tap(find.text('Set up MFA'));
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Set up MFA'));
+      await tester.tap(find.text('Set up MFA'));
+      await tester.pumpAndSettle();
 
-    final qr = tester.widget<BarcodeWidget>(
-      find.byKey(const Key('mfa-enrollment-qr')),
-    );
-    expect(
-      utf8.decode(qr.data),
-      'otpauth://totp/GetPrio:test@example.com?secret=secret-1',
-    );
-    expect(find.byKey(const Key('mfa-enrollment-key')), findsOneWidget);
-    expect(find.text('secret-1'), findsOneWidget);
-  });
+      final qr = tester.widget<BrandedQrCode>(
+        find.byKey(const Key('mfa-enrollment-qr')),
+      );
+      expect(
+        qr.data,
+        'otpauth://totp/GetPrio:test@example.com?secret=secret-1',
+      );
+      expect(find.byType(PrettyQrView), findsOneWidget);
+      expect(find.byKey(const Key('mfa-qr-brand')), findsOneWidget);
+      expect(find.byKey(const Key('mfa-enrollment-key')), findsOneWidget);
+      expect(find.text('secret-1'), findsOneWidget);
+    });
+  }
 
   testWidgets('copies the MFA setup key to the clipboard', (tester) async {
     MethodCall? clipboardCall;
@@ -140,7 +147,9 @@ class FakeSecurityApi implements SecurityApi {
   }) async {}
 
   @override
-  Future<Map<String, dynamic>> startMfaEnrollment({String? currentCode}) async => {
+  Future<Map<String, dynamic>> startMfaEnrollment({
+    String? currentCode,
+  }) async => {
     'secret': 'secret-1',
     'otpAuthUri': 'otpauth://totp/GetPrio:test@example.com?secret=secret-1',
   };

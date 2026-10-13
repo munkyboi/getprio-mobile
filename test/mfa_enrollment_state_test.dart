@@ -39,14 +39,16 @@ void main() {
     await tester.pumpAndSettle();
     final code = find.byKey(const Key('mfa-enrollment-code'));
     await tester.ensureVisible(code);
-    await tester.enterText(code, '123456');
-    await tester.ensureVisible(find.byKey(const Key('mfa-confirm-button')));
-    await tester.tap(find.byKey(const Key('mfa-confirm-button')));
+    await tester.enterText(
+      find.descendant(of: code, matching: find.byType(EditableText)).first,
+      '123456',
+    );
+    await tester.pump();
     await tester.pumpAndSettle();
     expect(updatedUser?.mfaEnabled, isTrue);
     expect(find.byKey(const Key('mfa-recovery-codes')), findsOneWidget);
     expect(find.byKey(const Key('mfa-setup-button')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('Close MFA Setup')));
+    await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const Key('profile-mfa')), 250);
     await tester.ensureVisible(find.byKey(const Key('profile-mfa')));

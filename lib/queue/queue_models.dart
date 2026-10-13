@@ -59,6 +59,9 @@ class QueueTicket {
     this.statusReason,
     this.carryOverExpiresAt,
     this.customerConfirmedAt,
+    this.serviceStartedAt,
+    this.serviceEndedAt,
+    this.serviceOutcome,
   });
 
   final String id;
@@ -80,7 +83,68 @@ class QueueTicket {
   final DateTime? carryOverExpiresAt;
   final DateTime? customerConfirmedAt;
 
-  bool get isActive => status.isActive;
+  final DateTime? serviceStartedAt;
+  final DateTime? serviceEndedAt;
+  final String? serviceOutcome;
+
+  bool get isInService => serviceStartedAt != null && serviceEndedAt == null;
+  bool get isServiceInterrupted =>
+      serviceOutcome == 'interrupted' || statusReason == 'service_interrupted';
+  bool get isServiceCompleted => serviceOutcome == 'completed';
+
+  // Queue lifecycle and actual service timing remain separate API facts.
+  int get progressRank =>
+      !status.isActive || isServiceCompleted || isServiceInterrupted
+      ? 4
+      : serviceStartedAt != null
+      ? 3
+      : customerConfirmedAt != null
+      ? 2
+      : status == TicketStatus.called
+      ? 1
+      : 0;
+
+  bool get isActive =>
+      status.isActive && !isServiceCompleted && !isServiceInterrupted;
+
+  /// Actual time in queue, stopping when staff explicitly began service.
+  Duration? get actualWaitingTime {
+    final joined = joinedAt;
+    final started = serviceStartedAt;
+    if (joined == null || started == null || started.isBefore(joined)) {
+      return null;
+    }
+    return started.difference(joined);
+  }
+
+  String get actualWaitingTimeLabel {
+    final wait = actualWaitingTime;
+    if (wait == null) return 'Unavailable';
+    final minutes = wait.inMinutes;
+    final hours = minutes ~/ 60;
+    final remaining = minutes % 60;
+    return [
+      if (hours > 0) '$hours${hours == 1 ? 'hr' : 'hrs'}',
+      if (remaining > 0 || hours == 0)
+        '$remaining${remaining == 1 ? 'min' : 'mins'}',
+    ].join(' ');
+  }
+
+  bool get needsArrival =>
+      status == TicketStatus.called &&
+      !isConfirmed &&
+      !isInService &&
+      !isServiceCompleted &&
+      !isServiceInterrupted &&
+      serviceEndedAt == null;
+
+  String? get serviceMessage => isInService
+      ? 'Your service is in progress.'
+      : isServiceInterrupted
+      ? 'Your service was interrupted. Contact the vendor about the next step.'
+      : isServiceCompleted
+      ? 'Your service is complete.'
+      : null;
 
   /// A vendor scan confirms the customer's arrival without serving the ticket.
   /// The API deliberately keeps the lifecycle status as `called` until staff
@@ -88,10 +152,20 @@ class QueueTicket {
   bool get isConfirmed =>
       status == TicketStatus.called && customerConfirmedAt != null;
 
-  String get displayStatusLabel => isConfirmed ? 'Confirmed' : status.label;
+  String get displayStatusLabel => isInService
+      ? 'In service'
+      : isServiceInterrupted
+      ? 'Interrupted'
+      : isServiceCompleted
+      ? 'Completed'
+      : isConfirmed
+      ? 'Confirmed'
+      : status.label;
 
   bool get canBeCancelled =>
-      status == TicketStatus.waiting || status == TicketStatus.pendingCarryOver;
+      !isInService &&
+      (status == TicketStatus.waiting ||
+          status == TicketStatus.pendingCarryOver);
 
   String? get customerFriendlyStatusReason =>
       customerFriendlyTicketReason(statusReason);
@@ -130,6 +204,9 @@ class QueueTicket {
       statusReason: json['statusReason'] as String?,
       carryOverExpiresAt: _asDate(json['carryOverExpiresAt']),
       customerConfirmedAt: _asDate(json['customerConfirmedAt']),
+      serviceStartedAt: _asDate(json['serviceStartedAt']),
+      serviceEndedAt: _asDate(json['serviceEndedAt']),
+      serviceOutcome: _asString(json['serviceOutcome']),
     );
   }
 
@@ -159,6 +236,9 @@ class QueueTicket {
       statusReason: statusReason,
       carryOverExpiresAt: carryOverExpiresAt,
       customerConfirmedAt: customerConfirmedAt,
+      serviceStartedAt: serviceStartedAt,
+      serviceEndedAt: serviceEndedAt,
+      serviceOutcome: serviceOutcome,
     );
   }
 }
@@ -179,6 +259,8 @@ String? customerFriendlyTicketReason(String? reason) {
       'Your carry-over opportunity expired before you were served.',
     'carry_over_declined' => 'You cancelled this ticket.',
     'customer_cancelled' => 'You cancelled this ticket.',
+    'service_interrupted' =>
+      'Your service was interrupted. Contact the vendor about the next step.',
     _ => _humanizeTicketReason(normalized),
   };
 }
@@ -366,6 +448,7 @@ class VendorLocation {
     required this.name,
     this.slug,
     this.queueAvailable = false,
+    this.isPrimary = false,
     this.address,
     this.contactEmail,
     this.contactPhone,
@@ -377,6 +460,7 @@ class VendorLocation {
   final String name;
   final String? slug;
   final bool queueAvailable;
+  final bool isPrimary;
   final String? address;
   final String? contactEmail;
   final String? contactPhone;
@@ -395,6 +479,7 @@ class VendorLocation {
         : const <VendorStoreHour>[];
     final slug = _firstNonBlank([json['slug'] as String?]);
     return VendorLocation(
+      isPrimary: json['isPrimary'] == true,
       id: _firstNonBlank([json['id'] as String?, slug]) ?? '',
       name: json['name'] as String? ?? 'Location',
       slug: slug,
@@ -452,6 +537,7 @@ class VendorSummary {
     required this.slug,
     required this.name,
     required this.queueAvailable,
+    this.bookingAvailable = false,
     this.category,
     this.locations = const [],
     this.description,
@@ -467,6 +553,7 @@ class VendorSummary {
   final String slug;
   final String name;
   final bool queueAvailable;
+  final bool bookingAvailable;
   final String? category;
   final List<VendorLocation> locations;
   final String? description;
@@ -494,6 +581,9 @@ class VendorSummary {
     final theme = _asMap(themeContainer?['theme']) ?? themeContainer;
     final imageUrl = _firstNonBlank([json['imageUrl'] as String?]);
     return VendorSummary(
+      bookingAvailable:
+          (capabilities is Map<String, dynamic> &&
+          capabilities['booking'] == true),
       slug: json['slug'] as String? ?? '',
       name: json['name'] as String? ?? 'Vendor',
       queueAvailable:

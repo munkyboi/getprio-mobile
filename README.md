@@ -7,7 +7,7 @@ The app uses [`shadcn_flutter`](https://pub.dev/packages/shadcn_flutter) for its
 - Home dashboard
 - Explore vendor directory
 - QR-code queue joining entry point
-- Active and historical tickets
+- Lists with active/historical tickets and customer bookings
 - Account, notification, security, and MFA entry points
 
 The navigation shell and customer queue foundation are in `lib/main.dart`. The app uses bearer authentication, QR resolution, authenticated queue joins, hosted-payment recovery, FCM registration, and REST refetches after queue push signals. Platform credentials and deployment-specific callback/host values remain environment setup documented in `docs/setup/`.
@@ -32,7 +32,20 @@ Firebase, FCM, OAuth callback, verified-host, and backend migration setup is doc
 
 Product decisions and implementation contracts are kept in [`CONTEXT.md`](CONTEXT.md) and [`docs/`](docs/).
 
+## Customer booking work
+
+The approved flow, implementation boundary, and remaining release work are in [the mobile booking plan](docs/specs/mobile-booking-plan.md). This work targets the main GetPrio app, using the iOS `Runner` scheme and production API configuration on Zero32. Booking details refresh automatically while visible and share the queue ticket pass design, with service image cards, schedule and fee summaries, and a dedicated payment section. Native manual payment instructions, receipt submission, private proof viewing, vendor-enabled customer arrival and linked queue-ticket navigation are available; cancellation and remaining lifecycle actions are pending.
+
 ## Upcoming API integration work
 
 - [API versioning rollout handoff](docs/specs/api-versioning-rollout-handoff.md) — implemented local `/api/v1` client and backend overlap, with production `1.0.2+4`, separate Sandbox identity/version sequence, and deployment/device verification still pending.
 - [Ticket invitation blocking handoff](docs/specs/api-ticket-invitation-blocking-handoff.md) — accepted v1 mobile scope; implementation and backend dependencies pending.
+
+For this booking branch on Zero32, run the main app without a Sandbox flavor:
+
+```bash
+flutter run --profile -d 00008120-001A3D101E68C01E \
+  --dart-define=GETPRIO_ENVIRONMENT=production \
+  --dart-define=GETPRIO_API_BASE_URL=https://api.getprio.online \
+  --dart-define=GETPRIO_APPROVED_HOSTS=api.getprio.online,getprio.online
+```

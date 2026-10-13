@@ -117,7 +117,7 @@ void main() {
     }
   });
 
-  testWidgets('uses the light theme by default', (tester) async {
+  testWidgets('follows the system theme by default', (tester) async {
     await tester.pumpWidget(
       GetPrioApp(
         onboardingStore: MemoryOnboardingStore(completed: true),
@@ -131,7 +131,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final app = tester.widget<ShadcnApp>(find.byType(ShadcnApp));
-    expect(app.themeMode, ThemeMode.light);
+    expect(app.themeMode, ThemeMode.system);
     expect(find.byType(SvgPicture), findsNothing);
     expect(
       find.image(const AssetImage('assets/branding/login-biometric-scene.png')),
@@ -443,8 +443,16 @@ void main() {
     expect(find.textContaining('j***@example.com'), findsOneWidget);
     expect(authenticated, isFalse);
 
-    await tester.enterText(find.byKey(const Key('register-otp')), '123456');
-    await tester.tap(find.byKey(const Key('register-otp-submit')));
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byKey(const Key('register-otp')),
+            matching: find.byType(EditableText),
+          )
+          .first,
+      '123456',
+    );
+    await tester.pump();
     await tester.pumpAndSettle();
 
     expect(authenticated, isTrue);
@@ -525,7 +533,7 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Explore'), findsOneWidget);
     expect(find.text('Join Queue'), findsOneWidget);
-    expect(find.text('Tickets'), findsOneWidget);
+    expect(find.text('Lists'), findsOneWidget);
     expect(find.text('Profile'), findsOneWidget);
     expect(find.byType(NavigationItem), findsNWidgets(4));
     expect(find.byType(NavigationButton), findsOneWidget);
@@ -648,7 +656,9 @@ void main() {
       ShadcnApp(home: const CustomerShell(user: AuthUserForTest.user)),
     );
 
-    await tester.tap(find.text('Tickets'));
+    await tester.tap(find.text('Lists'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('lists-tickets')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('tickets-page')), findsOneWidget);
@@ -821,7 +831,7 @@ void main() {
     expect(find.byKey(const Key('vendor-contact-sheet')), findsOneWidget);
     expect(find.text('Contact City Clinic'), findsOneWidget);
     expect(find.text('hello@cityclinic.example'), findsOneWidget);
-    expect(find.bySemanticsLabel('Close contact form'), findsOneWidget);
+    expect(find.bySemanticsLabel('Close contact form'), findsNothing);
 
     final sheetOverlay = tester.widget<DrawerWrapper>(
       find.byWidgetPredicate((widget) => widget is DrawerWrapper),
@@ -848,6 +858,21 @@ void main() {
       find.byKey(const Key('vendor-contact-message')),
       'Are you open this afternoon?',
     );
+    await tester.pumpAndSettle();
+    final messageField = tester.widget<TextArea>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextArea &&
+            widget.key == const Key('vendor-contact-message'),
+      ),
+    );
+    expect(messageField.focusNode!.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.tap(find.text('Message'));
+    await tester.pumpAndSettle();
+    expect(messageField.focusNode!.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(messageField.controller!.text, 'Are you open this afternoon?');
     await tester.tap(find.byKey(const Key('vendor-contact-continue')));
     await tester.pumpAndSettle();
 
@@ -925,12 +950,9 @@ void main() {
   testWidgets('separates active tickets from lightweight history', (
     tester,
   ) async {
+    final repository = QueueTicketRepository(FakeAccountQueueApi());
     await tester.pumpWidget(
-      ShadcnApp(
-        home: TicketsPage(
-          ticketRepository: QueueTicketRepository(FakeAccountQueueApi()),
-        ),
-      ),
+      ShadcnApp(home: TicketsPage(ticketRepository: repository)),
     );
     await tester.pumpAndSettle();
 
@@ -948,17 +970,35 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.fling(
-      find.byKey(const Key('tickets-page')),
-      const Offset(0, -600),
-      1000,
+    expect(
+      find.byKey(const ValueKey('history-ticket-history-1')),
+      findsNothing,
     );
+    await tester.tap(find.text('History'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('active-ticket-active-1')), findsNothing);
 
     expect(find.text('History'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('history-ticket-history-1')),
       findsOneWidget,
+    );
+    repository.requestRefresh();
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('history-ticket-history-1')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('active-ticket-active-1')), findsNothing);
+    await tester.tap(find.text('Active'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('active-ticket-active-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('history-ticket-history-1')),
+      findsNothing,
     );
   });
 
@@ -1082,9 +1122,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('Notifications'), findsNothing);
     expect(find.text('Security'), findsOneWidget);
-    expect(find.text('Queue alerts unavailable'), findsOneWidget);
+    expect(find.text('Appearance'), findsOneWidget);
     expect(find.byType(Card), findsOneWidget);
   });
 }

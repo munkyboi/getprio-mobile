@@ -91,17 +91,23 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
-        statusBarColor: const Color(0x00000000),
-        systemNavigationBarColor: GetPrioTheme.paper,
-      ),
+      value: GetPrioTheme.systemUi(context),
       child: Scaffold(
         child: DecoratedBox(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFFFAF7F2), Color(0xFFFFFDF9), Color(0xFFFBFAF8)],
+              colors: GetPrioTheme.colors(context).dark
+                  ? [
+                      GetPrioTheme.colors(context).paper,
+                      GetPrioTheme.colors(context).card,
+                    ]
+                  : const [
+                      Color(0xFFFAF7F2),
+                      Color(0xFFFFFDF9),
+                      Color(0xFFFBFAF8),
+                    ],
             ),
           ),
           child: SafeArea(
@@ -177,14 +183,15 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                           _slides[index].title,
                                           key: Key('onboarding-title-$index'),
                                           textAlign: TextAlign.center,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontFamily:
                                                 GetPrioTypography.uiFontFamily,
                                             fontSize: 28,
                                             height: 1.18,
                                             fontWeight: FontWeight.w600,
                                             letterSpacing: -1,
-                                            color: Color(0xFF191919),
+                                            color: GetPrioTheme.colors(context)
+                                                .ink,
                                           ),
                                         ),
                                       ),
@@ -196,12 +203,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                         child: Text(
                                           _slides[index].body,
                                           textAlign: TextAlign.center,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontFamily:
                                                 GetPrioTypography.uiFontFamily,
                                             fontSize: 14,
                                             height: 1.65,
-                                            color: GetPrioTheme.mutedInk,
+                                            color: GetPrioTheme.colors(context)
+                                                .mutedInk,
                                           ),
                                         ),
                                       ),
@@ -293,10 +301,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                   : _page == 2
                                   ? 'Get started'
                                   : 'Next',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
-                                color: Color(0xFF3B200B),
+                                color: GetPrioTheme.colors(context).ink,
                               ),
                             ),
                           ),
