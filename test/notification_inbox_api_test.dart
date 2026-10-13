@@ -21,6 +21,7 @@ void main() {
       );
       await auth.signIn(identifier: 'customer', password: 'password');
       final requests = <http.Request>[];
+      String? kind = 'booking';
       final api = RestNotificationInboxApi(
         AuthenticatedApiClient(
           baseUrl: 'https://api.example.test',
@@ -38,7 +39,7 @@ void main() {
                       'body': 'Proceed to vendor',
                       'createdAt': '2026-10-13T00:00:00Z',
                       'readAt': null,
-                      'kind': 'booking',
+                      'kind': kind,
                     },
                   ],
                   'unreadCount': 1,
@@ -68,6 +69,18 @@ void main() {
       expect(requests[3].url.path, '/api/v1/account/notifications/clear');
       expect(jsonDecode(requests[2].body), {'before': 'opaque=+cutoff'});
       expect(jsonDecode(requests[3].body), {'before': 'opaque=+cutoff'});
+      kind = 'queue';
+      expect((await api.load()).items.single.kind, InboxNotificationKind.queue);
+      kind = null;
+      expect(
+        (await api.load()).items.single.kind,
+        InboxNotificationKind.general,
+      );
+      kind = 'future-kind';
+      expect(
+        (await api.load()).items.single.kind,
+        InboxNotificationKind.general,
+      );
     },
   );
 }
