@@ -1,3 +1,4 @@
+import '../uploads/image_upload_policy.dart';
 import '../auth/auth_models.dart';
 import '../queue/auth_queue_api.dart';
 
@@ -83,11 +84,17 @@ class AccountProfileRepository {
     required String contentType,
     required List<int> bytes,
   }) async {
+    final prepared = await prepareImageForCurrentPolicy(
+      api,
+      bytes,
+      fileName: fileName,
+      contentType: contentType,
+    );
     return _parseUser(
       await api.uploadAvatar(
-        fileName: fileName,
-        contentType: contentType,
-        bytes: bytes,
+        fileName: prepared.fileName,
+        contentType: prepared.contentType,
+        bytes: prepared.bytes,
       ),
     );
   }
@@ -149,7 +156,10 @@ class AccountProfileRepository {
   }
 }
 
-class RestAccountProfileApi implements AccountProfileApi {
+class RestAccountProfileApi implements AccountProfileApi, ImageUploadPolicyApi {
+  @override
+  Future<Map<String, dynamic>> loadImageUploadPolicy() =>
+      client.get('/api/account/image-upload-policy');
   RestAccountProfileApi(this.client);
 
   final AuthenticatedApiClient client;

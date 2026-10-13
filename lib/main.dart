@@ -1,4 +1,3 @@
-import 'uploads/compressed_image.dart';
 import 'queue/join_otp_drawer.dart';
 import 'navigation/pull_to_refresh.dart';
 import 'details/detail_auto_update.dart';
@@ -6931,16 +6930,12 @@ class _AccountPageState extends State<AccountPage> {
       if (await picked.length() > 8 * 1024 * 1024) {
         throw ArgumentError('Choose an image up to 8 MB.');
       }
-      final prepared = await prepareUploadImage(
-        await picked.readAsBytes(),
-        fileName: picked.name,
-        contentType: picked.mimeType ?? _profileImageContentType(picked.name),
-      );
+      final bytes = await picked.readAsBytes();
       if (!mounted) return;
       final updated = await repository.uploadAvatar(
-        fileName: prepared.fileName,
-        contentType: prepared.contentType,
-        bytes: prepared.bytes,
+        fileName: picked.name,
+        contentType: picked.mimeType ?? _profileImageContentType(picked.name),
+        bytes: bytes,
       );
       if (mounted) {
         setState(() => _user = updated);

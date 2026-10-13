@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import '../uploads/compressed_image.dart';
-
 import '../navigation/app_drawer.dart';
 import '../keyboard_avoidance.dart';
 
@@ -108,17 +106,13 @@ class _BookingPaymentState extends State<BookingPayment> {
       if (size <= 0 || size > 8 * 1024 * 1024) {
         throw ArgumentError('Choose a receipt up to 8 MB.');
       }
-      final prepared = await prepareUploadImage(
-        await file.readAsBytes(),
-        fileName: file.name,
-        contentType: type,
-      );
+      final bytes = await file.readAsBytes();
       if (mounted) {
         setState(() {
           _receipt = file;
-          _bytes = prepared.bytes;
-          _contentType = prepared.contentType;
-          _uploadFileName = prepared.fileName;
+          _bytes = bytes;
+          _contentType = type;
+          _uploadFileName = file.name;
         });
       }
     } catch (e) {
@@ -154,6 +148,8 @@ class _BookingPaymentState extends State<BookingPayment> {
         setState(
           () => _error = e is TimeoutException
               ? 'This is taking too long. Refresh the booking status before retrying; your receipt is kept here.'
+              : e is ArgumentError
+              ? '${e.message}'
               : e is ApiException
               ? e.message
               : 'Could not submit payment proof. Your receipt is kept here; retry or refresh the booking status.',
@@ -247,7 +243,7 @@ class _BookingPaymentState extends State<BookingPayment> {
           ),
         const SizedBox(height: 8),
         const Text(
-          'JPEG, PNG or WebP, up to 8 MB. Larger images are compressed to 200 KB before upload. Your receipt stays private to you and authorized vendor staff.',
+          'JPEG, PNG or WebP, up to 8 MB. Larger images are compressed to the current upload limit before upload. Your receipt stays private to you and authorized vendor staff.',
         ),
         if (_error != null)
           Padding(

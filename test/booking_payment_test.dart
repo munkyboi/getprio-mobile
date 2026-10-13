@@ -1,3 +1,5 @@
+import 'package:getprio_mobile/uploads/image_upload_policy.dart';
+
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -24,7 +26,12 @@ Map<String, dynamic> paymentBooking() => {
   },
 };
 
-class PaymentApi implements BookingApi, BookingProofApi {
+class PaymentApi implements BookingApi, BookingProofApi, ImageUploadPolicyApi {
+  @override
+  Future<Map<String, dynamic>> loadImageUploadPolicy() async => {
+    'maxImageBytes': 200 * 1024,
+  };
+
   int uploads = 0, submissions = 0;
   Map<String, dynamic>? submitted;
   Completer<void>? gate, uploadGate;

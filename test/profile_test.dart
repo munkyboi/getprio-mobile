@@ -1,3 +1,5 @@
+import 'package:getprio_mobile/uploads/image_upload_policy.dart';
+
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -488,7 +490,12 @@ void main() {
   });
 }
 
-class FakeAccountProfileApi implements AccountProfileApi {
+class FakeAccountProfileApi implements AccountProfileApi, ImageUploadPolicyApi {
+  @override
+  Future<Map<String, dynamic>> loadImageUploadPolicy() async => {
+    'maxImageBytes': 200 * 1024,
+  };
+
   AuthUser user = const AuthUser(
     id: 'user-1',
     email: 'customer@example.com',

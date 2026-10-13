@@ -1,3 +1,5 @@
+import '../uploads/image_upload_policy.dart';
+
 import 'dart:async';
 
 import '../queue/auth_queue_api.dart';
@@ -205,7 +207,11 @@ abstract interface class BookingProofApi {
   });
 }
 
-class RestBookingApi implements BookingApi, BookingProofApi {
+class RestBookingApi
+    implements BookingApi, BookingProofApi, ImageUploadPolicyApi {
+  @override
+  Future<Map<String, dynamic>> loadImageUploadPolicy() =>
+      client.get('/api/account/image-upload-policy');
   RestBookingApi(this.client);
   final AuthenticatedApiClient client;
   @override
@@ -326,14 +332,20 @@ class BookingRepository {
     if (uploader is! BookingProofApi) {
       throw StateError('Payment upload is unavailable.');
     }
+    final prepared = await prepareImageForCurrentPolicy(
+      api,
+      bytes,
+      fileName: fileName,
+      contentType: contentType,
+    );
     final path =
         '/api/account/bookings/${Uri.encodeComponent(booking.id)}/payment-proof';
     final upload = await (uploader as BookingProofApi)
         .uploadProof(
           '$path/uploads/direct',
-          bytes: bytes,
-          contentType: contentType,
-          fileName: fileName,
+          bytes: prepared.bytes,
+          contentType: prepared.contentType,
+          fileName: prepared.fileName,
         )
         .timeout(const Duration(seconds: 30));
     final proof = upload['proof'] as Map<String, dynamic>;
