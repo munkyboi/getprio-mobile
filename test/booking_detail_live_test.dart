@@ -64,6 +64,62 @@ Future<void> openPayment(WidgetTester tester) async {
 }
 
 void main() {
+  for (final status in ['pending', 'confirmed', 'rescheduled']) {
+    testWidgets('$status booking supports pull refresh after idle pause', (
+      tester,
+    ) async {
+      final api = LiveApi()..data = {...liveBooking(), 'status': status};
+      await openLive(tester, api);
+      await tester.pump(const Duration(minutes: 5));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('detail-auto-update-paused')),
+        findsOneWidget,
+      );
+      final calls = api.requests;
+      await tester.drag(
+        find.byKey(const Key('booking-details-page')),
+        const Offset(0, 350),
+      );
+      await tester.pumpAndSettle();
+      expect(api.requests, calls + 1);
+      expect(find.byKey(const Key('detail-auto-update-paused')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('pulling active details refreshes and stops after completion', (
+    tester,
+  ) async {
+    final api = LiveApi();
+    await openLive(tester, api);
+    expect(api.requests, 1);
+    api.data = {...liveBooking(), 'status': 'confirmed'};
+    await tester.drag(
+      find.byKey(const Key('booking-details-page')),
+      const Offset(0, 350),
+    );
+    await tester.pumpAndSettle();
+    expect(api.requests, 2);
+    expect(find.text('Booking: confirmed'), findsOneWidget);
+
+    api.data = {...liveBooking(), 'status': 'completed'};
+    await tester.drag(
+      find.byKey(const Key('booking-details-page')),
+      const Offset(0, 350),
+    );
+    await tester.pumpAndSettle();
+    expect(api.requests, 3);
+    expect(find.byType(RefreshTrigger), findsNothing);
+    await tester.drag(
+      find.byKey(const Key('booking-details-page')),
+      const Offset(0, 350),
+    );
+    await tester.pumpAndSettle();
+    expect(api.requests, 3);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'booking interaction postpones idle pause; only successful refresh resumes',
     (tester) async {
