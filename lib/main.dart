@@ -2067,6 +2067,9 @@ class _CustomerShellState extends State<CustomerShell>
     _inbox?.dispose();
     _bookingPushGeneration++;
     _pendingBookingTaps.clear();
+    _bookingRepository?.confirmedArrivalVersion.removeListener(
+      _refreshConfirmedArrival,
+    );
     super.dispose();
   }
 
@@ -2539,11 +2542,19 @@ class _CustomerShellState extends State<CustomerShell>
     );
   }
 
+  void _refreshConfirmedArrival() => widget.ticketRepository?.requestRefresh();
+
   void _resetBookingRepository() {
+    _bookingRepository?.confirmedArrivalVersion.removeListener(
+      _refreshConfirmedArrival,
+    );
     final api = widget.directoryRepository?.api;
     _bookingRepository = !widget.sandbox && api is RestDirectoryApi
         ? BookingRepository(RestBookingApi(api.client))
         : null;
+    _bookingRepository?.confirmedArrivalVersion.addListener(
+      _refreshConfirmedArrival,
+    );
   }
 
   bool _ticketsOpen = false;
@@ -2592,7 +2603,6 @@ class _CustomerShellState extends State<CustomerShell>
       builder: (_) => BookingDetailPage(
         repository: repository,
         booking: booking,
-        onCheckedIn: widget.ticketRepository?.requestRefresh,
         onOpenTicket: (item) => _openBookingQueueTicket(
           context,
           item,
@@ -2623,7 +2633,6 @@ class _CustomerShellState extends State<CustomerShell>
       SwipeBackPageRoute<void>(
         builder: (_) => BookingsPage(
           repository: _bookingRepository,
-          onCheckedIn: widget.ticketRepository?.requestRefresh,
           onOpenTicket: (booking) => _openBookingQueueTicket(
             context,
             booking,

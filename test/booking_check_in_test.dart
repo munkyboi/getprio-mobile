@@ -1,3 +1,5 @@
+import 'package:getprio_mobile/auth/auth_repository.dart';
+
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -45,7 +47,13 @@ class ArrivalApi implements BookingApi {
   ) async {
     posts++;
     postPath = path;
-    if (fail) throw StateError('offline');
+    if (fail) {
+      throw const ApiException(
+        400,
+        'rejected',
+        'Could not record arrival. Please try again.',
+      );
+    }
     return postGate?.future ?? {'booking': checkedInBooking()};
   }
 }

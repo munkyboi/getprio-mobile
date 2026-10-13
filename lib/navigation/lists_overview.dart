@@ -115,7 +115,9 @@ class _ListsOverviewState extends State<ListsOverview>
       _bookingError = null;
     });
     try {
-      final bookings = await repository.upcoming();
+      final bookings = await repository.upcoming().timeout(
+        const Duration(seconds: 20),
+      );
       if (mounted) setState(() => _bookings = bookings);
     } catch (_) {
       if (mounted) {
