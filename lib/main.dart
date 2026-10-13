@@ -69,6 +69,10 @@ import 'queue/queue_models.dart';
 import 'queue/queue_repository.dart';
 import 'queue/current_queue_card.dart';
 import 'push/push_coordinator.dart';
+import 'notifications/notification_inbox.dart';
+import 'notifications/rest_notification_inbox_api.dart';
+import 'notifications/notification_inbox_page.dart';
+import 'navigation/main_page_top_bar.dart';
 import 'app_theme.dart';
 import 'loading_skeleton.dart';
 import 'onboarding/onboarding_gate.dart';
@@ -194,6 +198,9 @@ class GetPrioApp extends StatelessWidget {
       paymentLinkSource: AppPaymentLinkSource(),
       pushCoordinator: pushCoordinator,
       pushSignal: pushSignal,
+      notificationInboxApi: environmentConfig.isSandbox
+          ? null
+          : RestNotificationInboxApi(apiClient),
       oauthFlow: oauthFlow,
       approvedVendorStore: approvedVendorStore,
     );
@@ -301,6 +308,7 @@ class AuthGate extends StatefulWidget {
     this.paymentLinkSource,
     this.pushCoordinator,
     this.pushSignal,
+    this.notificationInboxApi,
     this.oauthFlow,
     this.approvedVendorStore,
     this.sandbox = false,
@@ -319,6 +327,7 @@ class AuthGate extends StatefulWidget {
   final PaymentLinkSource? paymentLinkSource;
   final PushCoordinator? pushCoordinator;
   final ValueNotifier<PushSignal?>? pushSignal;
+  final NotificationInboxApi? notificationInboxApi;
   final OAuthFlow? oauthFlow;
   final ApprovedVendorStore? approvedVendorStore;
   final bool sandbox;
@@ -389,6 +398,7 @@ class _AuthGateState extends State<AuthGate> {
         allowedHosts: widget.allowedHosts,
         paymentLinkSource: widget.paymentLinkSource,
         pushSignal: widget.pushSignal,
+        notificationInboxApi: widget.notificationInboxApi,
         approvedVendorStore: widget.approvedVendorStore,
         onSignOut: () => unawaited(_signOut()),
       );
@@ -418,6 +428,7 @@ class _AuthGateState extends State<AuthGate> {
             allowedHosts: widget.allowedHosts,
             paymentLinkSource: widget.paymentLinkSource,
             pushSignal: widget.pushSignal,
+            notificationInboxApi: widget.notificationInboxApi,
             approvedVendorStore: widget.approvedVendorStore,
             onSignOut: () => unawaited(_signOut()),
           );
@@ -1976,6 +1987,7 @@ class CustomerShell extends StatefulWidget {
     this.onUserUpdated,
     this.paymentLinkSource,
     this.pushSignal,
+    this.notificationInboxApi,
     this.approvedVendorStore,
     this.allowedHosts = const {},
     this.sandbox = false,
@@ -1995,6 +2007,7 @@ class CustomerShell extends StatefulWidget {
   final Set<String> allowedHosts;
   final PaymentLinkSource? paymentLinkSource;
   final ValueNotifier<PushSignal?>? pushSignal;
+  final NotificationInboxApi? notificationInboxApi;
   final ApprovedVendorStore? approvedVendorStore;
   final bool sandbox;
 
@@ -2008,6 +2021,11 @@ class _CustomerShellState extends State<CustomerShell>
   Timer? _ticketRefreshTimer;
   Timer? _invitationRefreshTimer;
   bool _vendorJoinOpen = false;
+  NotificationInboxController? _inbox;
+  Timer? _inboxRefreshTimer;
+  bool _inboxOpen = false;
+  Route<void>? _inboxRoute;
+  NavigatorState? _inboxNavigator;
 
   @override
   void initState() {
@@ -2018,6 +2036,7 @@ class _CustomerShellState extends State<CustomerShell>
     _startTicketRefreshFallback();
     _startInvitationRefreshFallback();
     _loadPendingInvitationAfterFrame();
+    _resetInbox();
   }
 
   @override
@@ -2027,6 +2046,9 @@ class _CustomerShellState extends State<CustomerShell>
     _invitationRefreshTimer?.cancel();
     widget.ticketRepository?.servedTicket.removeListener(_promptServedTicket);
     widget.pushSignal?.removeListener(_handlePushSignal);
+    _inboxRefreshTimer?.cancel();
+    _closeOwnedInbox();
+    _inbox?.dispose();
     super.dispose();
   }
 
@@ -2034,14 +2056,81 @@ class _CustomerShellState extends State<CustomerShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       widget.ticketRepository?.requestRefresh();
+      unawaited(_inbox?.refresh());
       _startTicketRefreshFallback();
       _startInvitationRefreshFallback();
       _loadPendingInvitationAfterFrame();
     } else {
+      _inboxRefreshTimer?.cancel();
+      _inboxRefreshTimer = null;
       _ticketRefreshTimer?.cancel();
       _ticketRefreshTimer = null;
       _invitationRefreshTimer?.cancel();
       _invitationRefreshTimer = null;
+    }
+  }
+
+  void _resetInbox() {
+    _closeOwnedInbox();
+    _inboxRefreshTimer?.cancel();
+    _inbox?.dispose();
+    _inbox = widget.notificationInboxApi == null
+        ? null
+        : NotificationInboxController(widget.notificationInboxApi!);
+    unawaited(_inbox?.refresh());
+  }
+
+  @override
+  void didUpdateWidget(covariant CustomerShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user?.id != widget.user?.id ||
+        oldWidget.notificationInboxApi != widget.notificationInboxApi) {
+      _resetInbox();
+    }
+    if (oldWidget.pushSignal != widget.pushSignal) {
+      oldWidget.pushSignal?.removeListener(_handlePushSignal);
+      widget.pushSignal?.addListener(_handlePushSignal);
+    }
+  }
+
+  Widget _withTopBar(Widget child) => _inbox == null
+      ? child
+      : MainPageTopBarScope(
+          tickets: widget.ticketRepository,
+          unreadCount: _inbox!.unreadCount,
+          activePage: _selectedDestination.name,
+          onTicket: _openTicketDetails,
+          onNotifications: _openInbox,
+          child: child,
+        );
+
+  void _closeOwnedInbox() {
+    final route = _inboxRoute, navigator = _inboxNavigator;
+    if (route == null || navigator == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (navigator.mounted && route.isActive) navigator.removeRoute(route);
+    });
+  }
+
+  Future<void> _openInbox() async {
+    final inbox = _inbox;
+    if (inbox == null || _inboxOpen) return;
+    _inboxOpen = true;
+    final navigator = Navigator.of(context);
+    final route = SwipeBackPageRoute<void>(
+      builder: (_) => NotificationInboxPage(controller: inbox),
+    );
+    _inboxRoute = route;
+    _inboxNavigator = navigator;
+    try {
+      await navigator.push(route);
+      if (mounted && identical(_inbox, inbox)) await inbox.refresh();
+    } finally {
+      if (identical(_inboxRoute, route)) {
+        _inboxOpen = false;
+        _inboxRoute = null;
+        _inboxNavigator = null;
+      }
     }
   }
 
@@ -2072,6 +2161,13 @@ class _CustomerShellState extends State<CustomerShell>
     }
 
     widget.ticketRepository?.requestRefresh();
+    if (!signal.silent) {
+      _inboxRefreshTimer?.cancel();
+      _inboxRefreshTimer = Timer(
+        const Duration(milliseconds: 300),
+        () => unawaited(_inbox?.refresh()),
+      );
+    }
     if (signal.eventType != 'developer_ticket_invitation' ||
         signal.notificationId == _lastInvitationNotificationId) {
       return;
@@ -2283,45 +2379,47 @@ class _CustomerShellState extends State<CustomerShell>
             padding: const EdgeInsets.only(
               top: GetPrioTheme.safeAreaTopSpacing,
             ),
-            child: IndexedStack(
-              index: _selectedDestination.index,
-              children: [
-                HomePage(
-                  directoryRepository: widget.directoryRepository,
-                  onOpenVendor: _openFavoriteVendor,
-                  user: widget.user,
-                  ticketRepository: widget.ticketRepository,
-                  onOpenJoin: _openJoin,
-                  onOpenTicketDetails: _openTicketDetails,
-                ),
-                ExplorePage(
-                  repository: widget.directoryRepository,
-                  queueRepository: widget.queueRepository,
-                  onOpenJoin: (host, vendor, locationSlug) =>
-                      unawaited(_openVendorJoin(host, vendor, locationSlug)),
-                ),
-                ListsPage(
-                  onTickets: _openTickets,
-                  onBookings: _openBookings,
-                  active: _selectedDestination == CustomerDestination.lists,
-                  ticketRepository: widget.ticketRepository,
-                  bookingRepository: _bookingRepository,
-                  onOpenTicket: _openTicketDetails,
-                  onOpenBooking: _openBookingDetails,
-                ),
-                AccountPage(
-                  socialRepository: widget.directoryRepository?.social,
-                  onOpenVendor: _openFavoriteVendor,
-                  user: widget.user,
-                  onSignOut: widget.onSignOut,
-                  settingsRepository: widget.settingsRepository,
-                  securityRepository: widget.securityRepository,
-                  profileRepository: widget.profileRepository,
-                  onUserUpdated: widget.onUserUpdated,
-                  approvedVendorStore: widget.approvedVendorStore,
-                  sandbox: widget.sandbox,
-                ),
-              ],
+            child: _withTopBar(
+              IndexedStack(
+                index: _selectedDestination.index,
+                children: [
+                  HomePage(
+                    directoryRepository: widget.directoryRepository,
+                    onOpenVendor: _openFavoriteVendor,
+                    user: widget.user,
+                    ticketRepository: widget.ticketRepository,
+                    onOpenJoin: _openJoin,
+                    onOpenTicketDetails: _openTicketDetails,
+                  ),
+                  ExplorePage(
+                    repository: widget.directoryRepository,
+                    queueRepository: widget.queueRepository,
+                    onOpenJoin: (host, vendor, locationSlug) =>
+                        unawaited(_openVendorJoin(host, vendor, locationSlug)),
+                  ),
+                  ListsPage(
+                    onTickets: _openTickets,
+                    onBookings: _openBookings,
+                    active: _selectedDestination == CustomerDestination.lists,
+                    ticketRepository: widget.ticketRepository,
+                    bookingRepository: _bookingRepository,
+                    onOpenTicket: _openTicketDetails,
+                    onOpenBooking: _openBookingDetails,
+                  ),
+                  AccountPage(
+                    socialRepository: widget.directoryRepository?.social,
+                    onOpenVendor: _openFavoriteVendor,
+                    user: widget.user,
+                    onSignOut: widget.onSignOut,
+                    settingsRepository: widget.settingsRepository,
+                    securityRepository: widget.securityRepository,
+                    profileRepository: widget.profileRepository,
+                    onUserUpdated: widget.onUserUpdated,
+                    approvedVendorStore: widget.approvedVendorStore,
+                    sandbox: widget.sandbox,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2631,6 +2729,7 @@ class _CustomerShellState extends State<CustomerShell>
 
   void _selectDestination(CustomerDestination destination) {
     if (widget.sandbox && destination == CustomerDestination.explore) return;
+    unawaited(_inbox?.refresh());
     setState(() => _selectedDestination = destination);
     if (destination == CustomerDestination.lists) {
       widget.ticketRepository?.requestRefresh();
@@ -2702,6 +2801,7 @@ class _HomePageState extends State<HomePage> {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         children: [
           TabPageHeader(
+            page: 'home',
             title: '$_greeting, ${homeGreetingName(widget.user)}',
             description: 'Stay up to date with your queue tickets.',
           ),
@@ -3051,6 +3151,7 @@ class _ExplorePageState extends State<ExplorePage> {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         children: [
           const TabPageHeader(
+            page: 'explore',
             title: 'Explore vendors',
             description: 'Browse vendors with queueing available.',
           ),
@@ -6481,6 +6582,7 @@ class _AccountPageState extends State<AccountPage> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
               const TabPageHeader(
+                page: 'account',
                 title: 'Profile',
                 description: 'Manage your profile and app preferences.',
               ),

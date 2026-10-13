@@ -63,6 +63,7 @@ class QueueTicketRepository {
     return (api as TicketBarcodeApi).loadTicketBarcode(ticketId);
   }
 
+  final overviewTickets = ValueNotifier<List<QueueTicket>>(const []);
   final ticketStats = ValueNotifier<CustomerTicketStats?>(null);
   final refreshVersion = ValueNotifier<int>(0);
   final servedTicket = ValueNotifier<QueueTicket?>(null);
@@ -86,6 +87,7 @@ class QueueTicketRepository {
   void clearSession() {
     ticketStats.value = null;
     _latestTickets = const [];
+    overviewTickets.value = const [];
     _observedActive.clear();
     servedTicket.value = null;
   }
@@ -102,6 +104,7 @@ class QueueTicketRepository {
     final tickets = _ticketsFrom(response);
     _observeTickets(tickets);
     _latestTickets = tickets;
+    overviewTickets.value = List.unmodifiable(tickets);
     return tickets;
   }
 
@@ -166,6 +169,7 @@ class QueueTicketRepository {
     final tickets = ticketsByKey.values.toList(growable: false);
     _observeTickets(tickets);
     _latestTickets = tickets;
+    overviewTickets.value = List.unmodifiable(tickets);
     return tickets;
   }
 

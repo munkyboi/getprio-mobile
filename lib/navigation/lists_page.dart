@@ -30,6 +30,7 @@ class ListsPage extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
     children: [
       const TabPageHeader(
+        page: 'lists',
         title: 'Lists',
         description: 'Your tickets and scheduled visits, all in one place.',
       ),

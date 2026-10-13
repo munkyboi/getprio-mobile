@@ -20,12 +20,14 @@ class PushSignal {
     required this.notificationId,
     this.ticketRef,
     this.route,
+    this.silent = false,
   });
 
   final String eventType;
   final String notificationId;
   final String? ticketRef;
   final String? route;
+  final bool silent;
 
   factory PushSignal.fromData(Map<String, dynamic> data) {
     final eventType = data['eventType'];
@@ -43,6 +45,7 @@ class PushSignal {
       notificationId: notificationId,
       ticketRef: data['ticketRef'] as String?,
       route: data['route'] as String?,
+      silent: data['silent'] == true || data['silent'] == 'true',
     );
   }
 }
