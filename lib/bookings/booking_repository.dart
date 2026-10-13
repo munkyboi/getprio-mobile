@@ -10,10 +10,19 @@ class BookingService {
     this.priceDisplay = '',
     this.priceAmountCents = 0,
     this.allowQuantity = false,
-    this.quantityLabel = 'quantity',
+    this.quantityLabel = 'Units',
+    this.quantityMin = 1,
+    this.quantityMax = 24,
+    this.currency = 'PHP',
   });
-  final String slug, name, description, imageUrl, priceDisplay, quantityLabel;
-  final int durationMinutes, priceAmountCents;
+  final String slug,
+      name,
+      description,
+      imageUrl,
+      priceDisplay,
+      quantityLabel,
+      currency;
+  final int durationMinutes, priceAmountCents, quantityMin, quantityMax;
   final bool allowQuantity;
   factory BookingService.fromJson(Map<String, dynamic> json) => BookingService(
     slug: json['slug'] as String? ?? '',
@@ -24,8 +33,15 @@ class BookingService {
     priceDisplay: json['priceDisplay'] as String? ?? '',
     priceAmountCents: (json['priceAmountCents'] as num?)?.toInt() ?? 0,
     allowQuantity: json['allowBookingQuantity'] == true,
-    quantityLabel: json['bookingQuantityLabel'] as String? ?? 'quantity',
+    quantityLabel: json['bookingQuantityLabel'] as String? ?? 'Units',
+    quantityMin: (json['bookingQuantityMin'] as num?)?.toInt() ?? 1,
+    quantityMax: (json['bookingQuantityMax'] as num?)?.toInt() ?? 24,
+    currency: json['currency'] as String? ?? 'PHP',
   );
+  String priceForQuantity(int quantity) =>
+      quantity == 1 && priceDisplay.isNotEmpty
+      ? priceDisplay
+      : '${currency == 'PHP' ? '₱' : '$currency '}${(priceAmountCents * quantity / 100).toStringAsFixed(2)}';
 }
 
 class CustomerBooking {

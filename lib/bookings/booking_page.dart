@@ -10,6 +10,7 @@ import 'booking_otp_drawer.dart';
 import '../queue/queue_models.dart';
 import 'booking_repository.dart';
 import 'service_selection.dart';
+import 'quantity_limits.dart';
 
 /// A focused native booking flow. Prices and availability remain server-owned.
 class BookingPage extends StatefulWidget {
@@ -45,41 +46,76 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
   int _slotRequest = 0;
   BuildContext? _drawerHostContext;
 
-  void _synchronizeQuantities() {
-    final unitServices = widget.services.where(
-      (service) => service.allowQuantity,
+  int _serviceRevision = 0;
+
+  BookingQuantityBounds? get _sharedBounds =>
+      sharedQuantityBounds(_services, _mode);
+  bool get _invalidLimits =>
+      _services.any((service) => !quantityBounds(service).isValid);
+
+  bool _reconcileQuantities() {
+    final next = reconcileBookingQuantities(
+      widget.services,
+      _selected,
+      _mode,
+      _quantities,
     );
-    var largest = 1;
-    for (final service in unitServices) {
-      final quantity = _quantities[service.slug] ?? 1;
-      if (quantity > largest) largest = quantity;
-    }
-    for (final service in unitServices) {
-      _quantities[service.slug] = largest;
-    }
+    final changed =
+        next.length != _quantities.length ||
+        next.entries.any((entry) => _quantities[entry.key] != entry.value);
+    _quantities
+      ..clear()
+      ..addAll(next);
+    return changed;
   }
 
   void _changeQuantity(BookingService service, int quantity) {
-    if (_busy || quantity < 1 || !_selected.contains(service.slug)) return;
+    if (_busy || !_selected.contains(service.slug)) return;
+    final bounds = _sharedBounds ?? quantityBounds(service);
+    if (!bounds.isValid) return;
     setState(() {
-      if (_mode == 'parallel') {
-        for (final item in widget.services.where(
-          (item) => item.allowQuantity,
-        )) {
-          _quantities[item.slug] = quantity;
+      final value = bounds.clamp(quantity);
+      if (_sharedBounds != null) {
+        for (final item in _services) {
+          _quantities[item.slug] = value;
         }
       } else {
-        _quantities[service.slug] = quantity;
+        _quantities[service.slug] = value;
       }
+      _reconcileQuantities();
     });
     _loadSlots();
+  }
+
+  @override
+  void didUpdateWidget(covariant BookingPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.services.length != widget.services.length ||
+        widget.services.any(
+          (service) => !oldWidget.services.any(
+            (old) =>
+                old.slug == service.slug &&
+                old.allowQuantity == service.allowQuantity &&
+                old.quantityMin == service.quantityMin &&
+                old.quantityMax == service.quantityMax &&
+                old.durationMinutes == service.durationMinutes &&
+                old.priceAmountCents == service.priceAmountCents,
+          ),
+        )) {
+      _serviceRevision++;
+      _selected.removeWhere(
+        (slug) => !widget.services.any((s) => s.slug == slug),
+      );
+      _reconcileQuantities();
+      _loadSlots();
+    }
   }
 
   void _changeMode(String mode) {
     if (_busy) return;
     setState(() {
       _mode = mode;
-      if (mode == 'parallel') _synchronizeQuantities();
+      _reconcileQuantities();
     });
     _loadSlots();
   }
@@ -108,6 +144,7 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
     _name = TextEditingController(text: widget.customer?.customerName ?? '');
     _email = TextEditingController(text: widget.customer?.email ?? '');
     _phone = TextEditingController(text: widget.customer?.phone ?? '');
+    _reconcileQuantities();
     _loadSlots();
   }
 
@@ -120,14 +157,17 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
   }
 
   Future<void> _loadSlots() async {
+    _reconcileQuantities();
     final request = ++_slotRequest;
     setState(() {
       _startAt = null;
       _slots = [];
-      _loadingSlots = _services.isNotEmpty;
-      _error = null;
+      _loadingSlots = _services.isNotEmpty && !_invalidLimits;
+      _error = _invalidLimits
+          ? 'These service unit limits do not fit a 24-hour visit. Please choose another service or contact the vendor.'
+          : null;
     });
-    if (_services.isEmpty) return;
+    if (_services.isEmpty || _invalidLimits) return;
     try {
       final response = _services.length > 1
           ? await widget.repository.api.post(
@@ -178,6 +218,16 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
   };
   Future<void> _submit() async {
     if (_busy || _startAt == null || _services.isEmpty) return;
+    if (_reconcileQuantities() || _invalidLimits) {
+      await _loadSlots();
+      if (mounted && !_invalidLimits) {
+        setState(
+          () => _error =
+              'Service limits changed. Please choose an available time again.',
+        );
+      }
+      return;
+    }
     if (!validateForm({
       _name: requiredField(_name.text, 'Name'),
       _email: emailField(_email.text),
@@ -190,6 +240,7 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
     });
     try {
       final payload = _payload();
+      final revision = _serviceRevision;
       final response = await widget.repository.api.post('$_base/booking-otp', {
         ...payload,
         'channel': 'email',
@@ -206,6 +257,7 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
           base: _base,
           challenge: response,
           payload: payload,
+          isPayloadCurrent: () => mounted && revision == _serviceRevision,
         ),
       ).future;
       if (!mounted) return;
@@ -304,14 +356,17 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                             enabled: !_busy,
                             quantities: _quantities,
                             onQuantityChanged: _changeQuantity,
+                            bounds: {
+                              for (final service in _services)
+                                service.slug:
+                                    _sharedBounds ?? quantityBounds(service),
+                            },
                             onToggle: (service) {
                               setState(() {
                                 if (!_selected.remove(service.slug)) {
                                   _selected.add(service.slug);
                                 }
-                                if (_mode == 'parallel') {
-                                  _synchronizeQuantities();
-                                }
+                                _reconcileQuantities();
                               });
                               _loadSlots();
                             },
@@ -457,7 +512,8 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                               _busy ||
                                   _loadingSlots ||
                                   _startAt == null ||
-                                  _services.isEmpty
+                                  _services.isEmpty ||
+                                  _invalidLimits
                               ? null
                               : _submit,
                           child: Text(

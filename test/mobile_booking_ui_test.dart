@@ -5,6 +5,7 @@ import 'package:getprio_mobile/auth/auth_models.dart';
 import 'package:getprio_mobile/bookings/booking_repository.dart';
 import 'package:getprio_mobile/bookings/bookings_page.dart';
 import 'package:getprio_mobile/bookings/booking_page.dart';
+import 'package:getprio_mobile/bookings/booking_otp_drawer.dart';
 import 'package:getprio_mobile/bookings/service_selection.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/main.dart';
@@ -57,7 +58,7 @@ void main() {
               slug: 'main',
             ),
             services: services,
-            selected: {'court-a', 'court-b', 'lesson'},
+            selected: {'court-a', 'court-b'},
           ),
         ),
       );
@@ -128,14 +129,9 @@ void main() {
       expect(api.last?['items'], [
         {'serviceSlug': 'court-a', 'bookingQuantity': 4},
         {'serviceSlug': 'court-b', 'bookingQuantity': 4},
-        {'serviceSlug': 'lesson', 'bookingQuantity': 1},
       ]);
       await press('service-toggle-court-c');
       expect(value('court-c'), '4');
-      expect((api.last?['items'] as List).last, {
-        'serviceSlug': 'lesson',
-        'bookingQuantity': 1,
-      });
       expect((api.last?['items'] as List)[2], {
         'serviceSlug': 'court-c',
         'bookingQuantity': 4,
@@ -158,12 +154,112 @@ void main() {
             .onPressed,
         isNull,
       );
+      await press('service-toggle-lesson');
+      await press('service-units-plus-court-a');
+      expect(value('court-a'), '2');
+      expect(value('court-b'), '1');
+      expect((api.last?['items'] as List).last, {
+        'serviceSlug': 'lesson',
+        'bookingQuantity': 1,
+      });
       await press('service-toggle-court-c');
       expect(find.byKey(const ValueKey('service-units-court-c')), findsNothing);
       expect(
         find.byKey(const ValueKey('service-units-divider-court-c')),
         findsNothing,
       );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'custom bounds, fixed units and refreshed limits control display and requests',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = _UnitsApi();
+      BookingService court(String slug, int min, int max) =>
+          BookingService.fromJson({
+            'slug': slug,
+            'name': slug,
+            'durationMinutes': 200,
+            'priceAmountCents': 10000,
+            'priceDisplay': '₱100',
+            'allowBookingQuantity': true,
+            'bookingQuantityMin': min,
+            'bookingQuantityMax': max,
+            'bookingQuantityLabel': 'Sessions',
+          });
+      Widget page(List<BookingService> services) => ShadcnApp(
+        home: BookingPage(
+          key: const Key('changing-services'),
+          repository: BookingRepository(api),
+          vendor: const VendorSummary(
+            slug: 'club',
+            name: 'Club',
+            queueAvailable: false,
+          ),
+          location: const VendorLocation(
+            id: 'main',
+            name: 'Main',
+            slug: 'main',
+          ),
+          services: services,
+          selected: {'a', 'b'},
+        ),
+      );
+      final unselected = court('catalog', 10, 12);
+      await tester.pumpWidget(
+        page([court('a', 2, 20), court('b', 3, 4), unselected]),
+      );
+      await tester.pumpAndSettle();
+      expect(api.last!['items'], [
+        {'serviceSlug': 'a', 'bookingQuantity': 3},
+        {'serviceSlug': 'b', 'bookingQuantity': 3},
+      ]);
+      expect(find.text('₱300.00 · 600 min'), findsNWidgets(2));
+      expect(find.text('₱100 · 200 min'), findsOneWidget);
+      expect(find.text('Sessions'), findsNWidgets(2));
+      await reveal(tester, find.byKey(const ValueKey('service-units-plus-a')));
+      await tester.tap(find.byKey(const ValueKey('service-units-plus-a')));
+      await tester.pumpAndSettle();
+      expect(api.last!['items'], [
+        {'serviceSlug': 'a', 'bookingQuantity': 4},
+        {'serviceSlug': 'b', 'bookingQuantity': 4},
+      ]);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byKey(const ValueKey('service-units-plus-a')),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.pumpWidget(
+        page([court('a', 2, 2), court('b', 3, 4), unselected]),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('service-units-fixed-a')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('service-units-plus-a')), findsNothing);
+      expect(find.text('Fixed at 2'), findsOneWidget);
+      expect(api.last!['items'], [
+        {'serviceSlug': 'a', 'bookingQuantity': 2},
+        {'serviceSlug': 'b', 'bookingQuantity': 4},
+      ]);
+      expect(find.text('₱200.00 · 400 min'), findsOneWidget);
+      final requests = api.requests;
+      await tester.pumpWidget(
+        page([court('a', 8, 20), court('b', 3, 4), unselected]),
+      );
+      await tester.pumpAndSettle();
+      expect(api.requests, requests);
+      expect(find.textContaining('do not fit a 24-hour visit'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -361,6 +457,51 @@ void main() {
       expect(find.text('Upcoming Vendor'), findsNothing);
     },
   );
+  testWidgets('OTP refuses a draft whose services change during verification', (
+    tester,
+  ) async {
+    final api = _StaleDraftApi();
+    var current = true;
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: Scaffold(
+          child: BookingOtpDrawer(
+            repository: BookingRepository(api),
+            base: '/api/public/vendors/club',
+            challenge: {
+              'otpId': 'otp',
+              'expiresAt': DateTime.now()
+                  .add(const Duration(minutes: 10))
+                  .toIso8601String(),
+            },
+            payload: const {'customerEmail': 'customer@example.com'},
+            isPayloadCurrent: () => current,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byType(GetPrioOtpInput),
+            matching: find.byType(EditableText),
+          )
+          .last,
+      '123456',
+    );
+    await tester.pump();
+    current = false;
+    api.verifyGate.complete();
+    await tester.pumpAndSettle();
+    expect(api.createCount, 0);
+    expect(find.textContaining('Services changed.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('booking-otp-submit')));
+    await tester.pumpAndSettle();
+    expect(api.createCount, 0);
+    await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+  });
+
   testWidgets(
     'booking page uses OTP-bound payload, blocks duplicates and completes',
     (tester) async {
@@ -368,7 +509,12 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final api = _BookingApi()..createGate = Completer<void>();
       CustomerBooking? created;
-      final service = BookingService.fromJson(_service);
+      final service = BookingService.fromJson({
+        ..._service,
+        'allowBookingQuantity': true,
+        'bookingQuantityMin': 2,
+        'bookingQuantityMax': 3,
+      });
       await tester.pumpWidget(
         ShadcnApp(
           home: DrawerOverlay(
@@ -436,8 +582,10 @@ void main() {
 
       expect(api.otpPayload?['locationSlug'], 'primary');
       expect(api.otpPayload?['bundleItems'], [
-        {'serviceSlug': 'consult', 'bookingQuantity': 1},
+        {'serviceSlug': 'consult', 'bookingQuantity': 2},
       ]);
+      expect(api.slotQuery?['bookingQuantity'], '2');
+      expect(api.otpPayload?['bookingQuantity'], 2);
       await reveal(tester, find.byType(InputOTP));
       await tester.enterText(
         find
@@ -464,6 +612,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(api.createCount, 1);
       expect(api.createPayload?['bookingVerificationToken'], 'verified');
+      expect(api.createPayload?['bookingQuantity'], 2);
+      expect(api.createPayload?['bundleItems'], api.otpPayload?['bundleItems']);
       expect(created?.id, 'new-booking');
       expect(tester.takeException(), isNull);
     },
@@ -485,6 +635,7 @@ class _BookingApi implements BookingApi {
   int createCount = 0;
   Completer<void>? createGate;
   Map<String, dynamic>? otpPayload, createPayload;
+  Map<String, String>? slotQuery;
   @override
   Future<Map<String, dynamic>> get(
     String path, {
@@ -497,6 +648,7 @@ class _BookingApi implements BookingApi {
       };
     }
     if (path.endsWith('/slots')) {
+      slotQuery = query;
       return {
         'slots': [
           {
@@ -616,6 +768,21 @@ class _UnitsApi extends _BookingApi {
       requests++;
       last = body;
       return {'slots': []};
+    }
+    return super.post(path, body);
+  }
+}
+
+class _StaleDraftApi extends _BookingApi {
+  final verifyGate = Completer<void>();
+  @override
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    if (path.endsWith('/verify')) {
+      await verifyGate.future;
+      return {'bookingVerificationToken': 'verified'};
     }
     return super.post(path, body);
   }
