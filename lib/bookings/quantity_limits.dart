@@ -34,7 +34,8 @@ BookingQuantityBounds? sharedQuantityBounds(
       )) {
     return null;
   }
-  var min = 1, max = 24;
+  final first = quantityBounds(selected.first);
+  var min = first.min, max = first.max;
   for (final service in selected) {
     final bounds = quantityBounds(service);
     if (!bounds.isValid) return null;

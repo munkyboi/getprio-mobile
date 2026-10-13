@@ -83,6 +83,27 @@ void main() {
     },
   );
 
+  test(
+    'shared bounds derive from actual ranges without a legacy default cap',
+    () {
+      final catalog = [
+        service('a', min: 1, max: 30, duration: 30),
+        service('b', min: 2, max: 35, duration: 30),
+      ];
+      final shared = sharedQuantityBounds(catalog, 'parallel')!;
+      expect([shared.min, shared.max], [2, 30]);
+      expect(
+        reconcileBookingQuantities(
+          catalog,
+          {'a', 'b'},
+          'parallel',
+          {'a': 29, 'b': 30},
+        ),
+        {'a': 30, 'b': 30},
+      );
+    },
+  );
+
   test('sequential, mixed duration, non-unit, one selected and disjoint ranges independent', () {
     final a = service('a', min: 2, max: 3), b = service('b', min: 5, max: 8);
     expect(sharedQuantityBounds([a, b], 'parallel'), isNull);
