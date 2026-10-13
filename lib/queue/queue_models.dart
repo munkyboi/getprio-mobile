@@ -93,7 +93,19 @@ class QueueTicket {
   bool get isServiceCompleted => serviceOutcome == 'completed';
 
   // Queue lifecycle and actual service timing remain separate API facts.
-  bool get isActive => status.isActive;
+  int get progressRank =>
+      !status.isActive || isServiceCompleted || isServiceInterrupted
+      ? 4
+      : serviceStartedAt != null
+      ? 3
+      : customerConfirmedAt != null
+      ? 2
+      : status == TicketStatus.called
+      ? 1
+      : 0;
+
+  bool get isActive =>
+      status.isActive && !isServiceCompleted && !isServiceInterrupted;
 
   /// Actual time in queue, stopping when staff explicitly began service.
   Duration? get actualWaitingTime {
@@ -119,7 +131,12 @@ class QueueTicket {
   }
 
   bool get needsArrival =>
-      status == TicketStatus.called && !isConfirmed && !isInService;
+      status == TicketStatus.called &&
+      !isConfirmed &&
+      !isInService &&
+      !isServiceCompleted &&
+      !isServiceInterrupted &&
+      serviceEndedAt == null;
 
   String? get serviceMessage => isInService
       ? 'Your service is in progress.'

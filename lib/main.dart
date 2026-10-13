@@ -1,3 +1,5 @@
+import 'uploads/compressed_image.dart';
+import 'notifications/notification_settings_card.dart';
 import 'queue/join_otp_drawer.dart';
 import 'navigation/pull_to_refresh.dart';
 import 'details/detail_auto_update.dart';
@@ -2026,6 +2028,7 @@ class _CustomerShellState extends State<CustomerShell>
   bool _inboxOpen = false;
   int _bookingPushGeneration = 0;
   bool _bookingPushOpen = false;
+  final _pendingBookingTaps = <(PushSignal, String)>[];
   Route<void>? _bookingPushRoute;
   NavigatorState? _bookingPushNavigator;
   final _openedBookingNotifications = <String>{};
@@ -2061,6 +2064,7 @@ class _CustomerShellState extends State<CustomerShell>
     _closeOwnedBookingPush();
     _inbox?.dispose();
     _bookingPushGeneration++;
+    _pendingBookingTaps.clear();
     super.dispose();
   }
 
@@ -2098,6 +2102,7 @@ class _CustomerShellState extends State<CustomerShell>
     if (oldWidget.user?.id != widget.user?.id ||
         oldWidget.notificationInboxApi != widget.notificationInboxApi) {
       _bookingPushGeneration++;
+      _pendingBookingTaps.clear();
       _closeOwnedBookingPush();
       _openedBookingNotifications.clear();
       _bookingPushOpen = false;
@@ -2221,8 +2226,15 @@ class _CustomerShellState extends State<CustomerShell>
   Future<void> _openBookingFromPush(PushSignal signal, String id) async {
     final repository = _bookingRepository;
     if (repository == null ||
-        _bookingPushOpen ||
         _openedBookingNotifications.contains(signal.notificationId)) {
+      return;
+    }
+    if (_bookingPushOpen) {
+      if (!_pendingBookingTaps.any(
+        (pending) => pending.$1.notificationId == signal.notificationId,
+      )) {
+        _pendingBookingTaps.add((signal, id));
+      }
       return;
     }
     final generation = _bookingPushGeneration;
@@ -2252,6 +2264,10 @@ class _CustomerShellState extends State<CustomerShell>
     } finally {
       if (mounted && generation == _bookingPushGeneration) {
         _bookingPushOpen = false;
+        if (_pendingBookingTaps.isNotEmpty) {
+          final pending = _pendingBookingTaps.removeAt(0);
+          unawaited(_openBookingFromPush(pending.$1, pending.$2));
+        }
       }
     }
   }
@@ -5609,6 +5625,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
   bool _isCancelling = false;
   Timer? _statusPoll;
   bool _pollingStatus = false;
+  bool _ticketRefreshPending = false;
   int _detailsRevision = 0;
   _TicketDetailsData? _lastDetails;
   VendorSummary? _vendorCache;
@@ -5647,11 +5664,21 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     unawaited(_refreshFromSignal());
   }
 
+  void _replayTicketRefresh() {
+    if (!mounted || !_ticketRefreshPending || _isCancelling) return;
+    _ticketRefreshPending = false;
+    _handleTicketRepositoryRefresh();
+  }
+
   Future<void> _refreshFromSignal() async {
-    if (_pollingStatus || _isCancelling) return;
+    if (_pollingStatus || _isCancelling) {
+      _ticketRefreshPending = true;
+      return;
+    }
     _pollingStatus = true;
     try {
-      final data = await _loadDetails(refreshTicket: true);
+      final data = await _loadDetails(refreshTicket: true)
+          .timeout(const Duration(seconds: 20));
       if (mounted) {
         setState(() {
           _details = SynchronousFuture(data);
@@ -5659,6 +5686,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
         });
       }
     } catch (_) {
+      _detailsRevision++;
       if (mounted) {
         setState(
           () => _syncError =
@@ -5667,6 +5695,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       }
     } finally {
       _pollingStatus = false;
+      _replayTicketRefresh();
     }
   }
 
@@ -5682,7 +5711,8 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     }
     _pollingStatus = true;
     try {
-      final pending = _loadDetails(refreshTicket: true);
+      final pending = _loadDetails(refreshTicket: true)
+          .timeout(const Duration(seconds: 20));
       final revision = _detailsRevision;
       final details = await pending;
       if (mounted && revision == _detailsRevision && !_isCancelling) {
@@ -5692,6 +5722,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
         });
       }
     } catch (_) {
+      _detailsRevision++;
       if (mounted) {
         setState(
           () => _syncError =
@@ -5700,6 +5731,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       }
     } finally {
       _pollingStatus = false;
+      _replayTicketRefresh();
     }
   }
 
@@ -5737,11 +5769,10 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       locationSlug: ticket.locationSlug,
       lookupCode: ticket.lookupCode,
     );
-    // Account terminal state is authoritative even if the public snapshot lags.
+    // Preserve account progress over lagging public snapshots, but accept later progress.
     final accountTerminal =
-        !ticket.isActive ||
-        ticket.isServiceCompleted ||
-        ticket.isServiceInterrupted;
+        ticket.progressRank >= 2 &&
+        ticket.progressRank >= (snapshot.focusTicket?.progressRank ?? 0);
     final snapshotTicket = accountTerminal
         ? ticket
         : snapshot.focusTicket?.copyWith(
@@ -5804,7 +5835,8 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
     if (_pollingStatus) return;
     _pollingStatus = true;
     try {
-      final data = await _loadDetails(refreshTicket: true);
+      final data = await _loadDetails(refreshTicket: true)
+          .timeout(const Duration(seconds: 20));
       if (mounted) {
         setState(() {
           _details = SynchronousFuture(data);
@@ -5814,6 +5846,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
         showFeedbackToast(context, message: 'Ticket status refreshed.');
       }
     } catch (_) {
+      _detailsRevision++;
       if (mounted) {
         setState(
           () => _syncError =
@@ -5822,6 +5855,7 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       }
     } finally {
       _pollingStatus = false;
+      _replayTicketRefresh();
     }
   }
 
@@ -6189,7 +6223,9 @@ class _TicketJoinSuccessNotice extends StatelessWidget {
       key: const Key('ticket-join-success-notice'),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: GetPrioTheme.colors(context).teal,
+        color: GetPrioTheme.colors(context).dark
+            ? const Color(0xFF115E59)
+            : GetPrioTheme.colors(context).teal,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -6639,9 +6675,11 @@ class AccountPage extends StatefulWidget {
     this.profileRepository,
     this.onUserUpdated,
     this.approvedVendorStore,
+    this.pickAvatar,
     this.sandbox = false,
   });
 
+  final Future<XFile?> Function()? pickAvatar;
   final VendorSocialRepository? socialRepository;
   final ValueChanged<VendorSummary>? onOpenVendor;
   final AuthUser? user;
@@ -6660,6 +6698,8 @@ class AccountPage extends StatefulWidget {
 class _AccountPageState extends State<AccountPage> {
   AuthUser? _user;
   bool _avatarBusy = false;
+  UploadImage? _pendingAvatar;
+  int _avatarGeneration = 0;
 
   @override
   void initState() {
@@ -6670,7 +6710,14 @@ class _AccountPageState extends State<AccountPage> {
   @override
   void didUpdateWidget(covariant AccountPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.user != oldWidget.user) _user = widget.user;
+    if (widget.user != oldWidget.user) {
+      if (widget.user?.id != oldWidget.user?.id) {
+        _avatarGeneration++;
+        _pendingAvatar = null;
+        _avatarBusy = false;
+      }
+      _user = widget.user;
+    }
   }
 
   @override
@@ -6719,6 +6766,32 @@ class _AccountPageState extends State<AccountPage> {
                   ],
                 ),
               ),
+              if (_pendingAvatar != null)
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    OutlineButton(
+                      key: const Key('profile-avatar-retry'),
+                      onPressed: _avatarBusy ? null : _pickAvatar,
+                      child: const Text('Retry photo upload'),
+                    ),
+                    GhostButton(
+                      onPressed: _avatarBusy
+                          ? null
+                          : () {
+                              setState(() => _pendingAvatar = null);
+                              _pickAvatar();
+                            },
+                      child: const Text('Change photo'),
+                    ),
+                    GhostButton(
+                      onPressed: _avatarBusy
+                          ? null
+                          : () => setState(() => _pendingAvatar = null),
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                ),
               const SizedBox(height: 28),
               const Text('Account').h3(),
               const SizedBox(height: 8),
@@ -6754,6 +6827,25 @@ class _AccountPageState extends State<AccountPage> {
                   title: 'Approved Vendors',
                   subtitle: 'Manage vendors whose invitations are accepted automatically.',
                   onPressed: () => _openApprovedVendorsSheet(overlayContext),
+                ),
+                const Divider(),
+              ],
+              if (widget.sandbox) ...[
+                _AccountAction(
+                  key: const Key('profile-notifications'),
+                  icon: LucideIcons.bell,
+                  title: 'Notifications',
+                  subtitle: 'Manage queue alerts.',
+                  onPressed: () => openAppDrawer<void>(
+                    context: overlayContext,
+                    position: OverlayPosition.bottom,
+                    builder: (_) => SocialSheet(
+                      title: 'Notifications',
+                      child: NotificationSettingsCard(
+                        repository: widget.settingsRepository,
+                      ),
+                    ),
+                  ),
                 ),
                 const Divider(),
               ],
@@ -6919,31 +7011,49 @@ class _AccountPageState extends State<AccountPage> {
     final repository = widget.profileRepository;
     if (repository == null || _avatarBusy) return;
     setState(() => _avatarBusy = true);
+    final userId = widget.user?.id;
+    final generation = _avatarGeneration;
+    bool isCurrent() =>
+        mounted && _avatarGeneration == generation && widget.user?.id == userId;
     try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 95,
-        maxWidth: 2400,
-        maxHeight: 2400,
-      );
-      if (picked == null || !mounted) return;
-      if (await picked.length() > 8 * 1024 * 1024) {
-        throw ArgumentError('Choose an image up to 8 MB.');
+      if (_pendingAvatar == null) {
+        final picked =
+            await (widget.pickAvatar?.call() ??
+                ImagePicker().pickImage(
+                  source: ImageSource.gallery,
+                  imageQuality: 95,
+                  maxWidth: 2400,
+                  maxHeight: 2400,
+                ));
+        if (picked == null || !isCurrent()) return;
+        if (await picked.length() > 8 * 1024 * 1024) {
+          throw ArgumentError('Choose an image up to 8 MB.');
+        }
+        final bytes = await picked.readAsBytes();
+        if (!isCurrent()) return;
+        _pendingAvatar = UploadImage(
+          bytes,
+          picked.name,
+          picked.mimeType ?? _profileImageContentType(picked.name),
+        );
       }
-      final bytes = await picked.readAsBytes();
-      if (!mounted) return;
+      final selected = _pendingAvatar!;
+      if (!isCurrent()) return;
       final updated = await repository.uploadAvatar(
-        fileName: picked.name,
-        contentType: picked.mimeType ?? _profileImageContentType(picked.name),
-        bytes: bytes,
+        fileName: selected.fileName,
+        contentType: selected.contentType,
+        bytes: selected.bytes,
+        isCurrent: isCurrent,
       );
+      if (!isCurrent()) return;
+      _pendingAvatar = null;
       if (mounted) {
         setState(() => _user = updated);
         widget.onUserUpdated?.call(updated);
         showFeedbackToast(context, message: 'Profile photo updated.');
       }
     } catch (error) {
-      if (mounted) {
+      if (mounted && isCurrent()) {
         showFeedbackToast(
           context,
           message: error is ArgumentError
@@ -6953,7 +7063,7 @@ class _AccountPageState extends State<AccountPage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _avatarBusy = false);
+      if (isCurrent()) setState(() => _avatarBusy = false);
     }
   }
 

@@ -241,10 +241,9 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
     try {
       final payload = _payload();
       final revision = _serviceRevision;
-      final response = await widget.repository.api.post('$_base/booking-otp', {
-        ...payload,
-        'channel': 'email',
-      });
+      final response = await widget.repository.api
+          .post('$_base/booking-otp', {...payload, 'channel': 'email'})
+          .timeout(const Duration(seconds: 20));
       if (!mounted) return;
       final booking = await openAppDrawer<CustomerBooking>(
         context: _drawerHostContext!,

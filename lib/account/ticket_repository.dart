@@ -68,11 +68,12 @@ class QueueTicketRepository {
   final refreshVersion = ValueNotifier<int>(0);
   final servedTicket = ValueNotifier<QueueTicket?>(null);
   final Set<String> _observedActive = {};
+  int _sessionGeneration = 0;
 
   void _observeTickets(List<QueueTicket> tickets) {
     for (final ticket in tickets) {
       if (ticket.isActive) _observedActive.add(ticket.lookupCode);
-      if (ticket.status == TicketStatus.served &&
+      if ((ticket.status == TicketStatus.served || ticket.isServiceCompleted) &&
           _observedActive.remove(ticket.lookupCode)) {
         servedTicket.value = ticket;
       }
@@ -85,6 +86,7 @@ class QueueTicketRepository {
 
   void requestRefresh() => refreshVersion.value++;
   void clearSession() {
+    _sessionGeneration++;
     ticketStats.value = null;
     _latestTickets = const [];
     overviewTickets.value = const [];
@@ -93,13 +95,15 @@ class QueueTicketRepository {
   }
 
   Future<List<QueueTicket>> loadOverview() async {
+    final generation = _sessionGeneration;
     late final Map<String, dynamic> response;
     try {
       response = await api.loadOverview();
     } catch (_) {
-      ticketStats.value = null;
+      if (generation == _sessionGeneration) ticketStats.value = null;
       rethrow;
     }
+    if (generation != _sessionGeneration) throw StateError('Account changed');
     ticketStats.value = CustomerTicketStats.fromJson(response['ticketStats']);
     final tickets = _ticketsFrom(response);
     _observeTickets(tickets);
@@ -109,9 +113,11 @@ class QueueTicketRepository {
   }
 
   Future<List<QueueTicket>> loadHistory({int page = 1, int limit = 20}) async {
+    final generation = _sessionGeneration;
     final tickets = _ticketsFrom(
       await api.loadHistory(page: page, limit: limit),
     );
+    if (generation != _sessionGeneration) throw StateError('Account changed');
     _observeTickets(tickets);
     return tickets;
   }
@@ -155,8 +161,11 @@ class QueueTicketRepository {
     int historyPage = 1,
     int historyLimit = 20,
   }) async {
+    final generation = _sessionGeneration;
     final overview = await loadOverview();
+    if (generation != _sessionGeneration) throw StateError('Account changed');
     final history = await loadHistory(page: historyPage, limit: historyLimit);
+    if (generation != _sessionGeneration) throw StateError('Account changed');
     final ticketsByKey = <String, QueueTicket>{};
 
     for (final ticket in [...overview, ...history]) {
@@ -291,6 +300,10 @@ class RestAccountQueueApi
             final focus = snapshot['focusTicket'];
             if (focus is! Map<String, dynamic> ||
                 focus['lookupCode'] != ticket.lookupCode) {
+              return raw;
+            }
+            if (ticket.progressRank >= 2 &&
+                ticket.progressRank >= QueueTicket.fromJson(focus).progressRank) {
               return raw;
             }
             // Retain account metadata while using the queue's live lifecycle data.

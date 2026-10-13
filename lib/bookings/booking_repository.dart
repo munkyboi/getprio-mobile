@@ -113,7 +113,7 @@ class CustomerBooking {
         data['expiredAt'] != null) {
       return 'Check-in unavailable';
     }
-    if (data['checkedInAt'] != null) return 'Checked in';
+    if (isCheckedIn) return 'Checked in';
     if (data['customerSelfCheckInEnabled'] != true) {
       return 'Waiting for vendor check-in';
     }
@@ -177,7 +177,7 @@ class CustomerBooking {
     if (status == 'pending') {
       return 'Request submitted. Awaiting vendor confirmation.';
     }
-    if (data['checkedInAt'] != null || linkedTicket != null) {
+    if (isCheckedIn) {
       return 'You’re checked in. Follow your queue ticket for service updates.';
     }
     if (status == 'confirmed' || status == 'rescheduled') {
@@ -237,6 +237,40 @@ class RestBookingApi
 class BookingRepository {
   BookingRepository(this.api);
   final BookingApi api;
+  final Set<String> _proofUncertain = {}, _proofPending = {};
+
+  bool proofNeedsReconciliation(String id) => _proofUncertain.contains(id);
+  Future<CustomerBooking> reconcileProof(String id) async {
+    final current = await detail(id).timeout(const Duration(seconds: 20));
+    if (_proofPending.contains(id) && current.canSubmitProof) {
+      throw StateError(
+        'Submission is still processing. Refresh status again before retrying.',
+      );
+    }
+    _proofUncertain.remove(id);
+    return current;
+  }
+
+  Future<T> _proofRequest<T>(String id, Future<T> operation) async {
+    _proofPending.add(id);
+    unawaited(
+      operation.then<void>(
+        (_) {
+          _proofPending.remove(id);
+        },
+        onError: (Object _, StackTrace _) {
+          _proofPending.remove(id);
+        },
+      ),
+    );
+    try {
+      return await operation.timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      _proofUncertain.add(id);
+      rethrow;
+    }
+  }
+
   Future<List<BookingService>> services(String vendor, String location) async {
     final response = await api.get(
       '/api/public/vendors/${Uri.encodeComponent(vendor)}/locations/${Uri.encodeComponent(location)}/services',
@@ -317,6 +351,9 @@ class BookingRepository {
     required String contentType,
     required String fileName,
   }) async {
+    if (proofNeedsReconciliation(booking.id)) {
+      throw StateError('Refresh booking status before retrying payment proof.');
+    }
     if (!booking.canSubmitProof) {
       throw StateError('This booking cannot accept payment proof.');
     }
@@ -340,27 +377,24 @@ class BookingRepository {
     );
     final path =
         '/api/account/bookings/${Uri.encodeComponent(booking.id)}/payment-proof';
-    final upload = await (uploader as BookingProofApi)
-        .uploadProof(
-          '$path/uploads/direct',
-          bytes: prepared.bytes,
-          contentType: prepared.contentType,
-          fileName: prepared.fileName,
-        )
-        .timeout(const Duration(seconds: 30));
+    final upload = await _proofRequest(
+      booking.id,
+      (uploader as BookingProofApi).uploadProof(
+        '$path/uploads/direct',
+        bytes: prepared.bytes,
+        contentType: prepared.contentType,
+        fileName: prepared.fileName,
+      ),
+    );
     final proof = upload['proof'] as Map<String, dynamic>;
-    final response = await api
-        .post(path, {
-          'paymentReference': reference.trim(),
-          for (final key in [
-            'objectKey',
-            'fileName',
-            'contentType',
-            'sizeBytes',
-          ])
-            key: proof[key],
-        })
-        .timeout(const Duration(seconds: 30));
+    final response = await _proofRequest(
+      booking.id,
+      api.post(path, {
+        'paymentReference': reference.trim(),
+        for (final key in ['objectKey', 'fileName', 'contentType', 'sizeBytes'])
+          key: proof[key],
+      }),
+    );
     return CustomerBooking(response['booking'] as Map<String, dynamic>);
   }
 

@@ -68,6 +68,9 @@ class _BookingPaymentState extends State<BookingPayment> {
   List<int>? _bytes;
   String? _contentType, _uploadFileName, _error;
   bool _busy = false;
+  CustomerBooking? _reconciledBooking;
+  bool get _needsReconciliation =>
+      widget.repository.proofNeedsReconciliation(widget.booking.id);
   @override
   void dispose() {
     _reference.dispose();
@@ -129,14 +132,19 @@ class _BookingPaymentState extends State<BookingPayment> {
   }
 
   Future<void> _submit() async {
-    if (_busy || _bytes == null || _reference.text.trim().isEmpty) return;
+    if (_busy ||
+        _needsReconciliation ||
+        _bytes == null ||
+        _reference.text.trim().isEmpty) {
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
       final updated = await widget.repository.submitPaymentProof(
-        widget.booking,
+        _reconciledBooking ?? widget.booking,
         reference: _reference.text,
         bytes: _bytes!,
         contentType: _contentType!,
@@ -153,6 +161,27 @@ class _BookingPaymentState extends State<BookingPayment> {
               : e is ApiException
               ? e.message
               : 'Could not submit payment proof. Your receipt is kept here; retry or refresh the booking status.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _reconcile() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final current = await widget.repository.reconcileProof(widget.booking.id);
+      if (!mounted) return;
+      _reconciledBooking = current;
+      if (!current.canSubmitProof) widget.onSubmitted(current);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Submission may still be processing. Refresh status again before retrying.',
         );
       }
     } finally {
@@ -245,6 +274,12 @@ class _BookingPaymentState extends State<BookingPayment> {
         const Text(
           'JPEG, PNG or WebP, up to 8 MB. Larger images are compressed to the current upload limit before upload. Your receipt stays private to you and authorized vendor staff.',
         ),
+        if (_needsReconciliation)
+          OutlineButton(
+            key: const Key('booking-payment-reconcile'),
+            onPressed: _busy ? null : _reconcile,
+            child: const Text('Refresh booking status'),
+          ),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -295,7 +330,11 @@ class _BookingPaymentState extends State<BookingPayment> {
   }
 
   Widget _submitAction() => PrimaryButton(
-    onPressed: _busy || _bytes == null || _reference.text.trim().isEmpty
+    onPressed:
+        _busy ||
+            _needsReconciliation ||
+            _bytes == null ||
+            _reference.text.trim().isEmpty
         ? null
         : _submit,
     child: Text(_busy ? 'Please wait...' : 'Submit payment proof'),

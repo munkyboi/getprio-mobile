@@ -348,7 +348,9 @@ class _BookingDetailPageState extends State<BookingDetailPage>
     final request = ++_request;
     setState(() => _fetching = true);
     try {
-      final item = await widget.repository.detail(widget.booking.id);
+      final item = await widget.repository
+          .detail(widget.booking.id)
+          .timeout(const Duration(seconds: 20));
       if (!mounted || request != _request) return;
       setState(() {
         _item = item;

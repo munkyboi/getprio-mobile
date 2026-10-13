@@ -1,3 +1,5 @@
+import '../network/drawer_request.dart';
+
 import 'dart:async';
 
 import 'package:shadcn_flutter/shadcn_flutter.dart';
@@ -29,7 +31,7 @@ class _JoinOtpDrawerState extends State<JoinOtpDrawer>
   final _code = TextEditingController();
   late JoinEmailVerification _challenge;
   Timer? _timer;
-  bool _busy = false, _finished = false;
+  bool _busy = false, _finished = false, _uncertain = false;
   @override
   bool get formBusy => _busy;
   bool get _expired => _challenge.expiresAt?.isBefore(DateTime.now()) ?? false;
@@ -52,8 +54,39 @@ class _JoinOtpDrawerState extends State<JoinOtpDrawer>
     super.dispose();
   }
 
+  Future<T> _bounded<T>(Future<T> request, void Function(T) onLate) =>
+      awaitDrawerRequest(
+        request,
+        onTimeout: () {
+          if (mounted) setState(() => _uncertain = true);
+        },
+        onLateSuccess: (value) {
+          if (mounted && !_finished) {
+            setState(() => _uncertain = false);
+            onLate(value);
+          }
+        },
+        onLateFailure: (error) {
+          if (mounted && !_finished) {
+            setState(
+              () => _uncertain =
+                  !(error is ApiException &&
+                      error.statusCode >= 400 &&
+                      error.statusCode < 500),
+            );
+          }
+        },
+      );
+
+  void _finish(JoinResult result) {
+    if (!mounted || _finished) return;
+    _finished = true;
+    closeDrawer(context, result);
+  }
+
   Future<void> _verify() async {
     if (_busy ||
+        _uncertain ||
         _finished ||
         _expired ||
         !validateForm({_code: codeField(_code.text)})) {
@@ -61,19 +94,18 @@ class _JoinOtpDrawerState extends State<JoinOtpDrawer>
     }
     setState(() => _busy = true);
     try {
-      final result = await widget.repository.verifyEmail(
-        _challenge,
-        _code.text,
+      final result = await _bounded(
+        widget.repository.verifyEmail(_challenge, _code.text),
+        _finish,
       );
-      if (mounted) {
-        _finished = true;
-        closeDrawer(context, result);
-      }
+      _finish(result);
     } catch (error) {
       if (mounted) {
         showFormError(
           error,
-          widget.messageFor(error),
+          error is TimeoutException
+              ? 'This request is still processing. Cancel to leave; check Tickets before trying again.'
+              : widget.messageFor(error),
           field: error is ApiException && error.statusCode == 400
               ? _code
               : null,
@@ -85,10 +117,23 @@ class _JoinOtpDrawerState extends State<JoinOtpDrawer>
   }
 
   Future<void> _resend() async {
-    if (_busy || _seconds > 0 || _challenge.resendsRemaining <= 0) return;
+    if (_busy ||
+        _uncertain ||
+        _seconds > 0 ||
+        _challenge.resendsRemaining <= 0) {
+      return;
+    }
     setState(() => _busy = true);
     try {
-      final challenge = await widget.repository.resendEmail(_challenge);
+      final challenge = await _bounded(
+        widget.repository.resendEmail(_challenge),
+        (late) {
+          setState(() {
+            _challenge = late;
+            _code.clear();
+          });
+        },
+      );
       if (mounted) {
         setState(() {
           _challenge = challenge;
@@ -100,7 +145,9 @@ class _JoinOtpDrawerState extends State<JoinOtpDrawer>
       if (mounted) {
         showFormError(
           error,
-          widget.messageFor(error),
+          error is TimeoutException
+              ? 'This request is still processing. Cancel to leave; check Tickets before trying again.'
+              : widget.messageFor(error),
           field: error is ApiException && error.statusCode == 400
               ? _code
               : null,
@@ -134,14 +181,14 @@ class _JoinOtpDrawerState extends State<JoinOtpDrawer>
             GetPrioOtpInput(
               inputKey: const Key('queue-join-otp'),
               controller: _code,
-              enabled: !_busy && !_expired,
+              enabled: !_busy && !_uncertain && !_expired,
               validation: formValidation,
               onCompleted: (_) => unawaited(_verify()),
               trailing: OtpResendButton(
                 key: const Key('queue-join-otp-resend'),
                 secondsRemaining: _seconds,
                 limitReached: _challenge.resendsRemaining <= 0,
-                onPressed: _busy ? null : _resend,
+                onPressed: _busy || _uncertain ? null : _resend,
               ),
             ),
             if (_expired)
@@ -163,7 +210,7 @@ class _JoinOtpDrawerState extends State<JoinOtpDrawer>
                 Expanded(
                   child: PrimaryButton(
                     key: const Key('queue-join-otp-verify'),
-                    onPressed: _busy || _expired ? null : _verify,
+                    onPressed: _busy || _uncertain || _expired ? null : _verify,
                     alignment: Alignment.center,
                     child: Row(
                       children: [

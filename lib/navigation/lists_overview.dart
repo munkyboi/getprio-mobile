@@ -28,7 +28,7 @@ class _ListsOverviewState extends State<ListsOverview>
     with WidgetsBindingObserver {
   List<QueueTicket> _tickets = [];
   List<CustomerBooking> _bookings = [];
-  bool _ticketsRefreshPending = false;
+  bool _ticketsRefreshPending = false, _bookingsRefreshPending = false;
   bool _loadingTickets = false, _loadingBookings = false;
   String? _ticketError, _bookingError;
   @override
@@ -105,7 +105,11 @@ class _ListsOverviewState extends State<ListsOverview>
 
   Future<void> _loadBookings() async {
     final repository = widget.bookingRepository;
-    if (repository == null || _loadingBookings) return;
+    if (repository == null) return;
+    if (_loadingBookings) {
+      _bookingsRefreshPending = true;
+      return;
+    }
     setState(() {
       _loadingBookings = true;
       _bookingError = null;
@@ -118,7 +122,13 @@ class _ListsOverviewState extends State<ListsOverview>
         setState(() => _bookingError = 'Could not update upcoming bookings.');
       }
     } finally {
-      if (mounted) setState(() => _loadingBookings = false);
+      if (mounted) {
+        setState(() => _loadingBookings = false);
+        if (_bookingsRefreshPending) {
+          _bookingsRefreshPending = false;
+          if (widget.active) _loadBookings();
+        }
+      }
     }
   }
 

@@ -6,6 +6,34 @@ import 'package:image/image.dart' as img;
 import 'package:getprio_mobile/uploads/compressed_image.dart';
 
 void main() {
+  test('small corrupt, truncated, animated and mismatched images fail before upload', () async {
+    final image = img.Image(width: 20, height: 20);
+    final png = img.encodePng(image);
+    for (final bytes in [
+      Uint8List.fromList([1, 2, 3]),
+      Uint8List.sublistView(png, 0, png.length ~/ 2),
+      img.encodeJpg(image),
+    ]) {
+      await expectLater(
+        prepareUploadImage(
+          bytes,
+          fileName: 'photo.png',
+          contentType: 'image/png',
+        ),
+        throwsArgumentError,
+      );
+    }
+    image.addFrame(img.Image(width: 20, height: 20));
+    await expectLater(
+      prepareUploadImage(
+        img.encodePng(image),
+        fileName: 'animated.png',
+        contentType: 'image/png',
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('small images retain exact bytes, format and filename', () async {
     final bytes = img.encodePng(img.Image(width: 20, height: 20));
     final result = await prepareUploadImage(

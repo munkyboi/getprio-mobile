@@ -83,6 +83,7 @@ class AccountProfileRepository {
     required String fileName,
     required String contentType,
     required List<int> bytes,
+    bool Function()? isCurrent,
   }) async {
     final prepared = await prepareImageForCurrentPolicy(
       api,
@@ -90,6 +91,7 @@ class AccountProfileRepository {
       fileName: fileName,
       contentType: contentType,
     );
+    if (isCurrent?.call() == false) throw StateError('Account changed');
     return _parseUser(
       await api.uploadAvatar(
         fileName: prepared.fileName,

@@ -1122,9 +1122,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('Notifications'), findsNothing);
     expect(find.text('Security'), findsOneWidget);
-    expect(find.text('Queue alerts unavailable'), findsOneWidget);
+    expect(find.text('Appearance'), findsOneWidget);
     expect(find.byType(Card), findsOneWidget);
   });
 }

@@ -128,6 +128,10 @@ void main() {
       );
     }
     expect(
+      ImageUploadPolicy.fromJson({'maxImageBytes': 200000}).maxImageBytes,
+      200000,
+    );
+    expect(
       ImageUploadPolicy.fromJson({'maxImageBytes': 1024}).maxImageBytes,
       1024,
     );

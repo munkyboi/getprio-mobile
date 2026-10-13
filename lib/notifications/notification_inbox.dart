@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 enum InboxNotificationKind { queue, booking, general }
@@ -56,7 +58,7 @@ class NotificationInboxController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final snapshot = await api.load();
+      final snapshot = await api.load().timeout(const Duration(seconds: 20));
       if (_disposed || revision != _revision) return;
       items = snapshot.items;
       nextCursor = snapshot.nextCursor;
@@ -85,7 +87,9 @@ class NotificationInboxController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final snapshot = await api.load(cursor: cursor);
+      final snapshot = await api
+          .load(cursor: cursor)
+          .timeout(const Duration(seconds: 20));
       if (_disposed || revision != _revision) return;
       final unique = {for (final item in items) item.id: item};
       for (final item in snapshot.items) {
@@ -119,10 +123,15 @@ class NotificationInboxController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      await operation();
+      await operation().timeout(const Duration(seconds: 20));
       if (!_disposed) await refresh();
     } catch (_) {
-      if (!_disposed) error = 'Could not update your inbox. Please try again.';
+      if (!_disposed) {
+        await refresh();
+        if (!_disposed) {
+          error = 'Could not update your inbox. Please try again.';
+        }
+      }
     } finally {
       if (!_disposed) {
         mutating = false;

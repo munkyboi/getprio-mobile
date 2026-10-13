@@ -1,5 +1,8 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:getprio_mobile/push/foreground_notification_presenter.dart';
 import 'package:getprio_mobile/push/push_coordinator.dart';
 
@@ -22,6 +25,49 @@ class Presenter implements ForegroundNotificationPresenter {
 }
 
 void main() {
+  testWidgets(
+    'native launch payload is delivered once across initialize calls',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      const channel = MethodChannel(
+        'dexterous.com/flutter/local_notifications',
+      );
+      var queries = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'initialize') return true;
+        if (call.method == 'getNotificationAppLaunchDetails') {
+          queries++;
+          return {
+            'notificationLaunchedApp': true,
+            'notificationResponse': {
+              'notificationId': 1,
+              'notificationResponseType': 0,
+              'payload': 'payload',
+            },
+          };
+        }
+        return null;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+      AndroidFlutterLocalNotificationsPlugin.registerWith();
+      final presenter = NativeForegroundNotificationPresenter();
+      expect(await presenter.initialize(), isTrue);
+      expect(await presenter.initialPayload, 'payload');
+      await presenter.initialize();
+      expect(await presenter.initialPayload, isNull);
+      expect(queries, 1);
+      debugDefaultTargetPlatformOverride = null;
+    },
+  );
+
   test(
     'foreground reminder banner preserves booking link for explicit local tap',
     () async {

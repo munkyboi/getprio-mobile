@@ -1,3 +1,4 @@
+import 'package:getprio_mobile/app_theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:getprio_mobile/details/ticket_barcode_viewer.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
@@ -584,6 +585,9 @@ void main() {
       );
       await tester.pumpWidget(
         ShadcnApp(
+          theme: completionSource == 'account'
+              ? GetPrioTheme.dark()
+              : GetPrioTheme.light(),
           home: TicketDetailsPage(
             ticket: QueueTicket.fromJson(waiting),
             showJoinConfirmation: true,
@@ -601,6 +605,14 @@ void main() {
         find.byKey(const Key('ticket-join-success-notice')),
         findsOneWidget,
       );
+      if (completionSource == 'account') {
+        final notice = tester.widget<Container>(
+          find.byKey(const Key('ticket-join-success-notice')),
+        );
+        final color = (notice.decoration! as BoxDecoration).color!;
+        final contrast = (1.0 + .05) / (color.computeLuminance() + .05);
+        expect(contrast, greaterThanOrEqualTo(4.5));
+      }
       if (completionSource == 'snapshot') {
         queueApi.snapshot = {'focusTicket': completed};
       } else {

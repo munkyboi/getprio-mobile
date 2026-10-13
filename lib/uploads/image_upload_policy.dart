@@ -12,10 +12,7 @@ class ImageUploadPolicy {
   final int maxImageBytes;
   factory ImageUploadPolicy.fromJson(Map<String, dynamic> json) {
     final limit = json['maxImageBytes'];
-    if (limit is! int ||
-        limit < 1024 ||
-        limit > 8 * 1024 * 1024 ||
-        limit % 1024 != 0) {
+    if (limit is! int || limit < 1024 || limit > 8 * 1024 * 1024) {
       throw ArgumentError(
         'Could not read the current image upload limit. Please retry.',
       );

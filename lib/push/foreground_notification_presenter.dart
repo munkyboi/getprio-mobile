@@ -35,14 +35,15 @@ class NativeForegroundNotificationPresenter
   final ValueChanged<String?>? onTap;
   @override
   Future<String?> get initialPayload async {
-    if (!_initialized) return null;
+    if (!_initialized || _launchPayloadConsumed) return null;
+    _launchPayloadConsumed = true;
     final details = await _plugin.getNotificationAppLaunchDetails();
     return details?.didNotificationLaunchApp == true
         ? details?.notificationResponse?.payload
         : null;
   }
 
-  bool _initialized = false;
+  bool _initialized = false, _launchPayloadConsumed = false;
 
   @override
   Future<bool> initialize() async {

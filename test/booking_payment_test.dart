@@ -1,7 +1,8 @@
 import 'package:getprio_mobile/uploads/image_upload_policy.dart';
 
 import 'dart:async';
-import 'dart:typed_data';
+
+import 'package:image/image.dart' as img;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
@@ -33,6 +34,8 @@ class PaymentApi implements BookingApi, BookingProofApi, ImageUploadPolicyApi {
   };
 
   int uploads = 0, submissions = 0;
+  final uploadStarted = Completer<void>();
+  final postStarted = Completer<void>();
   Map<String, dynamic>? submitted;
   Completer<void>? gate, uploadGate;
   bool fail = false;
@@ -50,6 +53,7 @@ class PaymentApi implements BookingApi, BookingProofApi, ImageUploadPolicyApi {
     required String fileName,
   }) async {
     uploads++;
+    if (!uploadStarted.isCompleted) uploadStarted.complete();
     if (uploadGate != null) await uploadGate!.future;
     expect(
       path,
@@ -72,6 +76,7 @@ class PaymentApi implements BookingApi, BookingProofApi, ImageUploadPolicyApi {
     Map<String, dynamic> body,
   ) async {
     submissions++;
+    if (!postStarted.isCompleted) postStarted.complete();
     submitted = body;
     if (gate != null) await gate!.future;
     if (fail) throw StateError('temporary failure');
@@ -84,6 +89,16 @@ class PaymentApi implements BookingApi, BookingProofApi, ImageUploadPolicyApi {
       },
     };
   }
+}
+
+Future<void> pumpImageWork(WidgetTester tester, bool Function() ready) async {
+  for (var i = 0; i < 500 && !ready(); i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
+  }
+  expect(ready(), isTrue, reason: 'Image worker should reach upload');
 }
 
 void main() {
@@ -161,16 +176,34 @@ void main() {
     'timed out receipt upload never advances to evidence submission',
     (tester) async {
       final api = PaymentApi()..uploadGate = Completer<void>();
-      final pending = BookingRepository(api).submitPaymentProof(
+      final repository = BookingRepository(api);
+      final pending = repository.submitPaymentProof(
         CustomerBooking(paymentBooking()),
         reference: 'ref',
-        bytes: [1],
+        bytes: img.encodePng(img.Image(width: 20, height: 20)),
         contentType: 'image/png',
         fileName: 'receipt.png',
       );
       final assertion = expectLater(pending, throwsA(isA<TimeoutException>()));
+      await pumpImageWork(tester, () => api.uploads == 1);
       await tester.pump(const Duration(seconds: 31));
       await assertion;
+      await expectLater(
+        repository.reconcileProof('booking-1'),
+        throwsStateError,
+      );
+      expect(repository.proofNeedsReconciliation('booking-1'), isTrue);
+      await expectLater(
+        repository.submitPaymentProof(
+          CustomerBooking(paymentBooking()),
+          reference: 'ref',
+          bytes: img.encodePng(img.Image(width: 20, height: 20)),
+          contentType: 'image/png',
+          fileName: 'receipt.png',
+        ),
+        throwsStateError,
+      );
+      expect(api.uploads, 1);
       api.uploadGate!.complete();
       await tester.pump();
       expect(api.submissions, 0);
@@ -289,7 +322,7 @@ void main() {
       repository.submitPaymentProof(
         CustomerBooking(paymentBooking()),
         reference: 'ref',
-        bytes: [1],
+        bytes: img.encodePng(img.Image(width: 20, height: 20)),
         contentType: 'application/pdf',
         fileName: 'receipt.pdf',
       ),
@@ -299,7 +332,7 @@ void main() {
       repository.submitPaymentProof(
         CustomerBooking(paymentBooking()),
         reference: ' ',
-        bytes: [1],
+        bytes: img.encodePng(img.Image(width: 20, height: 20)),
         contentType: 'image/png',
         fileName: 'receipt.png',
       ),
@@ -356,7 +389,7 @@ void main() {
                 fixedFooter: true,
                 onCancel: () => canceled = true,
                 pickReceipt: () async => XFile.fromData(
-                  Uint8List.fromList([1, 2, 3]),
+                  img.encodePng(img.Image(width: 20, height: 20)),
                   name: 'receipt.png',
                   path: 'receipt.png',
                   mimeType: 'image/png',
@@ -381,6 +414,7 @@ void main() {
       await Scrollable.ensureVisible(tester.element(submit));
       await tester.pumpAndSettle();
       await tester.tap(submit);
+      await pumpImageWork(tester, () => api.submissions == 1);
       await tester.pump();
       expect(api.submissions, 1);
       expect(
@@ -424,9 +458,25 @@ void main() {
       expect(find.text('receipt.png'), findsOneWidget);
       expect(find.textContaining('receipt is kept here'), findsOneWidget);
       api.fail = false;
+      expect(
+        tester
+            .widget<PrimaryButton>(
+              find.widgetWithText(PrimaryButton, 'Submit payment proof'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('booking-payment-reconcile')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('booking-payment-reconcile')));
+      await tester.pumpAndSettle();
       await tester.tap(
         find.widgetWithText(PrimaryButton, 'Submit payment proof'),
       );
+      await tester.pumpAndSettle();
+      await pumpImageWork(tester, () => api.submissions == 2);
       await tester.pumpAndSettle();
       expect(api.submissions, 2);
       expect(api.submitted?['paymentReference'], 'BANK-123');

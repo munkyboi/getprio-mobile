@@ -23,17 +23,37 @@ Future<UploadImage> prepareUploadImage(
     throw ArgumentError('Choose an image up to 8 MB.');
   }
   if (maxBytes < 1) throw ArgumentError('Invalid image size limit.');
+  final compressed = await compute(_compress, (bytes, maxBytes, contentType));
   if (bytes.length <= maxBytes) {
     return UploadImage(bytes, fileName, contentType);
   }
-  final compressed = await compute(_compress, (bytes, maxBytes));
   final stem = fileName.replaceFirst(RegExp(r'\.[^.]+$'), '');
   return UploadImage(compressed, '$stem.jpg', 'image/jpeg');
 }
 
-Uint8List _compress((Uint8List, int) input) {
-  final (bytes, maxBytes) = input;
+Uint8List _compress((Uint8List, int, String) input) {
+  try {
+    return _validateAndCompress(input);
+  } on ArgumentError {
+    rethrow;
+  } catch (_) {
+    throw ArgumentError('Could not read this image. Choose another image.');
+  }
+}
+
+Uint8List _validateAndCompress((Uint8List, int, String) input) {
+  final (bytes, maxBytes, contentType) = input;
   final decoder = img.findDecoderForData(bytes);
+  final format = switch (contentType) {
+    'image/jpeg' => img.ImageFormat.jpg,
+    'image/png' => img.ImageFormat.png,
+    _ => img.ImageFormat.webp,
+  };
+  if (decoder?.format != format) {
+    throw ArgumentError(
+      'Image format does not match the selected file. Choose another image.',
+    );
+  }
   final info = decoder?.startDecode(bytes);
   if (info == null ||
       info.width < 1 ||
@@ -46,6 +66,7 @@ Uint8List _compress((Uint8List, int) input) {
   if (decoded == null) {
     throw ArgumentError('Could not read this image. Choose another image.');
   }
+  if (bytes.length <= maxBytes) return bytes;
   final oriented = img.bakeOrientation(decoded);
   final longest = math.max(oriented.width, oriented.height);
   for (final edge in [2000, 1600, 1280, 1024]) {

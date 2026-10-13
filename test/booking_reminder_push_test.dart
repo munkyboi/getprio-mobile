@@ -26,6 +26,65 @@ PushSignal reminder({
 );
 
 void main() {
+  testWidgets(
+    'distinct reminder tap waits for active booking route then opens once',
+    (tester) async {
+      final auth = AuthRepository(
+        api: FakeAuthApiForTransport(),
+        tokenStore: MemoryTokenStore(),
+      );
+      await auth.signIn(identifier: 'customer', password: 'password');
+      final requests = <String>[];
+      final client = AuthenticatedApiClient(
+        baseUrl: 'https://api.example.test',
+        authRepository: auth,
+        client: MockClient((request) async {
+          if (request.url.path.contains('/account/bookings/')) {
+            final id = request.url.path.split('/').last;
+            requests.add(id);
+            return http.Response(
+              jsonEncode({
+                'booking': {
+                  'id': id,
+                  'reference': 'BKG-$id',
+                  'status': 'confirmed',
+                  'paymentStatus': 'paid',
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{"vendors":[]}', 200);
+        }),
+      );
+      final signal = ValueNotifier<PushSignal?>(null);
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: CustomerShell(
+            directoryRepository: DirectoryRepository(RestDirectoryApi(client)),
+            pushSignal: signal,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      signal.value = reminder();
+      await tester.pumpAndSettle();
+      signal.value = const PushSignal(
+        eventType: 'customer_booking_reminder_1h',
+        notificationId: 'second',
+        route: '/account/bookings/booking-2',
+        opened: true,
+      );
+      await tester.pumpAndSettle();
+      expect(requests.toSet(), {'booking-1'});
+      Navigator.of(tester.element(find.byType(BookingDetailPage))).pop();
+      await tester.pumpAndSettle();
+      expect(requests.toSet(), {'booking-1','booking-2'});
+      expect(find.text('BKG-booking-2'), findsOneWidget);
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    },
+  );
+
   test(
     'booking links require explicit tap and safe relative account route',
     () {

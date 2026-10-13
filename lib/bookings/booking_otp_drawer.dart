@@ -1,3 +1,4 @@
+import '../network/drawer_request.dart';
 import '../keyboard_avoidance.dart';
 
 import 'dart:async';
@@ -33,7 +34,7 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
   final _code = TextEditingController();
   late Map<String, dynamic> _challenge;
   String? _token, _error;
-  bool _busy = false, _finished = false;
+  bool _busy = false, _finished = false, _uncertain = false;
   Timer? _timer;
   @override
   bool get formBusy => _busy;
@@ -63,8 +64,42 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
     super.dispose();
   }
 
+  Future<T> _bounded<T>(Future<T> request, void Function(T) onLate) =>
+      awaitDrawerRequest(
+        request,
+        onTimeout: () {
+          if (mounted) setState(() => _uncertain = true);
+        },
+        onLateSuccess: (value) {
+          if (mounted && !_finished) {
+            setState(() => _uncertain = false);
+            onLate(value);
+          }
+        },
+        onLateFailure: (error) {
+          if (mounted && !_finished) {
+            setState(
+              () => _uncertain =
+                  !(error is ApiException &&
+                      error.statusCode >= 400 &&
+                      error.statusCode < 500),
+            );
+          }
+        },
+      );
+
+  void _finish(Map<String, dynamic> response) {
+    if (!mounted || _finished) return;
+    final booking = CustomerBooking(
+      response['booking'] as Map<String, dynamic>,
+    );
+    _finished = true;
+    closeDrawer(context, booking);
+  }
+
   Future<void> _submit() async {
     if (_busy ||
+        _uncertain ||
         _finished ||
         _expired ||
         !validateForm({_code: codeField(_code.text)})) {
@@ -82,9 +117,15 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
     });
     try {
       if (_token == null) {
-        final verified = await widget.repository.api.post(
-          '${widget.base}/booking-otp/verify',
-          {'otpId': _challenge['otpId'], 'code': _code.text},
+        final verified = await _bounded(
+          widget.repository.api.post('${widget.base}/booking-otp/verify', {
+            'otpId': _challenge['otpId'],
+            'code': _code.text,
+          }),
+          (late) {
+            _token = late['bookingVerificationToken'] as String?;
+            setState(() => _error = 'Email verified. Continue when ready.');
+          },
         );
         _token = verified['bookingVerificationToken'] as String?;
         if (_token == null) throw StateError('Missing verification token');
@@ -96,21 +137,20 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
         );
         return;
       }
-      final response = await widget.repository.api.post(
-        '/api/account/bookings',
-        {...widget.payload, 'bookingVerificationToken': _token},
+      final response = await _bounded(
+        widget.repository.api.post('/api/account/bookings', {
+          ...widget.payload,
+          'bookingVerificationToken': _token,
+        }),
+        _finish,
       );
-      if (mounted) {
-        _finished = true;
-        closeDrawer(
-          context,
-          CustomerBooking(response['booking'] as Map<String, dynamic>),
-        );
-      }
+      _finish(response);
     } catch (e) {
       if (mounted) {
         setState(
-          () => _error = e is ApiException
+          () => _error = e is TimeoutException
+              ? 'This request is still processing. You can return to Booking details; check Bookings before trying again.'
+              : e is ApiException
               ? e.message
               : 'Could not submit your booking. Please try again.',
         );
@@ -121,15 +161,24 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
   }
 
   Future<void> _resend() async {
-    if (_busy || _resendSeconds > 0) return;
+    if (_busy || _uncertain || _resendSeconds > 0) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final response = await widget.repository.api.post(
-        '${widget.base}/booking-otp/${Uri.encodeComponent('${_challenge['otpId']}')}/resend',
-        {},
+      final response = await _bounded(
+        widget.repository.api.post(
+          '${widget.base}/booking-otp/${Uri.encodeComponent('${_challenge['otpId']}')}/resend',
+          {},
+        ),
+        (late) {
+          setState(() {
+            _challenge = late;
+            _token = null;
+            _code.clear();
+          });
+        },
       );
       if (mounted) {
         setState(() {
@@ -141,7 +190,9 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
     } catch (e) {
       if (mounted) {
         setState(
-          () => _error = e is ApiException
+          () => _error = e is TimeoutException
+              ? 'Resend is still processing. You can return to Booking details.'
+              : e is ApiException
               ? e.message
               : 'Could not resend the code.',
         );
@@ -175,12 +226,12 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
               GetPrioOtpInput(
                 controller: _code,
                 onCompleted: (_) => unawaited(_submit()),
-                enabled: !_busy && !_expired,
+                enabled: !_busy && !_uncertain && !_expired,
                 validation: formValidation,
                 trailing: OtpResendButton(
                   key: const Key('booking-otp-resend'),
                   secondsRemaining: _resendSeconds,
-                  onPressed: _busy ? null : _resend,
+                  onPressed: _busy || _uncertain ? null : _resend,
                 ),
               ),
               if (_expired)
@@ -218,7 +269,9 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
                     child: PrimaryButton(
                       key: const Key('booking-otp-submit'),
                       alignment: Alignment.center,
-                      onPressed: _busy || _expired ? null : _submit,
+                      onPressed: _busy || _uncertain || _expired
+                          ? null
+                          : _submit,
                       child: Row(
                         children: [
                           Expanded(
