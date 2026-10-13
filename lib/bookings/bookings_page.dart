@@ -526,7 +526,9 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                   enabled: item.isUpcoming,
                   onRefresh: _manualRefresh,
                   child: ListView(
-                    key: const Key('booking-details-page'),
+                    // Retain the offset when terminal status removes the
+                    // refresh wrapper and recreates the scrollable.
+                    key: const PageStorageKey('booking-details-page'),
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 36),
                     children: [
