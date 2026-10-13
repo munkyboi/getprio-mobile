@@ -348,9 +348,11 @@ class _BookingDetailPageState extends State<BookingDetailPage>
     final request = ++_request;
     setState(() => _fetching = true);
     try {
-      final item = await widget.repository
-          .detail(widget.booking.id)
-          .timeout(const Duration(seconds: 20));
+      final item =
+          await (widget.repository.arrivalNeedsReconciliation(widget.booking.id)
+                  ? widget.repository.reconcileArrival(widget.booking.id)
+                  : widget.repository.detail(widget.booking.id))
+              .timeout(const Duration(seconds: 20));
       if (!mounted || request != _request) return;
       setState(() {
         _item = item;
@@ -403,7 +405,11 @@ class _BookingDetailPageState extends State<BookingDetailPage>
   }
 
   Future<void> _checkIn() async {
-    if (_arriving || !_item.canCheckIn(_now)) return;
+    if (_arriving ||
+        widget.repository.arrivalNeedsReconciliation(_item.id) ||
+        !_item.canCheckIn(_now)) {
+      return;
+    }
     _request++;
     setState(() {
       _arriving = true;
@@ -419,6 +425,8 @@ class _BookingDetailPageState extends State<BookingDetailPage>
         setState(
           () => _arrivalError = error is ApiException
               ? error.message
+              : error is TimeoutException
+              ? 'Check-in is still processing. Refresh status before trying again.'
               : 'Could not record arrival. Please try again.',
         );
       }
@@ -665,12 +673,24 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                             if (item.linkedTicket == null) ...[
                               PrimaryButton(
                                 key: const Key('booking-check-in'),
-                                onPressed: _arriving || !item.canCheckIn(_now)
+                                onPressed:
+                                    _arriving ||
+                                        widget.repository
+                                            .arrivalNeedsReconciliation(
+                                              item.id,
+                                            ) ||
+                                        !item.canCheckIn(_now)
                                     ? null
                                     : _checkIn,
                                 child: Text(
                                   _arriving
                                       ? 'Recording arrival...'
+                                      : widget.repository
+                                                .arrivalNeedsReconciliation(
+                                                  item.id,
+                                                ) &&
+                                            item.canCheckIn(_now)
+                                      ? 'Check-in pending. Refresh status.'
                                       : item.checkInLabel(_now),
                                   textAlign: TextAlign.center,
                                 ),

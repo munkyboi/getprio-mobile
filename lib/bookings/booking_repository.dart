@@ -333,15 +333,48 @@ class BookingRepository {
     return url as String;
   }
 
+  final Set<String> _arrivalPending = {}, _arrivalUncertain = {};
+  bool arrivalNeedsReconciliation(String id) =>
+      _arrivalPending.contains(id) || _arrivalUncertain.contains(id);
+
+  Future<CustomerBooking> reconcileArrival(String id) async {
+    final current = await detail(id).timeout(const Duration(seconds: 20));
+    if (!_arrivalPending.contains(id) || current.isCheckedIn) {
+      _arrivalUncertain.remove(id);
+    }
+    return current;
+  }
+
   Future<CustomerBooking> checkIn(CustomerBooking booking, DateTime now) async {
+    if (arrivalNeedsReconciliation(booking.id)) {
+      throw StateError('Refresh booking status before retrying check-in.');
+    }
     if (!booking.canCheckIn(now)) {
       throw StateError('Customer check-in is unavailable for this booking.');
     }
-    final response = await api.post(
-      '/api/account/bookings/${Uri.encodeComponent(booking.id)}/arrival',
+    final id = booking.id;
+    _arrivalPending.add(id);
+    final operation = api.post(
+      '/api/account/bookings/${Uri.encodeComponent(id)}/arrival',
       {},
     );
-    return CustomerBooking(response['booking'] as Map<String, dynamic>);
+    unawaited(
+      operation.then<void>(
+        (_) {
+          _arrivalPending.remove(id);
+        },
+        onError: (Object _, StackTrace _) {
+          _arrivalPending.remove(id);
+        },
+      ),
+    );
+    try {
+      final response = await operation.timeout(const Duration(seconds: 20));
+      return CustomerBooking(response['booking'] as Map<String, dynamic>);
+    } on TimeoutException {
+      _arrivalUncertain.add(id);
+      rethrow;
+    }
   }
 
   Future<CustomerBooking> submitPaymentProof(
