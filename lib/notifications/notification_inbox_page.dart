@@ -41,25 +41,23 @@ class _NotificationInboxPageState extends State<NotificationInboxPage> {
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
               const ScrollAwareHeaderSpace(),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: GhostButton(
-                      key: const Key('notification-read-all'),
-                      onPressed: busy || inbox.unreadCount.value == 0
-                          ? null
-                          : inbox.markAllRead,
-                      child: const Text('Mark all read'),
-                    ),
+                  OutlineButton(
+                    key: const Key('notification-read-all'),
+                    onPressed: busy || inbox.unreadCount.value == 0
+                        ? null
+                        : inbox.markAllRead,
+                    leading: const Icon(LucideIcons.checkCheck, size: 16),
+                    child: const Text('Mark all as read'),
                   ),
-                  Expanded(
-                    child: GhostButton(
-                      key: const Key('notification-clear'),
-                      onPressed: busy || inbox.items.isEmpty
-                          ? null
-                          : inbox.clear,
-                      child: const Text('Empty inbox'),
-                    ),
+                  OutlineButton(
+                    key: const Key('notification-clear'),
+                    onPressed: busy || inbox.items.isEmpty ? null : inbox.clear,
+                    leading: const Icon(LucideIcons.trash2, size: 16),
+                    child: const Text('Empty inbox'),
                   ),
                 ],
               ),
