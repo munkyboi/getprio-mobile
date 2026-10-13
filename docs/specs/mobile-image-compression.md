@@ -1,0 +1,7 @@
+# Selected image uploads
+
+Profile photos and booking manual-payment receipts are prepared on the device before upload. The shared helper uses the Dart `image` library in a worker isolate. Files already at or below 200 × 1024 bytes are passed through unchanged. Larger supported JPEG/PNG/WebP files are decoded, oriented, flattened on white and encoded to JPEG, trying long edges 2000/1600/1280/1024 and quality88/80/72. It preserves aspect ratio and never enlarges the image. Converted filename and content type match the encoded bytes; original gallery files are untouched.
+
+Picker sizing limits initial native selections to2400px per side. The helper bounds source files to8MB, still images to24MP, and rejects files that cannot fit at its resolution/quality floor. The server's configurable upload policy remains authoritative;200KB is the current default target, not a fetched policy. Changes to the server limit may require adjusting the client target. Unsupported, unreadable or excessively complex files receive local guidance rather than an over-limit upload.
+
+Manual-payment receipts remain private and pending vendor review. Compression does not change eligibility, payment verification or submission state. Local tests cover byte limits, naming/MIME, orientation, transparency, invalid inputs and existing payment/profile flows. Physical-device upload and receipt readability acceptance remains separate from build/install evidence.

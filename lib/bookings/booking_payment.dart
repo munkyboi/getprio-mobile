@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../uploads/compressed_image.dart';
+
 import '../navigation/app_drawer.dart';
 import '../keyboard_avoidance.dart';
 
@@ -66,7 +68,7 @@ class _BookingPaymentState extends State<BookingPayment> {
   final _reference = TextEditingController();
   XFile? _receipt;
   List<int>? _bytes;
-  String? _contentType, _error;
+  String? _contentType, _uploadFileName, _error;
   bool _busy = false;
   @override
   void dispose() {
@@ -83,7 +85,12 @@ class _BookingPaymentState extends State<BookingPayment> {
     try {
       final file =
           await (widget.pickReceipt?.call() ??
-              ImagePicker().pickImage(source: ImageSource.gallery));
+              ImagePicker().pickImage(
+                source: ImageSource.gallery,
+                maxWidth: 2400,
+                maxHeight: 2400,
+                imageQuality: 95,
+              ));
       if (file == null || !mounted) return;
       final extension = file.name.split('.').last.toLowerCase();
       final type =
@@ -101,12 +108,17 @@ class _BookingPaymentState extends State<BookingPayment> {
       if (size <= 0 || size > 8 * 1024 * 1024) {
         throw ArgumentError('Choose a receipt up to 8 MB.');
       }
-      final bytes = await file.readAsBytes();
+      final prepared = await prepareUploadImage(
+        await file.readAsBytes(),
+        fileName: file.name,
+        contentType: type,
+      );
       if (mounted) {
         setState(() {
           _receipt = file;
-          _bytes = bytes;
-          _contentType = type;
+          _bytes = prepared.bytes;
+          _contentType = prepared.contentType;
+          _uploadFileName = prepared.fileName;
         });
       }
     } catch (e) {
@@ -134,7 +146,7 @@ class _BookingPaymentState extends State<BookingPayment> {
         reference: _reference.text,
         bytes: _bytes!,
         contentType: _contentType!,
-        fileName: _receipt!.name,
+        fileName: _uploadFileName!,
       );
       if (mounted) widget.onSubmitted(updated);
     } catch (e) {
@@ -235,7 +247,7 @@ class _BookingPaymentState extends State<BookingPayment> {
           ),
         const SizedBox(height: 8),
         const Text(
-          'JPEG, PNG or WebP, up to 8 MB. Your receipt stays private to you and authorized vendor staff.',
+          'JPEG, PNG or WebP, up to 8 MB. Larger images are compressed to 200 KB before upload. Your receipt stays private to you and authorized vendor staff.',
         ),
         if (_error != null)
           Padding(

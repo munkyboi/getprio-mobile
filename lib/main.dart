@@ -1,3 +1,4 @@
+import 'uploads/compressed_image.dart';
 import 'queue/join_otp_drawer.dart';
 import 'navigation/pull_to_refresh.dart';
 import 'details/detail_auto_update.dart';
@@ -6918,39 +6919,28 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _pickAvatar() async {
     final repository = widget.profileRepository;
     if (repository == null || _avatarBusy) return;
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1600,
-    );
-    if (picked == null || !mounted) return;
-    final bytes = await picked.readAsBytes();
-    if (!mounted) return;
-    final contentType =
-        picked.mimeType ?? _profileImageContentType(picked.name);
-    if (!['image/jpeg', 'image/png', 'image/webp'].contains(contentType)) {
-      showFeedbackToast(
-        context,
-        message: 'Choose a JPEG, PNG, or WebP image.',
-        isError: true,
-      );
-      return;
-    }
-    if (bytes.length > 5 * 1024 * 1024) {
-      showFeedbackToast(
-        context,
-        message: 'Choose an image no larger than 5 MB.',
-        isError: true,
-      );
-      return;
-    }
-
     setState(() => _avatarBusy = true);
     try {
-      final updated = await repository.uploadAvatar(
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 95,
+        maxWidth: 2400,
+        maxHeight: 2400,
+      );
+      if (picked == null || !mounted) return;
+      if (await picked.length() > 8 * 1024 * 1024) {
+        throw ArgumentError('Choose an image up to 8 MB.');
+      }
+      final prepared = await prepareUploadImage(
+        await picked.readAsBytes(),
         fileName: picked.name,
-        contentType: contentType,
-        bytes: bytes,
+        contentType: picked.mimeType ?? _profileImageContentType(picked.name),
+      );
+      if (!mounted) return;
+      final updated = await repository.uploadAvatar(
+        fileName: prepared.fileName,
+        contentType: prepared.contentType,
+        bytes: prepared.bytes,
       );
       if (mounted) {
         setState(() => _user = updated);
@@ -6961,10 +6951,9 @@ class _AccountPageState extends State<AccountPage> {
       if (mounted) {
         showFeedbackToast(
           context,
-          message: _profileErrorMessage(
-            error,
-            'Could not upload profile photo.',
-          ),
+          message: error is ArgumentError
+              ? '${error.message}'
+              : _profileErrorMessage(error, 'Could not upload profile photo.'),
           isError: true,
         );
       }
