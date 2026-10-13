@@ -2135,7 +2135,10 @@ class _CustomerShellState extends State<CustomerShell>
     _inboxOpen = true;
     final navigator = Navigator.of(context);
     final route = SwipeBackPageRoute<void>(
-      builder: (_) => NotificationInboxPage(controller: inbox),
+      builder: (_) => NotificationInboxPage(
+        controller: inbox,
+        settingsRepository: widget.settingsRepository,
+      ),
     );
     _inboxRoute = route;
     _inboxNavigator = navigator;
@@ -6657,22 +6660,17 @@ class AccountPage extends StatefulWidget {
 class _AccountPageState extends State<AccountPage> {
   AuthUser? _user;
   bool _avatarBusy = false;
-  Future<NotificationSettings?>? _notificationSettingsFuture;
 
   @override
   void initState() {
     super.initState();
     _user = widget.user;
-    _primeNotificationSettings();
   }
 
   @override
   void didUpdateWidget(covariant AccountPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.user != oldWidget.user) _user = widget.user;
-    if (widget.settingsRepository != oldWidget.settingsRepository) {
-      _primeNotificationSettings();
-    }
   }
 
   @override
@@ -6759,16 +6757,6 @@ class _AccountPageState extends State<AccountPage> {
                 ),
                 const Divider(),
               ],
-              _AccountAction(
-                key: const Key('profile-notifications'),
-                icon: LucideIcons.bell,
-                title: 'Notifications',
-                subtitle: widget.settingsRepository == null
-                    ? 'Queue alerts unavailable'
-                    : 'Manage queue alerts and app preferences.',
-                onPressed: () => _openNotificationsSheet(overlayContext),
-              ),
-              const Divider(),
               _AccountAction(
                 key: const Key('profile-appearance'),
                 icon: LucideIcons.palette,
@@ -6871,29 +6859,6 @@ class _AccountPageState extends State<AccountPage> {
     showFeedbackToast(this.context, message: 'Profile updated.');
   }
 
-  Future<void> _openNotificationsSheet(BuildContext context) async {
-    final settings = await (_notificationSettingsFuture ??=
-        _loadNotificationSettings());
-    if (!mounted || !context.mounted) return;
-    final completer = openAppDrawer<void>(
-      context: context,
-      position: OverlayPosition.bottom,
-      expands: false,
-      draggable: true,
-      useSafeArea: false,
-      borderRadius: _ProfileSheetContent.borderRadius,
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.78,
-      ),
-      builder: (sheetContext) => _NotificationsSheet(
-        repository: widget.settingsRepository,
-        initialSettings: settings,
-      ),
-    );
-    await completer.future;
-    if (mounted) _primeNotificationSettings();
-  }
-
   Future<void> _openApprovedVendorsSheet(BuildContext context) async {
     final store = widget.approvedVendorStore;
     final accountId = _user?.id ?? widget.user?.id;
@@ -6910,22 +6875,6 @@ class _AccountPageState extends State<AccountPage> {
         child: _ApprovedVendorsList(accountId: accountId, store: store),
       ),
     ).future;
-  }
-
-  void _primeNotificationSettings() {
-    _notificationSettingsFuture = widget.settingsRepository == null
-        ? null
-        : _loadNotificationSettings();
-  }
-
-  Future<NotificationSettings?> _loadNotificationSettings() async {
-    final repository = widget.settingsRepository;
-    if (repository == null) return null;
-    try {
-      return await repository.loadNotificationSettings();
-    } catch (_) {
-      return null;
-    }
   }
 
   Future<void> _openSecuritySheet(
@@ -7844,120 +7793,6 @@ class _PersonalInfoSheetState extends State<_PersonalInfoSheet>
 
   void _finish(AuthUser user) {
     closeOverlay(context, user);
-  }
-}
-
-class _NotificationsSheet extends StatefulWidget {
-  const _NotificationsSheet({required this.repository, this.initialSettings});
-
-  final AccountSettingsRepository? repository;
-  final NotificationSettings? initialSettings;
-
-  @override
-  State<_NotificationsSheet> createState() => _NotificationsSheetState();
-}
-
-class _NotificationsSheetState extends State<_NotificationsSheet> {
-  bool? _queueAlerts;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _queueAlerts = widget.initialSettings?.queueAlerts;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = widget.initialSettings;
-    return _ProfileSheetContent(
-      key: const Key('profile-notifications-sheet'),
-      title: 'Notifications',
-      child: settings == null
-          ? const SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(LucideIcons.bellOff, size: 40),
-                  SizedBox(height: 12),
-                  Text('Queue alerts unavailable'),
-                  SizedBox(height: 4),
-                  Text('Notification settings could not be loaded.'),
-                ],
-              ),
-            )
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Choose which updates you want to receive.'),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      const Icon(LucideIcons.bell),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Queue alerts'),
-                            SizedBox(height: 4),
-                            Text(
-                              'Receive notifications about your queue tickets.',
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        key: const Key('profile-queue-alerts'),
-                        value: _queueAlerts ?? settings.queueAlerts,
-                        onChanged: _saving ? null : _updateQueueAlerts,
-                      ),
-                    ],
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 16),
-                    DestructiveBadge(child: Text(_error!)),
-                  ],
-                ],
-              ),
-            ),
-    );
-  }
-
-  Future<void> _updateQueueAlerts(bool enabled) async {
-    if (_saving) return;
-    final repository = widget.repository;
-    if (repository == null) return;
-    final previous = _queueAlerts;
-    setState(() {
-      _saving = true;
-      _queueAlerts = enabled;
-      _error = null;
-    });
-    try {
-      final settings = await repository.updateNotificationSettings(
-        queueAlerts: enabled,
-      );
-      if (mounted) {
-        setState(() => _queueAlerts = settings.queueAlerts);
-        showFeedbackToast(context, message: 'Notification preferences saved.');
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _queueAlerts = previous;
-          _error = _profileErrorMessage(
-            error,
-            'Could not save notification settings.',
-          );
-        });
-        showFeedbackToast(context, message: _error!, isError: true);
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
   }
 }
 

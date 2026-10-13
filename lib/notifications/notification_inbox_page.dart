@@ -3,9 +3,16 @@ import 'package:shadcn_flutter/shadcn_flutter.dart';
 import '../navigation/scroll_aware_app_bar.dart';
 import '../app_theme.dart';
 import 'notification_inbox.dart';
+import '../account/account_settings_repository.dart';
+import 'notification_settings_card.dart';
 
 class NotificationInboxPage extends StatefulWidget {
-  const NotificationInboxPage({super.key, required this.controller});
+  const NotificationInboxPage({
+    super.key,
+    required this.controller,
+    this.settingsRepository,
+  });
+  final AccountSettingsRepository? settingsRepository;
   final NotificationInboxController controller;
   @override
   State<NotificationInboxPage> createState() => _NotificationInboxPageState();
@@ -41,6 +48,8 @@ class _NotificationInboxPageState extends State<NotificationInboxPage> {
             physics: const AlwaysScrollableScrollPhysics(),
             children: [
               const ScrollAwareHeaderSpace(),
+              NotificationSettingsCard(repository: widget.settingsRepository),
+              const SizedBox(height: 16),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -62,6 +71,29 @@ class _NotificationInboxPageState extends State<NotificationInboxPage> {
                 ],
               ),
               const SizedBox(height: 16),
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text.rich(
+                  key: const Key('notification-inbox-summary'),
+                  TextSpan(
+                    children: [
+                      const TextSpan(text: 'Unread: '),
+                      TextSpan(
+                        text: inbox.cutoff == null
+                            ? '—'
+                            : '${inbox.unreadCount.value}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const TextSpan(text: '  |  Total: '),
+                      TextSpan(
+                        text: inbox.totalCount?.toString() ?? '—',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               if (inbox.error != null) ...[
                 Text(
                   inbox.error!,

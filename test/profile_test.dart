@@ -236,36 +236,21 @@ void main() {
     );
   });
 
-  testWidgets('opens notifications as a bottom sheet and saves the toggle', (
+  testWidgets('notification controls have moved out of Profile settings', (
     tester,
   ) async {
-    final settingsApi = FakeAccountSettingsApi();
     await tester.pumpWidget(
       ShadcnApp(
         home: AccountPage(
           user: FakeAccountProfileApi().user,
-          settingsRepository: AccountSettingsRepository(settingsApi),
+          settingsRepository: AccountSettingsRepository(
+            FakeAccountSettingsApi(),
+          ),
         ),
       ),
     );
-
-    await tester.tap(find.byKey(const Key('profile-notifications')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('profile-notifications-sheet')),
-      findsOneWidget,
-    );
-    final sheet = find.byKey(const Key('profile-notifications-sheet'));
-    expect(tester.widget(sheet), isNot(isA<Container>()));
-    expect(
-      tester.getSize(sheet).height,
-      lessThan(MediaQuery.sizeOf(tester.element(sheet)).height * 0.7),
-    );
-    await tester.tap(find.byKey(const Key('profile-queue-alerts')));
-    await tester.pumpAndSettle();
-    expect(settingsApi.lastQueueAlerts, isFalse);
-    expect(find.text('Notification preferences saved.'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 4));
+    expect(find.byKey(const Key('profile-notifications')), findsNothing);
+    expect(find.byKey(const Key('profile-appearance')), findsOneWidget);
   });
 
   testWidgets('shows approved vendors and confirms before removing one', (
@@ -326,35 +311,6 @@ void main() {
       findsOneWidget,
     );
     await tester.pump(const Duration(seconds: 4));
-  });
-
-  testWidgets('waits for notification content before starting its animation', (
-    tester,
-  ) async {
-    final settingsApi = FakeAccountSettingsApi();
-    final load = Completer<Map<String, dynamic>>();
-    settingsApi.loadCompleter = load;
-    await tester.pumpWidget(
-      ShadcnApp(
-        home: AccountPage(
-          user: FakeAccountProfileApi().user,
-          settingsRepository: AccountSettingsRepository(settingsApi),
-        ),
-      ),
-    );
-
-    await tester.tap(find.byKey(const Key('profile-notifications')));
-    await tester.pump();
-    expect(find.byKey(const Key('profile-notifications-sheet')), findsNothing);
-
-    load.complete({
-      'notificationSettings': {'queueAlerts': true},
-    });
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('profile-notifications-sheet')),
-      findsOneWidget,
-    );
   });
 
   testWidgets(

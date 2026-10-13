@@ -39,6 +39,7 @@ void main() {
                     },
                   ],
                   'unreadCount': 1,
+                  'totalCount': 24,
                   'snapshotCutoff': 'opaque=+cutoff',
                   'nextCursor': 'opaque=+cursor',
                 }),
@@ -54,6 +55,7 @@ void main() {
       expect(requests.single.url.queryParameters['cursor'], 'opaque=+cursor');
       expect(snapshot.items.single.unread, isTrue);
       expect(snapshot.cutoff, 'opaque=+cutoff');
+      expect(snapshot.totalCount, 24);
       await api.markRead(snapshot.items.single.id);
       await api.markAllRead(snapshot.cutoff);
       await api.clear(snapshot.cutoff);

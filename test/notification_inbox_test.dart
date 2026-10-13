@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:getprio_mobile/account/account_settings_repository.dart';
+import 'package:getprio_mobile/notifications/notification_settings_card.dart';
+
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'package:getprio_mobile/notifications/notification_inbox_page.dart';
 
@@ -19,6 +22,7 @@ class InboxApi implements NotificationInboxApi {
     if (fail) throw StateError('offline');
     return NotificationInboxSnapshot(
       items: List.of(rows),
+      totalCount: rows.length,
       unreadCount: rows.where((item) => item.unread).length,
       cutoff: 'snapshot-1',
     );
@@ -62,6 +66,74 @@ InboxNotification notification(String id) => InboxNotification(
 );
 
 void main() {
+  testWidgets(
+    'settings card precedes actions and summary; saving failures retain preference',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = SettingsApi();
+      final inbox = NotificationInboxController(PagedInboxApi());
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: NotificationInboxPage(
+            controller: inbox,
+            settingsRepository: AccountSettingsRepository(api),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final card = find.byKey(const Key('notification-settings-card'));
+      final actions = find.byKey(const Key('notification-read-all'));
+      final summary = find.byKey(const Key('notification-inbox-summary'));
+      expect(
+        tester.getTopLeft(card).dy,
+        lessThan(tester.getTopLeft(actions).dy),
+      );
+      expect(
+        tester.getTopLeft(actions).dy,
+        lessThan(tester.getTopLeft(summary).dy),
+      );
+      expect(
+        tester.widget<Text>(summary).textSpan!.toPlainText(),
+        'Unread: 2  |  Total: 24',
+      );
+      await tester.tap(find.byKey(const Key('notification-queue-alerts')));
+      await tester.pumpAndSettle();
+      expect(api.enabled, isFalse);
+      api.fail = true;
+      await tester.tap(find.byKey(const Key('notification-queue-alerts')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<Switch>(find.byKey(const Key('notification-queue-alerts')))
+            .value,
+        isFalse,
+      );
+      expect(find.textContaining('Could not save'), findsOneWidget);
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+      inbox.dispose();
+    },
+  );
+
+  testWidgets('settings load can be retried without hiding inbox actions', (
+    tester,
+  ) async {
+    final api = SettingsApi()..fail = true;
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: NotificationSettingsCard(
+          repository: AccountSettingsRepository(api),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Retry settings'), findsOneWidget);
+    api.fail = false;
+    await tester.tap(find.text('Retry settings'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('notification-queue-alerts')), findsOneWidget);
+  });
+
   test(
     'pagination deduplicates rows and preserves original bulk cutoff',
     () async {
@@ -72,6 +144,7 @@ void main() {
       expect(inbox.items.map((item) => item.id), ['a', 'b']);
       expect(inbox.cutoff, 'original');
       expect(api.cursor, 'opaque-next');
+      expect(inbox.totalCount, 24);
       inbox.dispose();
     },
   );
@@ -108,6 +181,7 @@ void main() {
     final inbox = NotificationInboxController(api);
     await inbox.refresh();
     expect(inbox.unreadCount.value, 2);
+    expect(inbox.totalCount, 2);
     await inbox.markRead(inbox.items.first);
     expect(api.readId, 'a');
     expect(inbox.unreadCount.value, 1);
@@ -117,6 +191,7 @@ void main() {
     await inbox.clear();
     expect(api.clearCutoff, 'snapshot-1');
     expect(inbox.items, isEmpty);
+    expect(inbox.totalCount, 0);
     inbox.dispose();
   });
   test('failed mutation retains unread rows and exposes retry error', () async {
@@ -157,9 +232,28 @@ class PagedInboxApi extends InboxApi {
     this.cursor = cursor;
     return NotificationInboxSnapshot(
       items: [notification('a'), if (cursor != null) notification('b')],
+      totalCount: 24,
       unreadCount: 2,
       cutoff: cursor == null ? 'original' : 'other',
       nextCursor: cursor == null ? 'opaque-next' : null,
     );
+  }
+}
+
+class SettingsApi implements AccountSettingsApi {
+  bool enabled = true, fail = false;
+  @override
+  Future<Map<String, dynamic>> loadNotificationSettings() async {
+    if (fail) throw StateError('offline');
+    return {'queueAlerts': enabled};
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateNotificationSettings({
+    required bool queueAlerts,
+  }) async {
+    if (fail) throw StateError('offline');
+    enabled = queueAlerts;
+    return {'queueAlerts': enabled};
   }
 }

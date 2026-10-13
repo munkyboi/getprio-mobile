@@ -15,11 +15,13 @@ class RestNotificationInboxApi implements NotificationInboxApi {
     );
     final raw = data['notifications'];
     final count = data['unreadCount'];
+    final total = data['totalCount'];
     final cutoff = data['snapshotCutoff'];
     final next = data['nextCursor'];
     if (raw is! List ||
         count is! int ||
         count < 0 ||
+        (total != null && (total is! int || total < count)) ||
         cutoff is! String ||
         cutoff.isEmpty ||
         (next != null && next is! String)) {
@@ -53,6 +55,7 @@ class RestNotificationInboxApi implements NotificationInboxApi {
     return NotificationInboxSnapshot(
       items: items,
       unreadCount: count,
+      totalCount: total as int?,
       cutoff: cutoff,
       nextCursor: next == '' ? null : next as String?,
     );

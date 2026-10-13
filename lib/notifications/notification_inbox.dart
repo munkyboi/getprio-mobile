@@ -20,9 +20,11 @@ class NotificationInboxSnapshot {
     required this.unreadCount,
     required this.cutoff,
     this.nextCursor,
+    this.totalCount,
   });
   final List<InboxNotification> items;
   final int unreadCount;
+  final int? totalCount;
   final String cutoff;
   final String? nextCursor;
 }
@@ -41,6 +43,7 @@ class NotificationInboxController extends ChangeNotifier {
   final unreadCount = ValueNotifier<int>(0);
   List<InboxNotification> items = const [];
   String? nextCursor, cutoff, error;
+  int? totalCount;
   bool loading = false, mutating = false, _disposed = false;
   int _revision = 0;
   Future<void> refresh() async {
@@ -55,6 +58,9 @@ class NotificationInboxController extends ChangeNotifier {
       nextCursor = snapshot.nextCursor;
       cutoff = snapshot.cutoff;
       unreadCount.value = snapshot.unreadCount;
+      totalCount =
+          snapshot.totalCount ??
+          (snapshot.nextCursor == null ? items.length : null);
     } catch (_) {
       if (!_disposed && revision == _revision) {
         error = 'Could not refresh notifications. Please try again.';
@@ -84,6 +90,7 @@ class NotificationInboxController extends ChangeNotifier {
       items = unique.values.toList();
       nextCursor = snapshot.nextCursor;
       unreadCount.value = snapshot.unreadCount;
+      totalCount = snapshot.totalCount;
     } catch (_) {
       if (!_disposed && revision == _revision) {
         error = 'Could not load more notifications. Please try again.';
