@@ -228,7 +228,8 @@ class _CyclingTicketStatsState extends State<_CyclingTicketStats>
         ),
         child: ticket == null
             ? const Text('No active tickets', key: ValueKey('empty-quickstats'))
-            : Button.ghost(
+            : LinkButton(
+                density: ButtonDensity.compact,
                 key: ValueKey('main-ticket-quickstats-${ticket.id}'),
                 onPressed: widget.onTicket == null
                     ? null
