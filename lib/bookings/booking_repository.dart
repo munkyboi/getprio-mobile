@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart';
+
+import '../auth/auth_repository.dart';
 import '../uploads/image_upload_policy.dart';
 
 import 'dart:async';
@@ -333,7 +336,28 @@ class BookingRepository {
     return url as String;
   }
 
-  final Set<String> _arrivalPending = {}, _arrivalUncertain = {};
+  final confirmedArrivalVersion = ValueNotifier<int>(0);
+  final Set<String> _confirmedArrivals = {};
+  final Set<String> _arrivalPending = {},
+      _arrivalUncertain = {},
+      _arrivalOutcomeUnknown = {};
+
+  void _observeConfirmedArrival(String id) {
+    if (_confirmedArrivals.add(id)) confirmedArrivalVersion.value++;
+  }
+
+  bool _definitiveArrivalRejection(Object error) =>
+      error is ApiException &&
+      error.statusCode >= 400 &&
+      error.statusCode < 500;
+
+  void _recordArrivalFailure(String id, Object error) {
+    if (!_definitiveArrivalRejection(error)) {
+      _arrivalOutcomeUnknown.add(id);
+      _arrivalUncertain.add(id);
+    }
+  }
+
   bool arrivalNeedsReconciliation(String id) =>
       _arrivalPending.contains(id) || _arrivalUncertain.contains(id);
 
@@ -341,7 +365,13 @@ class BookingRepository {
     final wasPending = _arrivalPending.contains(id);
     final current = await detail(id).timeout(const Duration(seconds: 20));
     // A read begun before settlement may still describe the pre-arrival state.
-    if (current.isCheckedIn || (!wasPending && !_arrivalPending.contains(id))) {
+    if (current.isCheckedIn) {
+      _arrivalUncertain.remove(id);
+      _arrivalOutcomeUnknown.remove(id);
+      _observeConfirmedArrival(id);
+    } else if (!wasPending &&
+        !_arrivalPending.contains(id) &&
+        !_arrivalOutcomeUnknown.contains(id)) {
       _arrivalUncertain.remove(id);
     }
     return current;
@@ -356,25 +386,37 @@ class BookingRepository {
     }
     final id = booking.id;
     _arrivalPending.add(id);
-    final operation = api.post(
-      '/api/account/bookings/${Uri.encodeComponent(id)}/arrival',
-      {},
+    final operation = Future<Map<String, dynamic>>.sync(
+      () => api.post(
+        '/api/account/bookings/${Uri.encodeComponent(id)}/arrival',
+        {},
+      ),
     );
     unawaited(
       operation.then<void>(
-        (_) {
+        (response) {
           _arrivalPending.remove(id);
+          final data = response['booking'];
+          if (data is Map<String, dynamic> &&
+              CustomerBooking(data).isCheckedIn) {
+            _observeConfirmedArrival(id);
+          }
         },
-        onError: (Object _, StackTrace _) {
+        onError: (Object error, StackTrace _) {
           _arrivalPending.remove(id);
+          _recordArrivalFailure(id, error);
         },
       ),
     );
     try {
       final response = await operation.timeout(const Duration(seconds: 20));
       return CustomerBooking(response['booking'] as Map<String, dynamic>);
-    } on TimeoutException {
-      _arrivalUncertain.add(id);
+    } catch (error) {
+      if (error is TimeoutException && _arrivalPending.contains(id)) {
+        _arrivalUncertain.add(id);
+      } else {
+        _recordArrivalFailure(id, error);
+      }
       rethrow;
     }
   }
@@ -433,10 +475,14 @@ class BookingRepository {
     return CustomerBooking(response['booking'] as Map<String, dynamic>);
   }
 
-  Future<CustomerBooking> detail(String id) async => CustomerBooking(
-    (await api.get(
-          '/api/account/bookings/${Uri.encodeComponent(id)}',
-        ))['booking']
-        as Map<String, dynamic>,
-  );
+  Future<CustomerBooking> detail(String id) async {
+    final booking = CustomerBooking(
+      (await api.get(
+            '/api/account/bookings/${Uri.encodeComponent(id)}',
+          ))['booking']
+          as Map<String, dynamic>,
+    );
+    if (booking.isCheckedIn) _observeConfirmedArrival(id);
+    return booking;
+  }
 }

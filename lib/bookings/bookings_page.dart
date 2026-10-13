@@ -346,6 +346,9 @@ class _BookingDetailPageState extends State<BookingDetailPage>
   Future<void> _refresh() async {
     if (_fetching || _arriving || !mounted) return;
     final request = ++_request;
+    final wasUncertain = widget.repository.arrivalNeedsReconciliation(
+      widget.booking.id,
+    );
     setState(() => _fetching = true);
     try {
       final item =
@@ -354,10 +357,18 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                   : widget.repository.detail(widget.booking.id))
               .timeout(const Duration(seconds: 20));
       if (!mounted || request != _request) return;
+      final newlyCheckedIn = !_item.isCheckedIn && item.isCheckedIn;
       setState(() {
         _item = item;
         _syncError = null;
+        if (item.isCheckedIn) {
+          _arrivalError = null;
+        } else if (wasUncertain &&
+            !widget.repository.arrivalNeedsReconciliation(item.id)) {
+          _arrivalError = 'Could not record arrival. Please try again.';
+        }
       });
+      if (newlyCheckedIn) widget.onCheckedIn?.call();
       if (_paymentOpen &&
           !item.canSubmitProof &&
           _paymentDrawerContext != null) {
@@ -423,10 +434,15 @@ class _BookingDetailPageState extends State<BookingDetailPage>
     } catch (error) {
       if (mounted) {
         setState(
-          () => _arrivalError = error is ApiException
+          () => _arrivalError =
+              error is ApiException &&
+                  error.statusCode >= 400 &&
+                  error.statusCode < 500
               ? error.message
               : error is TimeoutException
               ? 'Check-in is still processing. Refresh status before trying again.'
+              : widget.repository.arrivalNeedsReconciliation(_item.id)
+              ? 'Check-in outcome is unconfirmed. Refresh status or ask the vendor to check you in.'
               : 'Could not record arrival. Please try again.',
         );
       }
