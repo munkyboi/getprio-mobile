@@ -338,8 +338,10 @@ class BookingRepository {
       _arrivalPending.contains(id) || _arrivalUncertain.contains(id);
 
   Future<CustomerBooking> reconcileArrival(String id) async {
+    final wasPending = _arrivalPending.contains(id);
     final current = await detail(id).timeout(const Duration(seconds: 20));
-    if (!_arrivalPending.contains(id) || current.isCheckedIn) {
+    // A read begun before settlement may still describe the pre-arrival state.
+    if (current.isCheckedIn || (!wasPending && !_arrivalPending.contains(id))) {
       _arrivalUncertain.remove(id);
     }
     return current;

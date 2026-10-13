@@ -13,6 +13,32 @@ import 'review_refresh_regressions_test.dart' show PendingBookings;
 import 'directory_and_ticket_repository_test.dart' show FakeAccountQueueApi;
 
 void main() {
+  testWidgets(
+    'pre-settlement read cannot clear uncertain arrival after late commit',
+    (tester) async {
+      final api = ArrivalApi()..postGate = Completer<Map<String, dynamic>>();
+      final repository = BookingRepository(api);
+      final pending = repository.checkIn(
+        CustomerBooking(arrivalBooking()),
+        scheduled,
+      );
+      final deadline = expectLater(pending, throwsA(isA<TimeoutException>()));
+      await tester.pump(const Duration(seconds: 21));
+      await deadline;
+      api.getGate = Completer<Map<String, dynamic>>();
+      final staleRead = repository.reconcileArrival('booking/one');
+      api.postGate!.complete({'booking': checkedInBooking()});
+      await tester.pump();
+      api.getGate!.complete({'booking': arrivalBooking()});
+      await staleRead;
+      expect(repository.arrivalNeedsReconciliation('booking/one'), isTrue);
+      api.getGate = null;
+      api.data = checkedInBooking();
+      final fresh = await repository.reconcileArrival('booking/one');
+      expect(fresh.isCheckedIn, isTrue);
+      expect(repository.arrivalNeedsReconciliation('booking/one'), isFalse);
+    },
+  );
   for (final accepted in [false, true]) {
     testWidgets(
       'arrival timeout restores refresh; late accepted=$accepted reconciles before retry',
