@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../queue/auth_queue_api.dart';
 
 /// Totals remain separate when selected services use different currencies.
@@ -326,18 +328,27 @@ class BookingRepository {
     }
     final path =
         '/api/account/bookings/${Uri.encodeComponent(booking.id)}/payment-proof';
-    final upload = await (uploader as BookingProofApi).uploadProof(
-      '$path/uploads/direct',
-      bytes: bytes,
-      contentType: contentType,
-      fileName: fileName,
-    );
+    final upload = await (uploader as BookingProofApi)
+        .uploadProof(
+          '$path/uploads/direct',
+          bytes: bytes,
+          contentType: contentType,
+          fileName: fileName,
+        )
+        .timeout(const Duration(seconds: 30));
     final proof = upload['proof'] as Map<String, dynamic>;
-    final response = await api.post(path, {
-      'paymentReference': reference.trim(),
-      for (final key in ['objectKey', 'fileName', 'contentType', 'sizeBytes'])
-        key: proof[key],
-    });
+    final response = await api
+        .post(path, {
+          'paymentReference': reference.trim(),
+          for (final key in [
+            'objectKey',
+            'fileName',
+            'contentType',
+            'sizeBytes',
+          ])
+            key: proof[key],
+        })
+        .timeout(const Duration(seconds: 30));
     return CustomerBooking(response['booking'] as Map<String, dynamic>);
   }
 

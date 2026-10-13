@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../navigation/app_drawer.dart';
 import '../keyboard_avoidance.dart';
 
@@ -138,7 +140,11 @@ class _BookingPaymentState extends State<BookingPayment> {
     } catch (e) {
       if (mounted) {
         setState(
-          () => _error = e is ApiException ? e.message : 'Could not submit payment proof. Your receipt is kept here; retry or refresh the booking status.',
+          () => _error = e is TimeoutException
+              ? 'This is taking too long. Refresh the booking status before retrying; your receipt is kept here.'
+              : e is ApiException
+              ? e.message
+              : 'Could not submit payment proof. Your receipt is kept here; retry or refresh the booking status.',
         );
       }
     } finally {

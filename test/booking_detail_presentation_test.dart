@@ -55,6 +55,15 @@ class PresentationApi implements BookingApi {
 }
 
 void main() {
+  test('snapshot totals preserve currencies without multiplying bundle snapshots again', () {
+    final booking = CustomerBooking(sampleBooking());
+    final services = bookingServiceItems(booking);
+    services.first['currency'] = 'USD';
+    expect(bookingSnapshotTotal(booking, services), 'USD 1,350.00 + ₱2,700.00');
+    services.last.remove('priceAmountCents');
+    expect(bookingSnapshotTotal(booking, services), isNull);
+  });
+
   test('single-service fallback multiplies price once by quantity', () {
     final items = bookingServiceItems(
       CustomerBooking({

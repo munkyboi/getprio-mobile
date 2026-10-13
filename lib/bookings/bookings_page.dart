@@ -484,20 +484,7 @@ class _BookingDetailPageState extends State<BookingDetailPage>
         : minutes < 60
         ? '$minutes min'
         : '${(minutes / 60).toStringAsFixed(minutes % 60 == 0 ? 0 : 1)} hrs';
-    final group = item.data['groupFundedCampaign'];
-    final amounts = services
-        .map((s) => s['priceAmountCents'])
-        .whereType<num>()
-        .toList();
-    final total = group is Map && group['targetAmountCents'] is num
-        ? (group['targetAmountCents'] as num) +
-              ((group['roundingAdjustmentCents'] as num?) ?? 0)
-        : amounts.length == services.length
-        ? amounts.fold<num>(0, (a, b) => a + b)
-        : null;
-    final currency = group is Map
-        ? group['currency']
-        : item.data['serviceCurrency'] ?? services.first['currency'];
+    final totalLabel = bookingSnapshotTotal(item, services);
     return DrawerOverlay(
       child: Builder(
         builder: (drawerContext) {
@@ -665,10 +652,8 @@ class _BookingDetailPageState extends State<BookingDetailPage>
                                       Text(
                                         '$duration · ${services.length} ${services.length == 1 ? 'service' : 'services'}',
                                       ),
-                                      if (total != null)
-                                        Text(
-                                          'Total fee ${bookingMoney(total, currency)}',
-                                        ).bold(),
+                                      if (totalLabel != null)
+                                        Text('Total fee $totalLabel').bold(),
                                     ],
                                   ),
                                 ],

@@ -27,7 +27,7 @@ Map<String, dynamic> paymentBooking() => {
 class PaymentApi implements BookingApi, BookingProofApi {
   int uploads = 0, submissions = 0;
   Map<String, dynamic>? submitted;
-  Completer<void>? gate;
+  Completer<void>? gate, uploadGate;
   bool fail = false;
   Map<String, dynamic>? data;
   @override
@@ -43,6 +43,7 @@ class PaymentApi implements BookingApi, BookingProofApi {
     required String fileName,
   }) async {
     uploads++;
+    if (uploadGate != null) await uploadGate!.future;
     expect(
       path,
       '/api/account/bookings/booking-1/payment-proof/uploads/direct',
@@ -148,6 +149,26 @@ void main() {
       expect(api.submissions, 0);
     });
   }
+
+  testWidgets(
+    'timed out receipt upload never advances to evidence submission',
+    (tester) async {
+      final api = PaymentApi()..uploadGate = Completer<void>();
+      final pending = BookingRepository(api).submitPaymentProof(
+        CustomerBooking(paymentBooking()),
+        reference: 'ref',
+        bytes: [1],
+        contentType: 'image/png',
+        fileName: 'receipt.png',
+      );
+      final assertion = expectLater(pending, throwsA(isA<TimeoutException>()));
+      await tester.pump(const Duration(seconds: 31));
+      await assertion;
+      api.uploadGate!.complete();
+      await tester.pump();
+      expect(api.submissions, 0);
+    },
+  );
 
   testWidgets(
     'new booking without manual payment does not open payment drawer',
@@ -374,11 +395,27 @@ void main() {
             .onPressed,
         isNull,
       );
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Refresh the booking status before retrying'),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<PopScope>(find.byType(PopScope).last).canPop,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
+            .onPressed,
+        isNotNull,
+      );
       api.gate!.complete();
       await tester.pumpAndSettle();
       expect(updated, isNull);
       expect(find.text('receipt.png'), findsOneWidget);
-      expect(find.textContaining('Your receipt is kept here'), findsOneWidget);
+      expect(find.textContaining('receipt is kept here'), findsOneWidget);
       api.fail = false;
       await tester.tap(
         find.widgetWithText(PrimaryButton, 'Submit payment proof'),

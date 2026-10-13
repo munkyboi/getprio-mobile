@@ -236,6 +236,32 @@ void main() {
     }
   });
 
+  testWidgets('service start without confirmation hides arrival QR action', (
+    tester,
+  ) async {
+    final ticket = {
+      'id': 'active-1',
+      'lookupCode': 'A0C18AF',
+      'ticketNumber': 'AH002',
+      'tenantSlug': 'city-clinic',
+      'status': 'called',
+      'serviceStartedAt': '2026-10-13T01:00:00Z',
+    };
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: TicketDetailsPage(
+          ticket: QueueTicket.fromJson(ticket),
+          queueRepository: QueueRepository(
+            FakeQueueApi(snapshot: {'focusTicket': ticket}),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+  });
+
   for (final status in ['cancelled', 'unserved', 'skipped', 'expired']) {
     testWidgets('$status history hides QR action', (tester) async {
       await tester.pumpWidget(

@@ -5805,6 +5805,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
           final showQr =
               ticket.isActive &&
               !ticket.isServiceCompleted &&
+              !ticket.isServiceInterrupted &&
+              ticket.serviceStartedAt == null &&
+              ticket.serviceEndedAt == null &&
               ticket.customerConfirmedAt == null;
           return DetailActivityBoundary(
             activity: _activity,

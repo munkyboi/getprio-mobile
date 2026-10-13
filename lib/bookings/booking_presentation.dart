@@ -47,6 +47,31 @@ String bookingMoney(num cents, Object? currency) {
   return '${currency == null || currency == 'PHP' ? '₱' : '$currency '}$whole.${amount.last}';
 }
 
+String? bookingSnapshotTotal(
+  CustomerBooking booking,
+  List<Map<String, dynamic>> services,
+) {
+  final group = booking.data['groupFundedCampaign'];
+  if (group is Map && group['targetAmountCents'] is num) {
+    return bookingMoney(
+      (group['targetAmountCents'] as num) +
+          ((group['roundingAdjustmentCents'] as num?) ?? 0),
+      group['currency'],
+    );
+  }
+  final totals = <Object?, num>{};
+  for (final service in services) {
+    final amount = service['priceAmountCents'];
+    if (amount is! num) return null;
+    final currency =
+        service['currency'] ?? booking.data['serviceCurrency'] ?? 'PHP';
+    totals.update(currency, (value) => value + amount, ifAbsent: () => amount);
+  }
+  return totals.entries
+      .map((entry) => bookingMoney(entry.value, entry.key))
+      .join(' + ');
+}
+
 /// Uses booked snapshots for prices and times, rather than the current catalogue.
 List<Map<String, dynamic>> bookingServiceItems(CustomerBooking booking) {
   final group = booking.data['groupFundedCampaign'];
