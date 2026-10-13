@@ -7,23 +7,41 @@ abstract interface class ForegroundNotificationPresenter {
   Future<void> show({
     required String notificationId,
     String? ticketRef,
+    String? payload,
     String? title,
     String? body,
   });
 }
 
+abstract interface class ForegroundNotificationTapSource {
+  Future<String?> get initialPayload;
+}
+
 class NativeForegroundNotificationPresenter
-    implements ForegroundNotificationPresenter {
+    implements
+        ForegroundNotificationPresenter,
+        ForegroundNotificationTapSource {
   NativeForegroundNotificationPresenter({
     FlutterLocalNotificationsPlugin? plugin,
+    this.onTap,
   }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   static const _channelId = 'getprio_queue_updates';
-  static const _channelName = 'Queue updates';
+  static const _channelName = 'GetPrio updates';
   static const _channelDescription =
-      'Notifications about queue tickets and their status.';
+      'Notifications about bookings and queue tickets.';
 
   final FlutterLocalNotificationsPlugin _plugin;
+  final ValueChanged<String?>? onTap;
+  @override
+  Future<String?> get initialPayload async {
+    if (!_initialized) return null;
+    final details = await _plugin.getNotificationAppLaunchDetails();
+    return details?.didNotificationLaunchApp == true
+        ? details?.notificationResponse?.payload
+        : null;
+  }
+
   bool _initialized = false;
 
   @override
@@ -64,6 +82,8 @@ class NativeForegroundNotificationPresenter
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
+      onDidReceiveNotificationResponse: (response) =>
+          onTap?.call(response.payload),
     );
     if (initialized != true) return false;
     await android.createNotificationChannel(
@@ -84,6 +104,7 @@ class NativeForegroundNotificationPresenter
   Future<void> show({
     required String notificationId,
     String? ticketRef,
+    String? payload,
     String? title,
     String? body,
   }) async {
@@ -105,7 +126,7 @@ class NativeForegroundNotificationPresenter
             presentList: true,
           ),
         ),
-        payload: ticketRef,
+        payload: payload ?? ticketRef,
       );
       return;
     }
@@ -128,7 +149,7 @@ class NativeForegroundNotificationPresenter
           icon: '@mipmap/ic_launcher',
         ),
       ),
-      payload: ticketRef,
+      payload: payload ?? ticketRef,
     );
   }
 

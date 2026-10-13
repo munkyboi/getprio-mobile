@@ -2024,6 +2024,11 @@ class _CustomerShellState extends State<CustomerShell>
   NotificationInboxController? _inbox;
   Timer? _inboxRefreshTimer;
   bool _inboxOpen = false;
+  int _bookingPushGeneration = 0;
+  bool _bookingPushOpen = false;
+  Route<void>? _bookingPushRoute;
+  NavigatorState? _bookingPushNavigator;
+  final _openedBookingNotifications = <String>{};
   Route<void>? _inboxRoute;
   NavigatorState? _inboxNavigator;
 
@@ -2037,6 +2042,11 @@ class _CustomerShellState extends State<CustomerShell>
     _startInvitationRefreshFallback();
     _loadPendingInvitationAfterFrame();
     _resetInbox();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.pushSignal?.value?.opened == true) {
+        _handlePushSignal();
+      }
+    });
   }
 
   @override
@@ -2048,7 +2058,9 @@ class _CustomerShellState extends State<CustomerShell>
     widget.pushSignal?.removeListener(_handlePushSignal);
     _inboxRefreshTimer?.cancel();
     _closeOwnedInbox();
+    _closeOwnedBookingPush();
     _inbox?.dispose();
+    _bookingPushGeneration++;
     super.dispose();
   }
 
@@ -2085,6 +2097,11 @@ class _CustomerShellState extends State<CustomerShell>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.user?.id != widget.user?.id ||
         oldWidget.notificationInboxApi != widget.notificationInboxApi) {
+      _bookingPushGeneration++;
+      _closeOwnedBookingPush();
+      _openedBookingNotifications.clear();
+      _bookingPushOpen = false;
+      widget.pushSignal?.value = null;
       _resetInbox();
     }
     if (oldWidget.pushSignal != widget.pushSignal) {
@@ -2168,6 +2185,12 @@ class _CustomerShellState extends State<CustomerShell>
         () => unawaited(_inbox?.refresh()),
       );
     }
+    final bookingId = bookingIdForPush(signal);
+    if (bookingId != null) {
+      widget.pushSignal?.value = null;
+      unawaited(_openBookingFromPush(signal, bookingId));
+      return;
+    }
     if (signal.eventType != 'developer_ticket_invitation' ||
         signal.notificationId == _lastInvitationNotificationId) {
       return;
@@ -2176,6 +2199,58 @@ class _CustomerShellState extends State<CustomerShell>
     _selectDestination(CustomerDestination.lists);
     _openTickets();
     unawaited(_presentTicketInvitation(signal));
+  }
+
+  void _closeOwnedBookingPush() {
+    final route = _bookingPushRoute, navigator = _bookingPushNavigator;
+    _bookingPushRoute = null;
+    _bookingPushNavigator = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (navigator != null &&
+          navigator.mounted &&
+          route != null &&
+          route.isActive) {
+        navigator.removeRoute(route);
+      }
+    });
+  }
+
+  Future<void> _openBookingFromPush(PushSignal signal, String id) async {
+    final repository = _bookingRepository;
+    if (repository == null ||
+        _bookingPushOpen ||
+        _openedBookingNotifications.contains(signal.notificationId)) {
+      return;
+    }
+    final generation = _bookingPushGeneration;
+    final userId = widget.user?.id;
+    _bookingPushOpen = true;
+    _openedBookingNotifications.add(signal.notificationId);
+    try {
+      final booking = await repository
+          .detail(id)
+          .timeout(const Duration(seconds: 20));
+      if (!mounted ||
+          generation != _bookingPushGeneration ||
+          userId != widget.user?.id) {
+        return;
+      }
+      await _openBookingDetails(booking, fromPush: true);
+    } catch (_) {
+      if (mounted && generation == _bookingPushGeneration) {
+        _openedBookingNotifications.remove(signal.notificationId);
+        showFeedbackToast(
+          context,
+          message:
+              'Could not open this booking. Please check your Bookings list.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted && generation == _bookingPushGeneration) {
+        _bookingPushOpen = false;
+      }
+    }
   }
 
   Future<void> _presentTicketInvitation([PushSignal? signal]) async {
@@ -2479,26 +2554,40 @@ class _CustomerShellState extends State<CustomerShell>
     _ticketsOpen = false;
   }
 
-  Future<void> _openBookingDetails(CustomerBooking booking) async {
+  Future<void> _openBookingDetails(
+    CustomerBooking booking, {
+    bool fromPush = false,
+  }) async {
     final repository = _bookingRepository;
     if (repository == null) return;
-    await Navigator.of(context).push<void>(
-      SwipeBackPageRoute<void>(
-        builder: (_) => BookingDetailPage(
-          repository: repository,
-          booking: booking,
-          onCheckedIn: widget.ticketRepository?.requestRefresh,
-          onOpenTicket: (item) => _openBookingQueueTicket(
-            context,
-            item,
-            bookingRepository: repository,
-            ticketRepository: widget.ticketRepository,
-            queueRepository: widget.queueRepository,
-            directoryRepository: widget.directoryRepository,
-          ),
+    final navigator = Navigator.of(context);
+    final route = SwipeBackPageRoute<void>(
+      builder: (_) => BookingDetailPage(
+        repository: repository,
+        booking: booking,
+        onCheckedIn: widget.ticketRepository?.requestRefresh,
+        onOpenTicket: (item) => _openBookingQueueTicket(
+          context,
+          item,
+          bookingRepository: repository,
+          ticketRepository: widget.ticketRepository,
+          queueRepository: widget.queueRepository,
+          directoryRepository: widget.directoryRepository,
         ),
       ),
     );
+    if (fromPush) {
+      _bookingPushRoute = route;
+      _bookingPushNavigator = navigator;
+    }
+    try {
+      await navigator.push<void>(route);
+    } finally {
+      if (identical(_bookingPushRoute, route)) {
+        _bookingPushRoute = null;
+        _bookingPushNavigator = null;
+      }
+    }
   }
 
   Future<void> _openBookings() async {
