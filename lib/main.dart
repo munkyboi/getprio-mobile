@@ -2370,6 +2370,7 @@ class _CustomerShellState extends State<CustomerShell>
             onDestinationSelected: _selectDestination,
             onJoinQueue: _openJoin,
             exploreEnabled: !widget.sandbox,
+            bookingsEnabled: !widget.sandbox,
           ),
         ],
         child: SafeArea(
@@ -2397,15 +2398,23 @@ class _CustomerShellState extends State<CustomerShell>
                     onOpenJoin: (host, vendor, locationSlug) =>
                         unawaited(_openVendorJoin(host, vendor, locationSlug)),
                   ),
-                  ListsPage(
-                    onTickets: _openTickets,
-                    onBookings: _openBookings,
-                    active: _selectedDestination == CustomerDestination.lists,
-                    ticketRepository: widget.ticketRepository,
-                    bookingRepository: _bookingRepository,
-                    onOpenTicket: _openTicketDetails,
-                    onOpenBooking: _openBookingDetails,
-                  ),
+                  if (widget.sandbox)
+                    TicketsPage(
+                      ticketRepository: widget.ticketRepository,
+                      queueRepository: widget.queueRepository,
+                      directoryRepository: widget.directoryRepository,
+                      sandbox: true,
+                    )
+                  else
+                    ListsPage(
+                      onTickets: _openTickets,
+                      onBookings: _openBookings,
+                      active: _selectedDestination == CustomerDestination.lists,
+                      ticketRepository: widget.ticketRepository,
+                      bookingRepository: _bookingRepository,
+                      onOpenTicket: _openTicketDetails,
+                      onOpenBooking: _openBookingDetails,
+                    ),
                   AccountPage(
                     socialRepository: widget.directoryRepository?.social,
                     onOpenVendor: _openFavoriteVendor,
@@ -2428,6 +2437,7 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   BookingRepository? get _bookingRepository {
+    if (widget.sandbox) return null;
     final api = widget.directoryRepository?.api;
     return api is RestDirectoryApi
         ? BookingRepository(RestBookingApi(api.client))
@@ -2492,6 +2502,7 @@ class _CustomerShellState extends State<CustomerShell>
   }
 
   Future<void> _openBookings() async {
+    if (widget.sandbox) return;
     await Navigator.of(context).push(
       SwipeBackPageRoute<void>(
         builder: (_) => BookingsPage(

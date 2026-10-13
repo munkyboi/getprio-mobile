@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:getprio_mobile/main.dart';
 import 'package:getprio_mobile/directory/directory_repository.dart';
 import 'package:getprio_mobile/otp_input.dart';
@@ -9,6 +11,44 @@ import 'package:getprio_mobile/queue/queue_models.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 
 void main() {
+  testWidgets(
+    'stalled direct join times out and ignores late result after cancel',
+    (tester) async {
+      final api = _StalledEmailApi();
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: CustomerShell(
+            joinRepository: JoinRepository(api),
+            directoryRepository: DirectoryRepository(_JoinDirectoryApi()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Explore').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clinic').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('vendor-join-queue-button')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 21));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'This is taking too long. Check your tickets before trying again.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      api.gate.complete(api.challenge('late'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('vendor-join-queue-button')), findsOneWidget);
+      expect(find.byKey(const Key('queue-join-otp-drawer')), findsNothing);
+      expect(find.byType(TicketDetailsPage), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('vendor Join queue opens only OTP drawer then ticket details', (
     tester,
   ) async {
@@ -318,4 +358,15 @@ class _JoinDirectoryApi implements DirectoryApi {
   };
   @override
   Future<Map<String, dynamic>> loadVendor(String tenantSlug) async => vendor;
+}
+
+class _StalledEmailApi extends _EmailApi {
+  final gate = Completer<Map<String, dynamic>>();
+  @override
+  Future<Map<String, dynamic>> joinDirect({
+    required String tenantSlug,
+    String? locationSlug,
+    required String joinAttemptId,
+    required String customerName,
+  }) => gate.future;
 }

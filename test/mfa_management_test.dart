@@ -14,7 +14,8 @@ import 'security_repository_test.dart' show FakeSecurityApi;
 
 Future<void> tapKey(WidgetTester tester, String key) async {
   final finder = find.byKey(Key(key));
-  await tester.ensureVisible(finder);
+  await Scrollable.ensureVisible(tester.element(finder), alignment: .5);
+  await tester.pumpAndSettle();
   await tester.tap(finder);
   await tester.pumpAndSettle();
 }
@@ -96,7 +97,7 @@ void main() {
               .first,
           '123456',
         );
-        await tapKey(tester, 'mfa-replace-confirm');
+        await tester.pumpAndSettle();
         expect(api.currentCode, '123456');
         expect(changed, isNull);
         expect(find.byKey(const Key('mfa-enrollment-qr')), findsOneWidget);
@@ -116,7 +117,7 @@ void main() {
                 .first,
             '654321',
           );
-          await tapKey(tester, 'mfa-confirm-button');
+          await tester.pumpAndSettle();
           expect(changed, isTrue);
           expect(find.byKey(const Key('mfa-recovery-codes')), findsOneWidget);
           await tester.pump(const Duration(seconds: 4));
@@ -159,7 +160,11 @@ void main() {
               .first,
           recovery ? 'ABCDE-12345' : '123456',
         );
-        await tapKey(tester, 'mfa-remove-confirm');
+        if (recovery) {
+          await tapKey(tester, 'mfa-remove-confirm');
+        } else {
+          await tester.pumpAndSettle();
+        }
         expect(api.password, 'password');
         expect(api.code, recovery ? null : '123456');
         expect(api.recoveryCode, recovery ? 'ABCDE-12345' : null);

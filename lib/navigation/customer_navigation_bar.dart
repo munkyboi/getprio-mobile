@@ -11,12 +11,13 @@ class CustomerNavigationBar extends StatelessWidget {
     required this.onDestinationSelected,
     required this.onJoinQueue,
     this.exploreEnabled = true,
+    this.bookingsEnabled = true,
   });
 
   final CustomerDestination selectedDestination;
   final ValueChanged<CustomerDestination> onDestinationSelected;
   final VoidCallback onJoinQueue;
-  final bool exploreEnabled;
+  final bool exploreEnabled, bookingsEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -50,8 +51,8 @@ class CustomerNavigationBar extends StatelessWidget {
         _destinationItem(
           context: context,
           destination: CustomerDestination.lists,
-          label: 'Lists',
-          icon: LucideIcons.layoutGrid,
+          label: bookingsEnabled ? 'Lists' : 'Tickets',
+          icon: bookingsEnabled ? LucideIcons.layoutGrid : LucideIcons.ticket,
         ),
         _destinationItem(
           context: context,

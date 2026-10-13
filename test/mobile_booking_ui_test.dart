@@ -21,6 +21,36 @@ Future<void> reveal(WidgetTester tester, Finder finder) async {
 
 void main() {
   testWidgets(
+    'Sandbox keeps Tickets destination and never exposes booking cards',
+    (tester) async {
+      await tester.pumpWidget(
+        const ShadcnApp(home: CustomerShell(sandbox: true)),
+      );
+      expect(find.text('Lists'), findsNothing);
+      await tester.tap(find.text('Tickets').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('tickets-page')), findsOneWidget);
+      expect(find.byKey(const ValueKey('lists-bookings')), findsNothing);
+      expect(find.text('Bookings'), findsNothing);
+    },
+  );
+  testWidgets('booking category automatically seeks matching later pages', (
+    tester,
+  ) async {
+    final api = _PagedBookingApi();
+    await tester.pumpWidget(
+      ShadcnApp(home: BookingsPage(repository: BookingRepository(api))),
+    );
+    await tester.pumpAndSettle();
+    expect(api.pages, [1, 2]);
+    expect(find.text('Later upcoming'), findsOneWidget);
+    expect(find.text('No upcoming bookings'), findsNothing);
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+    expect(find.text('Past vendor0'), findsOneWidget);
+  });
+
+  testWidgets(
     'service units live in cards and Together synchronizes maximum quantities',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(320, 700));
@@ -514,6 +544,8 @@ void main() {
         'allowBookingQuantity': true,
         'bookingQuantityMin': 2,
         'bookingQuantityMax': 3,
+        'currency': 'USD',
+        'priceDisplay': 'USD 100.00',
       });
       await tester.pumpWidget(
         ShadcnApp(
@@ -557,6 +589,7 @@ void main() {
       );
       await tester.tap(find.text('Open booking'));
       await tester.pumpAndSettle();
+      expect(find.text('1 services · USD 200.00'), findsOneWidget);
       await reveal(tester, find.text('09:00'));
       await tester.tap(find.text('09:00'));
       await tester.pumpAndSettle();
@@ -608,6 +641,10 @@ void main() {
             .first,
       );
       expect(action.onPressed, isNull);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('booking-otp-drawer')), findsOneWidget);
+      expect(api.createCount, 1);
       api.createGate!.complete();
       await tester.pumpAndSettle();
       expect(api.createCount, 1);
@@ -785,5 +822,36 @@ class _StaleDraftApi extends _BookingApi {
       return {'bookingVerificationToken': 'verified'};
     }
     return super.post(path, body);
+  }
+}
+
+class _PagedBookingApi extends _BookingApi {
+  final pages = <int>[];
+  @override
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    final page = int.parse(query!['page']!);
+    pages.add(page);
+    return {
+      'bookings': page == 1
+          ? [
+              for (var i = 0; i < 20; i++)
+                {
+                  'id': 'past$i',
+                  'status': 'completed',
+                  'tenantName': 'Past vendor$i',
+                },
+            ]
+          : [
+              {
+                'id': 'later',
+                'status': 'confirmed',
+                'tenantName': 'Later upcoming',
+              },
+            ],
+      'pagination': {'totalPages': 2},
+    };
   }
 }

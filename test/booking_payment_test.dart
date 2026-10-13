@@ -79,6 +79,27 @@ class PaymentApi implements BookingApi, BookingProofApi {
 }
 
 void main() {
+  test('authoritative expiry blocks proof upload before private receipt leaves device', () async {
+    final api = PaymentApi();
+    final booking = CustomerBooking({
+      ...paymentBooking(),
+      'expiredAt': '2026-10-13T00:00:00Z',
+    });
+    expect(booking.canSubmitProof, isFalse);
+    await expectLater(
+      BookingRepository(api).submitPaymentProof(
+        booking,
+        reference: 'ref',
+        bytes: [1, 2],
+        contentType: 'image/png',
+        fileName: 'receipt.png',
+      ),
+      throwsStateError,
+    );
+    expect(api.uploads, 0);
+    expect(api.submissions, 0);
+  });
+
   testWidgets(
     'new booking without manual payment does not open payment drawer',
     (tester) async {

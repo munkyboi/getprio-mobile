@@ -305,11 +305,22 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
   );
   @override
   Widget build(BuildContext context) {
-    final total = _services.fold<int>(
-      0,
-      (sum, service) =>
-          sum + service.priceAmountCents * (_quantities[service.slug] ?? 1),
-    );
+    final totals = <String, int>{};
+    for (final service in _services) {
+      final amount =
+          service.priceAmountCents * (_quantities[service.slug] ?? 1);
+      totals.update(
+        service.currency,
+        (value) => value + amount,
+        ifAbsent: () => amount,
+      );
+    }
+    final totalLabel = totals.entries
+        .map(
+          (entry) =>
+              '${entry.key == 'PHP' ? '₱' : '${entry.key} '}${(entry.value / 100).toStringAsFixed(2)}',
+        )
+        .join(' + ');
     return PopScope(
       canPop: !_busy,
       child: ScrollAwareScaffold(
@@ -500,7 +511,7 @@ class _BookingPageState extends State<BookingPage> with FormValidationMixin {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          '${_services.length} services · ₱${(total / 100).toStringAsFixed(2)}',
+                          '${_services.length} services · ${totalLabel.isEmpty ? '₱0.00' : totalLabel}',
                         ).bold(),
                         const SizedBox(height: 6),
                         const Text(

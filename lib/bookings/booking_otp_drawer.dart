@@ -152,85 +152,91 @@ class _BookingOtpDrawerState extends State<BookingOtpDrawer>
   }
 
   @override
-  Widget build(BuildContext context) => Container(
-    key: const Key('booking-otp-drawer'),
-    color: appDrawerBackground(context),
-    child: ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * .8,
-      ),
-      child: KeyboardAwareScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const AppDrawerTitle('Verify email'),
-            const SizedBox(height: 16),
-            Text(
-              'Enter the code sent to ${_challenge['deliveryTarget'] ?? widget.payload['customerEmail']}.',
-            ),
-            const SizedBox(height: 16),
-            GetPrioOtpInput(
-              controller: _code,
-              onCompleted: (_) => unawaited(_submit()),
-              enabled: !_busy && !_expired,
-              validation: formValidation,
-              trailing: OtpResendButton(
-                key: const Key('booking-otp-resend'),
-                secondsRemaining: _resendSeconds,
-                onPressed: _busy ? null : _resend,
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_busy,
+    child: Container(
+      key: const Key('booking-otp-drawer'),
+      color: appDrawerBackground(context),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .8,
+        ),
+        child: KeyboardAwareScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const AppDrawerTitle('Verify email'),
+              const SizedBox(height: 16),
+              Text(
+                'Enter the code sent to ${_challenge['deliveryTarget'] ?? widget.payload['customerEmail']}.',
               ),
-            ),
-            if (_expired)
-              const Text('This code has expired. Request a new code.'),
-            if (_error != null) ...[const SizedBox(height: 12), Text(_error!)],
-            const SizedBox(height: 16),
-
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: OutlineButton(
-                    key: const Key('booking-otp-details'),
-                    alignment: Alignment.center,
-                    onPressed: _busy ? null : () => closeDrawer(context),
-                    child: Row(
-                      children: [
-                        const Icon(LucideIcons.undo2, size: 18),
-                        const SizedBox(width: 6),
-                        const Expanded(
-                          child: Text(
-                            'Booking details',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+              const SizedBox(height: 16),
+              GetPrioOtpInput(
+                controller: _code,
+                onCompleted: (_) => unawaited(_submit()),
+                enabled: !_busy && !_expired,
+                validation: formValidation,
+                trailing: OtpResendButton(
+                  key: const Key('booking-otp-resend'),
+                  secondsRemaining: _resendSeconds,
+                  onPressed: _busy ? null : _resend,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: PrimaryButton(
-                    key: const Key('booking-otp-submit'),
-                    alignment: Alignment.center,
-                    onPressed: _busy || _expired ? null : _submit,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _busy ? 'Please wait...' : 'Continue',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Icon(LucideIcons.arrowRight, size: 18),
-                      ],
-                    ),
-                  ),
-                ),
+              ),
+              if (_expired)
+                const Text('This code has expired. Request a new code.'),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!),
               ],
-            ),
-          ],
+              const SizedBox(height: 16),
+
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: OutlineButton(
+                      key: const Key('booking-otp-details'),
+                      alignment: Alignment.center,
+                      onPressed: _busy ? null : () => closeDrawer(context),
+                      child: Row(
+                        children: [
+                          const Icon(LucideIcons.undo2, size: 18),
+                          const SizedBox(width: 6),
+                          const Expanded(
+                            child: Text(
+                              'Booking details',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: PrimaryButton(
+                      key: const Key('booking-otp-submit'),
+                      alignment: Alignment.center,
+                      onPressed: _busy || _expired ? null : _submit,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _busy ? 'Please wait...' : 'Continue',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(LucideIcons.arrowRight, size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     ),

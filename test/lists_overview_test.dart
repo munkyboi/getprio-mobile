@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
@@ -75,6 +77,29 @@ class OverviewBookings implements BookingApi {
 }
 
 void main() {
+  testWidgets('refresh received during initial list load is replayed', (
+    tester,
+  ) async {
+    final api = PendingOverview();
+    final repository = QueueTicketRepository(api);
+    await tester.pumpWidget(
+      ShadcnApp(
+        home: SingleChildScrollView(
+          child: ListsOverview(active: true, ticketRepository: repository),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(api.calls, 1);
+    repository.requestRefresh();
+    repository.requestRefresh();
+    api.gate.complete({'tickets': []});
+    await tester.pumpAndSettle();
+    expect(api.calls, 2);
+    expect(find.text('Active clinic'), findsOneWidget);
+    await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+  });
+
   test(
     'booking row uses check-in evidence without hiding terminal statuses',
     () {
@@ -198,4 +223,16 @@ void main() {
       repository.servedTicket.dispose();
     },
   );
+}
+
+class PendingOverview extends OverviewTickets {
+  final gate = Completer<Map<String, dynamic>>();
+  @override
+  Future<Map<String, dynamic>> loadOverview() {
+    if (calls == 0) {
+      calls++;
+      return gate.future;
+    }
+    return super.loadOverview();
+  }
 }

@@ -214,7 +214,9 @@ class _DirectQueueJoinDrawerState extends State<DirectQueueJoinDrawer> {
     unawaited(_load());
   }
 
-  String _message(Object error) => error is ApiException
+  String _message(Object error) => error is TimeoutException
+      ? 'This is taking too long. Check your tickets before trying again.'
+      : error is ApiException
       ? error.message
       : 'Could not join this queue. Please try again.';
   Future<void> _load() async {
@@ -223,11 +225,13 @@ class _DirectQueueJoinDrawerState extends State<DirectQueueJoinDrawer> {
       _error = null;
     });
     try {
-      final result = await widget.repository.joinDirect(
-        tenantSlug: widget.tenantSlug,
-        locationSlug: widget.locationSlug,
-        customerName: widget.customerName,
-      );
+      final result = await widget.repository
+          .joinDirect(
+            tenantSlug: widget.tenantSlug,
+            locationSlug: widget.locationSlug,
+            customerName: widget.customerName,
+          )
+          .timeout(const Duration(seconds: 20));
       if (!mounted) return;
       if (result is JoinEmailVerification) {
         setState(() {

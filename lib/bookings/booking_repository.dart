@@ -88,6 +88,10 @@ class CustomerBooking {
       return 'Check-in unavailable';
     }
     if (data['checkedInAt'] != null) return 'Checked in';
+    if (data['customerSelfCheckInEnabled'] != true) {
+      return 'Waiting for vendor check-in';
+    }
+    if (arrivalPaymentBlocked) return 'Waiting for payment verification';
     final start = startAt;
     if (start == null) return 'Ask the vendor about check-in';
     final opening = start.subtract(const Duration(minutes: 15));
@@ -119,6 +123,7 @@ class CustomerBooking {
   bool get canSubmitProof =>
       requiresManualPayment &&
       isUpcoming &&
+      data['expiredAt'] == null &&
       data['bookingPaymentSource'] != 'group_funded' &&
       data['groupFundedBookingId'] == null &&
       data['checkedInAt'] == null &&

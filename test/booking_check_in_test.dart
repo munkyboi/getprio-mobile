@@ -74,11 +74,35 @@ Future<void> openArrival(
 Future<void> showCheckIn(WidgetTester tester) async {
   await Scrollable.ensureVisible(
     tester.element(find.byKey(const Key('booking-check-in'))),
+    alignment: .5,
   );
   await tester.pumpAndSettle();
 }
 
 void main() {
+  test('staff-only and unpaid bookings never promise timed self-check-in', () {
+    final before = scheduled.subtract(const Duration(days: 5));
+    expect(
+      CustomerBooking({
+        ...arrivalBooking(),
+        'customerSelfCheckInEnabled': false,
+      }).checkInLabel(before),
+      'Waiting for vendor check-in',
+    );
+    expect(
+      CustomerBooking({
+        ...arrivalBooking(),
+        'serviceManualPaymentRequired': true,
+        'paymentStatus': 'unpaid',
+      }).checkInLabel(before),
+      'Waiting for payment verification',
+    );
+    expect(
+      CustomerBooking(arrivalBooking()).checkInLabel(before),
+      startsWith('Check-in available in'),
+    );
+  });
+
   test('arrival uses root schedule with inclusive 15-minute boundaries', () {
     final booking = CustomerBooking({
       ...arrivalBooking(),

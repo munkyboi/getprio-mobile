@@ -67,27 +67,36 @@ class _BookingsPageState extends State<BookingsPage>
     final repository = widget.repository;
     if (repository == null || (more && _loading)) return;
     final request = ++_request;
-    final page = more ? _page + 1 : 1;
+    var page = more ? _page + 1 : 1;
+    final history = _history;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final response = await repository.list(page: page);
-      if (!mounted || request != _request) return;
-      final next = (response['bookings'] as List? ?? [])
-          .whereType<Map<String, dynamic>>()
-          .map(CustomerBooking.new)
-          .toList();
-      final pagination = response['pagination'] as Map<String, dynamic>?;
+      final next = <CustomerBooking>[];
+      var hasMore = false;
+      do {
+        final response = await repository.list(page: page);
+        if (!mounted || request != _request) return;
+        final rows = (response['bookings'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(CustomerBooking.new)
+            .toList();
+        next.addAll(rows);
+        final pagination = response['pagination'] as Map<String, dynamic>?;
+        hasMore = pagination != null
+            ? page < ((pagination['totalPages'] as num?)?.toInt() ?? page)
+            : rows.length == 20;
+        if (!hasMore || rows.any((item) => item.isUpcoming != history)) break;
+        page++;
+      } while (true);
       setState(() {
         if (!more) _items.clear();
         final ids = _items.map((item) => item.id).toSet();
         _items.addAll(next.where((item) => ids.add(item.id)));
         _page = page;
-        _hasMore = pagination != null
-            ? page < ((pagination['totalPages'] as num?)?.toInt() ?? page)
-            : next.length == 20;
+        _hasMore = hasMore;
       });
     } catch (_) {
       if (mounted && request == _request) {
@@ -123,7 +132,11 @@ class _BookingsPageState extends State<BookingsPage>
                 key: const Key('booking-tabs'),
                 labels: const ['Upcoming', 'History'],
                 index: _history ? 1 : 0,
-                onChanged: (index) => setState(() => _history = index == 1),
+                onChanged: (index) {
+                  if (_history == (index == 1)) return;
+                  setState(() => _history = index == 1);
+                  _load();
+                },
               ),
               const SizedBox(height: 20),
               if (widget.repository == null)
