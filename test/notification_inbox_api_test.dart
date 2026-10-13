@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:getprio_mobile/notifications/notification_inbox.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -36,6 +38,7 @@ void main() {
                       'body': 'Proceed to vendor',
                       'createdAt': '2026-10-13T00:00:00Z',
                       'readAt': null,
+                      'kind': 'booking',
                     },
                   ],
                   'unreadCount': 1,
@@ -54,6 +57,7 @@ void main() {
       expect(requests.single.url.path, '/api/v1/account/notifications');
       expect(requests.single.url.queryParameters['cursor'], 'opaque=+cursor');
       expect(snapshot.items.single.unread, isTrue);
+      expect(snapshot.items.single.kind, InboxNotificationKind.booking);
       expect(snapshot.cutoff, 'opaque=+cutoff');
       expect(snapshot.totalCount, 24);
       await api.markRead(snapshot.items.single.id);

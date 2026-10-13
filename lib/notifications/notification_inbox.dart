@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+enum InboxNotificationKind { queue, booking, general }
+
 class InboxNotification {
   const InboxNotification({
     required this.id,
@@ -7,10 +9,12 @@ class InboxNotification {
     required this.body,
     required this.createdAt,
     this.readAt,
+    this.kind = InboxNotificationKind.general,
   });
   final String id, title, body;
   final DateTime createdAt;
   final DateTime? readAt;
+  final InboxNotificationKind kind;
   bool get unread => readAt == null;
 }
 

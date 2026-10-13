@@ -5,6 +5,7 @@ import '../app_theme.dart';
 import 'notification_inbox.dart';
 import '../account/account_settings_repository.dart';
 import 'notification_settings_card.dart';
+import 'notification_date_groups.dart';
 
 class NotificationInboxPage extends StatefulWidget {
   const NotificationInboxPage({
@@ -117,56 +118,107 @@ class _NotificationInboxPageState extends State<NotificationInboxPage> {
                     ],
                   ),
                 ),
-              for (final item in inbox.items) ...[
-                Button.ghost(
-                  key: ValueKey('notification-${item.id}'),
-                  onPressed: busy ? null : () => inbox.markRead(item),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Row(
-                      children: [
-                        Icon(
-                          item.unread ? LucideIcons.bellDot : LucideIcons.bell,
-                          size: 20,
-                          color: item.unread
-                              ? GetPrioTheme.primary
-                              : GetPrioTheme.colors(context).mutedInk,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.title,
-                                style: TextStyle(
-                                  fontWeight: item.unread
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                ),
-                              ),
-                              if (item.body.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(item.body),
-                              ],
-                              const SizedBox(height: 6),
-                              Text(
-                                _time(item.createdAt),
-                                style: Theme.of(context).typography.small,
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (item.unread)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 8),
-                            child: Icon(LucideIcons.circle, size: 8),
-                          ),
-                      ],
+              for (final group in groupInboxNotifications(
+                inbox.items,
+                DateTime.now(),
+              ).entries) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 20, 0, 12),
+                  child: Text(
+                    group.key,
+                    key: ValueKey('notification-group-${group.key}'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: GetPrioTheme.colors(context).mutedInk,
                     ),
                   ),
                 ),
-                const Divider(),
+                for (final item in group.value) ...[
+                  DecoratedBox(
+                    key: ValueKey('notification-background-${item.id}'),
+                    decoration: BoxDecoration(
+                      color: item.unread
+                          ? GetPrioTheme.primary.withValues(
+                              alpha: GetPrioTheme.colors(context).dark
+                                  ? 0.12
+                                  : 0.06,
+                            )
+                          : null,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Button.ghost(
+                      key: ValueKey('notification-${item.id}'),
+                      onPressed: busy ? null : () => inbox.markRead(item),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              switch (item.kind) {
+                                InboxNotificationKind.queue =>
+                                  LucideIcons.ticket,
+                                InboxNotificationKind.booking =>
+                                  LucideIcons.calendarDays,
+                                InboxNotificationKind.general =>
+                                  LucideIcons.bell,
+                              },
+                              size: 20,
+                              color: item.unread
+                                  ? GetPrioTheme.primary
+                                  : GetPrioTheme.colors(context).mutedInk,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.title,
+                                    style: TextStyle(
+                                      fontWeight: item.unread
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (item.body.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(item.body),
+                                  ],
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _time(item.createdAt),
+                                    style: Theme.of(context).typography.small,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (item.unread)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: SizedBox(
+                                  key: ValueKey(
+                                    'notification-unread-${item.id}',
+                                  ),
+                                  width: 8,
+                                  height: 8,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: GetPrioTheme.primary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(),
+                ],
               ],
               if (inbox.nextCursor != null)
                 GhostButton(

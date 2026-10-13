@@ -49,6 +49,11 @@ class RestNotificationInboxApi implements NotificationInboxApi {
             body: row['body'],
             createdAt: created,
             readAt: read,
+            kind: switch (row['kind']) {
+              'queue' => InboxNotificationKind.queue,
+              'booking' => InboxNotificationKind.booking,
+              _ => InboxNotificationKind.general,
+            },
           );
         })
         .toList(growable: false);

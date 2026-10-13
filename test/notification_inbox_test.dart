@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:getprio_mobile/app_theme.dart';
+
+import 'package:getprio_mobile/notifications/notification_date_groups.dart';
+
 import 'package:getprio_mobile/account/account_settings_repository.dart';
 import 'package:getprio_mobile/notifications/notification_settings_card.dart';
 
@@ -40,6 +44,7 @@ class InboxApi implements NotificationInboxApi {
       body: item.body,
       createdAt: item.createdAt,
       readAt: DateTime.utc(2026),
+      kind: item.kind,
     );
   }
 
@@ -66,6 +71,125 @@ InboxNotification notification(String id) => InboxNotification(
 );
 
 void main() {
+  test(
+    'date groups are exclusive, newest first, and use calendar week boundaries',
+    () {
+      InboxNotification dated(String id, int day) => InboxNotification(
+        id: id,
+        title: id,
+        body: '',
+        createdAt: DateTime(2026, 10, day, 12),
+      );
+      final groups = groupInboxNotifications([
+        dated('old', 1),
+        dated('week', 12),
+        dated('today', 14),
+        dated('yesterday', 13),
+        dated('last', 9),
+      ], DateTime(2026, 10, 14, 20));
+      expect(groups.keys, [
+        'Today',
+        'Yesterday',
+        'This week',
+        'Last week',
+        'Earlier',
+      ]);
+      expect(groups.values.expand((rows) => rows).map((row) => row.id), [
+        'today',
+        'yesterday',
+        'week',
+        'last',
+        'old',
+      ]);
+      final monday = groupInboxNotifications([
+        dated('sunday', 11),
+        dated('saturday', 10),
+      ], DateTime(2026, 10, 12));
+      expect(monday.keys, ['Yesterday', 'Last week']);
+      expect(groupInboxNotifications([], DateTime(2026)), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'unread rows have filled dots and tint; category icons persist after reading',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final now = DateTime.now();
+      final api = InboxApi()
+        ..rows.addAll([
+          InboxNotification(
+            id: 'queue',
+            title: 'Queue update',
+            body: '',
+            createdAt: now,
+            kind: InboxNotificationKind.queue,
+          ),
+          InboxNotification(
+            id: 'booking',
+            title: 'Booking update',
+            body: '',
+            createdAt: now,
+            kind: InboxNotificationKind.booking,
+          ),
+        ]);
+      final inbox = NotificationInboxController(api);
+      await tester.pumpWidget(
+        ShadcnApp(home: NotificationInboxPage(controller: inbox)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('notification-group-Today')),
+        findsOneWidget,
+      );
+      expect(find.byIcon(LucideIcons.ticket), findsOneWidget);
+      expect(find.byIcon(LucideIcons.calendarDays), findsOneWidget);
+      final background = find.byKey(
+        const ValueKey('notification-background-queue'),
+      );
+      expect(
+        (tester.widget<DecoratedBox>(background).decoration as BoxDecoration)
+            .color,
+        isNotNull,
+      );
+      final dot = find.descendant(
+        of: find.byKey(const ValueKey('notification-unread-queue')),
+        matching: find.byType(DecoratedBox),
+      );
+      final decoration =
+          tester.widget<DecoratedBox>(dot).decoration as BoxDecoration;
+      expect(decoration.shape, BoxShape.circle);
+      expect(decoration.border, isNull);
+      expect(decoration.color, isNotNull);
+      await tester.pumpWidget(
+        ShadcnApp(
+          theme: GetPrioTheme.dark(),
+          home: NotificationInboxPage(controller: inbox),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final darkTint =
+          (tester.widget<DecoratedBox>(background).decoration as BoxDecoration)
+              .color!;
+      expect(darkTint.a, closeTo(0.12, 0.01));
+
+      await tester.tap(find.byKey(const ValueKey('notification-queue')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('notification-unread-queue')),
+        findsNothing,
+      );
+      expect(
+        (tester.widget<DecoratedBox>(background).decoration as BoxDecoration)
+            .color,
+        isNull,
+      );
+      expect(find.byIcon(LucideIcons.ticket), findsOneWidget);
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+      inbox.dispose();
+    },
+  );
+
   testWidgets(
     'settings card precedes actions and summary; saving failures retain preference',
     (tester) async {
