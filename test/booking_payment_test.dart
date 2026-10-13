@@ -79,6 +79,34 @@ class PaymentApi implements BookingApi, BookingProofApi {
 }
 
 void main() {
+  test('selection totals preserve each currency and booking quantities', () {
+    const services = [
+      BookingService(
+        slug: 'a',
+        name: 'A',
+        currency: 'USD',
+        priceAmountCents: 10000,
+      ),
+      BookingService(
+        slug: 'b',
+        name: 'B',
+        currency: 'PHP',
+        priceAmountCents: 20000,
+      ),
+      BookingService(
+        slug: 'c',
+        name: 'C',
+        currency: 'USD',
+        priceAmountCents: 5000,
+      ),
+    ];
+    expect(bookingServiceTotal(services), 'USD 150.00 + ₱200.00');
+    expect(
+      bookingServiceTotal(services, quantities: {'a': 2}),
+      'USD 250.00 + ₱200.00',
+    );
+  });
+
   test('authoritative expiry blocks proof upload before private receipt leaves device', () async {
     final api = PaymentApi();
     final booking = CustomerBooking({
@@ -99,6 +127,27 @@ void main() {
     expect(api.uploads, 0);
     expect(api.submissions, 0);
   });
+
+  for (final settled in [
+    {'paymentStatus': 'paid'},
+    {'paymentVerifiedAt': '2026-10-13T00:00:00Z'},
+  ]) {
+    test('settled payment blocks private upload $settled', () async {
+      final api = PaymentApi();
+      await expectLater(
+        BookingRepository(api).submitPaymentProof(
+          CustomerBooking({...paymentBooking(), ...settled}),
+          reference: 'ref',
+          bytes: [1, 2],
+          contentType: 'image/png',
+          fileName: 'receipt.png',
+        ),
+        throwsStateError,
+      );
+      expect(api.uploads, 0);
+      expect(api.submissions, 0);
+    });
+  }
 
   testWidgets(
     'new booking without manual payment does not open payment drawer',
@@ -186,6 +235,9 @@ void main() {
   test('manual evidence eligibility follows the server lifecycle', () {
     expect(CustomerBooking(paymentBooking()).canSubmitProof, isTrue);
     for (final change in [
+      {'paymentStatus': 'paid'},
+      {'paymentStatus': 'verified'},
+      {'paymentVerifiedAt': '2026-10-13T00:00:00Z'},
       {'status': 'expired'},
       {'status': 'canceled'},
       {'checkedInAt': '2030-01-01'},
@@ -264,13 +316,17 @@ void main() {
         ..gate = Completer<void>()
         ..fail = true;
       CustomerBooking? updated;
+      var canceled = false;
       await tester.pumpWidget(
         ShadcnApp(
           home: Scaffold(
-            child: SingleChildScrollView(
+            child: SizedBox(
+              height: 600,
               child: BookingPayment(
                 repository: BookingRepository(api),
                 booking: CustomerBooking(paymentBooking()),
+                fixedFooter: true,
+                onCancel: () => canceled = true,
                 pickReceipt: () async => XFile.fromData(
                   Uint8List.fromList([1, 2, 3]),
                   name: 'receipt.png',
@@ -299,6 +355,17 @@ void main() {
       await tester.tap(submit);
       await tester.pump();
       expect(api.submissions, 1);
+      expect(
+        tester.widget<PopScope>(find.byType(PopScope).last).canPop,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
+            .onPressed,
+        isNull,
+      );
+      expect(canceled, isFalse);
       expect(
         tester
             .widget<PrimaryButton>(

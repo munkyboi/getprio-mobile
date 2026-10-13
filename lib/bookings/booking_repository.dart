@@ -1,5 +1,27 @@
 import '../queue/auth_queue_api.dart';
 
+/// Totals remain separate when selected services use different currencies.
+String bookingServiceTotal(
+  Iterable<BookingService> services, {
+  Map<String, int> quantities = const {},
+}) {
+  final totals = <String, int>{};
+  for (final service in services) {
+    final amount = service.priceAmountCents * (quantities[service.slug] ?? 1);
+    totals.update(
+      service.currency,
+      (sum) => sum + amount,
+      ifAbsent: () => amount,
+    );
+  }
+  return totals.entries
+      .map(
+        (entry) =>
+            '${entry.key == 'PHP' ? '₱' : '${entry.key} '}${(entry.value / 100).toStringAsFixed(2)}',
+      )
+      .join(' + ');
+}
+
 class BookingService {
   const BookingService({
     required this.slug,
@@ -124,6 +146,9 @@ class CustomerBooking {
       requiresManualPayment &&
       isUpcoming &&
       data['expiredAt'] == null &&
+      paymentStatus != 'paid' &&
+      paymentStatus != 'verified' &&
+      data['paymentVerifiedAt'] == null &&
       data['bookingPaymentSource'] != 'group_funded' &&
       data['groupFundedBookingId'] == null &&
       data['checkedInAt'] == null &&

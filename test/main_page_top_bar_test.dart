@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:getprio_mobile/notifications/notification_inbox.dart';
+import 'package:getprio_mobile/notifications/notification_inbox_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart';
 import 'package:getprio_mobile/account/ticket_repository.dart';
@@ -37,6 +41,35 @@ class OverviewApi implements AccountQueueApi {
 
 void main() {
   testWidgets(
+    'closing inbox releases navigation guard even while refresh is stalled',
+    (tester) async {
+      final api = InboxApi();
+      await tester.pumpWidget(
+        ShadcnApp(home: CustomerShell(notificationInboxApi: api)),
+      );
+      await tester.pumpAndSettle();
+      api.gate = Completer<NotificationInboxSnapshot>();
+      await tester.tap(find.byKey(const Key('main-notification-center')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byType(GetPrioBackButton));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(NotificationInboxPage), findsNothing);
+      await tester.tap(find.byKey(const Key('main-notification-center')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(NotificationInboxPage), findsOneWidget);
+      api.gate!.complete(
+        const NotificationInboxSnapshot(items: [], unreadCount: 0, cutoff: 'x'),
+      );
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    },
+  );
+
+  testWidgets(
     'silent queue signals do not fetch inbox and visible push bursts coalesce',
     (tester) async {
       final api = InboxApi();
@@ -53,6 +86,7 @@ void main() {
         notificationId: 'silent',
         silent: true,
       );
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(api.loads, 1);
       for (var i = 0; i < 3; i++) {

@@ -496,6 +496,42 @@ void main() {
     await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
   });
 
+  for (final status in ['cancelled', 'skipped', 'expired', 'unserved']) {
+    testWidgets('stale live snapshot cannot revive $status account ticket', (
+      tester,
+    ) async {
+      final terminal = {
+        'id': 'active-1',
+        'lookupCode': 'A0C18AF',
+        'ticketNumber': 'AH002',
+        'tenantSlug': 'city-clinic',
+        'status': status,
+      };
+      await tester.pumpWidget(
+        ShadcnApp(
+          home: TicketDetailsPage(
+            ticket: QueueTicket.fromJson(terminal),
+            ticketRepository: QueueTicketRepository(
+              FakeAccountQueueApi()..completedTicket = terminal,
+            ),
+            queueRepository: QueueRepository(
+              FakeQueueApi(
+                snapshot: {
+                  'focusTicket': {...terminal, 'status': 'called'},
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+      expect(find.text('CALLED'), findsNothing);
+      expect(find.byKey(const Key('ticket-details-refresh')), findsNothing);
+      await tester.pumpWidget(const ShadcnApp(home: SizedBox()));
+    });
+  }
+
   for (final completionSource in ['snapshot', 'account']) {
     testWidgets('thanks the customer after completion from $completionSource', (
       tester,

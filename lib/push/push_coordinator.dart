@@ -358,19 +358,7 @@ class FirebaseMessagingPort implements PushMessagingPort {
   }
 
   Future<RemoteMessage> _presentForegroundMessage(RemoteMessage message) async {
-    final signal = _tryParseSignal(message.data);
-    if (signal != null) {
-      try {
-        await _foregroundPresenter.show(
-          notificationId: signal.notificationId,
-          ticketRef: signal.ticketRef,
-          title: message.notification?.title,
-          body: message.notification?.body,
-        );
-      } catch (_) {
-        // A banner failure must not prevent the ticket refresh signal.
-      }
-    }
+    await presentForegroundPush(message, _foregroundPresenter);
     return message;
   }
 
@@ -384,6 +372,25 @@ class FirebaseMessagingPort implements PushMessagingPort {
       }
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
+  }
+}
+
+/// Silent signals refresh data without creating a user-visible fallback banner.
+Future<void> presentForegroundPush(
+  RemoteMessage message,
+  ForegroundNotificationPresenter presenter,
+) async {
+  final signal = _tryParseSignal(message.data);
+  if (signal == null || signal.silent) return;
+  try {
+    await presenter.show(
+      notificationId: signal.notificationId,
+      ticketRef: signal.ticketRef,
+      title: message.notification?.title,
+      body: message.notification?.body,
+    );
+  } catch (_) {
+    // A banner failure must not prevent the ticket refresh signal.
   }
 }
 

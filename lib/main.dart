@@ -2124,7 +2124,7 @@ class _CustomerShellState extends State<CustomerShell>
     _inboxNavigator = navigator;
     try {
       await navigator.push(route);
-      if (mounted && identical(_inbox, inbox)) await inbox.refresh();
+      if (mounted && identical(_inbox, inbox)) unawaited(inbox.refresh());
     } finally {
       if (identical(_inboxRoute, route)) {
         _inboxOpen = false;
@@ -3932,6 +3932,10 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
     );
   }
 
+  String _selectedServiceTotal() => bookingServiceTotal(
+    _services.where((service) => _selectedServices.contains(service.slug)),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -4073,7 +4077,7 @@ class _VendorProfileViewState extends State<_VendorProfileView> {
                       Padding(
                         padding: const EdgeInsets.only(top: 8, bottom: 12),
                         child: Text(
-                          '${_selectedServices.length} services selected · ₱${(_services.where((service) => _selectedServices.contains(service.slug)).fold<int>(0, (sum, service) => sum + service.priceAmountCents) / 100).toStringAsFixed(2)}',
+                          '${_selectedServices.length} services selected · ${_selectedServiceTotal()}',
                         ).bold(),
                       ),
                   ],
@@ -5641,13 +5645,12 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
       locationSlug: ticket.locationSlug,
       lookupCode: ticket.lookupCode,
     );
-    // A delayed live snapshot must not revive a completed account ticket.
-    final accountCompleted =
-        ticket.status == TicketStatus.served || ticket.isServiceCompleted;
-    final snapshotCompleted =
-        snapshot.focusTicket?.status == TicketStatus.served ||
-        snapshot.focusTicket?.isServiceCompleted == true;
-    final snapshotTicket = accountCompleted && !snapshotCompleted
+    // Account terminal state is authoritative even if the public snapshot lags.
+    final accountTerminal =
+        !ticket.isActive ||
+        ticket.isServiceCompleted ||
+        ticket.isServiceInterrupted;
+    final snapshotTicket = accountTerminal
         ? ticket
         : snapshot.focusTicket?.copyWith(
                 vendorName: ticket.vendorName,

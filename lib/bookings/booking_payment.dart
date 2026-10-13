@@ -18,6 +18,8 @@ Future<CustomerBooking?> openBookingPaymentDrawer({
   context: context,
   position: OverlayPosition.bottom,
   useSafeArea: false,
+  draggable: false,
+  barrierDismissible: false,
   builder: (drawerContext) {
     onOpened?.call(drawerContext);
     return Container(
@@ -29,6 +31,7 @@ Future<CustomerBooking?> openBookingPaymentDrawer({
           repository: repository,
           booking: booking,
           fixedFooter: true,
+          onCancel: () => closeDrawer(drawerContext),
           onSubmitted: (updated) => closeDrawer(drawerContext, updated),
         ),
       ),
@@ -45,12 +48,14 @@ class BookingPayment extends StatefulWidget {
     required this.onSubmitted,
     this.pickReceipt,
     this.fixedFooter = false,
+    this.onCancel,
   });
   final BookingRepository repository;
   final CustomerBooking booking;
   final ValueChanged<CustomerBooking> onSubmitted;
   final Future<XFile?> Function()? pickReceipt;
   final bool fixedFooter;
+  final VoidCallback? onCancel;
   @override
   State<BookingPayment> createState() => _BookingPaymentState();
 }
@@ -238,27 +243,40 @@ class _BookingPaymentState extends State<BookingPayment> {
       ],
     );
     if (!widget.fixedFooter) return content;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: KeyboardAwareScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            child: content,
-          ),
-        ),
-        Container(
-          key: const Key('booking-payment-footer'),
-          color: appDrawerBackground(context),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-              child: _submitAction(),
+    return PopScope(
+      canPop: !_busy,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: KeyboardAwareScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: content,
             ),
           ),
-        ),
-      ],
+          Container(
+            key: const Key('booking-payment-footer'),
+            color: appDrawerBackground(context),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _submitAction(),
+                    if (widget.onCancel != null)
+                      TextButton(
+                        onPressed: _busy ? null : widget.onCancel,
+                        child: const Text('Cancel'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
