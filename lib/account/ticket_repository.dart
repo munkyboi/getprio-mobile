@@ -73,7 +73,8 @@ class QueueTicketRepository {
   void _observeTickets(List<QueueTicket> tickets) {
     for (final ticket in tickets) {
       if (ticket.isActive) _observedActive.add(ticket.lookupCode);
-      if ((ticket.status == TicketStatus.served || ticket.isServiceCompleted) &&
+      if (!ticket.isInService &&
+          (ticket.status == TicketStatus.served || ticket.isServiceCompleted) &&
           _observedActive.remove(ticket.lookupCode)) {
         servedTicket.value = ticket;
       }

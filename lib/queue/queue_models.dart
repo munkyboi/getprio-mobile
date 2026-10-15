@@ -15,7 +15,9 @@ class CustomerQueueLifecycle {
   static CustomerQueueLifecycle? fromJson(Object? value) {
     if (value is! Map<String, dynamic> ||
         value['version'] is! int ||
-        value['version'] != 1) {
+        value['version'] != 1 ||
+        !value.containsKey('resourceWait') ||
+        value['resourceWait'] != null) {
       return null;
     }
     final state = switch (value['state']) {
@@ -200,7 +202,9 @@ class QueueTicket {
         CustomerQueueState.recovery =>
           status == TicketStatus.skipped ? 'Skipped' : 'Needs attention',
         CustomerQueueState.terminal =>
-          status.isActive ? 'Closed' : _legacyDisplayStatusLabel,
+          isServiceCompleted || isServiceInterrupted || !status.isActive
+              ? _legacyDisplayStatusLabel
+              : 'Closed',
       };
     }
     return _legacyDisplayStatusLabel;

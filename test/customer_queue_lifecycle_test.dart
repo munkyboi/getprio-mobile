@@ -24,6 +24,46 @@ Map<String, dynamic> projected(String state, {String status = 'called'}) => {
 };
 
 void main() {
+  test(
+    'served notification waits for unfinished service to actually end',
+    () async {
+      final api = _LifecycleAccountApi()..ticket = projected('called');
+      final repository = QueueTicketRepository(api);
+      await repository.loadOverview();
+      api.ticket = {
+        ...projected('in_service', status: 'served'),
+        'serviceStartedAt': '2026-10-15T01:00:00Z',
+      };
+      await repository.loadOverview();
+      expect(repository.servedTicket.value, isNull);
+      api.ticket = {
+        ...projected('terminal', status: 'served'),
+        'serviceStartedAt': '2026-10-15T01:00:00Z',
+        'serviceEndedAt': '2026-10-15T01:20:00Z',
+        'serviceOutcome': 'completed',
+      };
+      await repository.loadOverview();
+      expect(repository.servedTicket.value?.displayStatusLabel, 'Completed');
+    },
+  );
+
+  test(
+    'called raw status retains completed and interrupted outcome labels',
+    () {
+      for (final outcome in ['completed', 'interrupted']) {
+        final ticket = QueueTicket.fromJson({
+          ...projected('terminal'),
+          'serviceOutcome': outcome,
+        });
+        expect(
+          ticket.displayStatusLabel,
+          outcome == 'completed' ? 'Completed' : 'Interrupted',
+        );
+        expect(ticket.isActive, isFalse);
+      }
+    },
+  );
+
   testWidgets('unfinished service is not shown as served after queue closure', (
     tester,
   ) async {
@@ -194,6 +234,9 @@ void main() {
         {'version': 1.0, 'state': 'in_service'},
         {'version': 1, 'state': 'published'},
         {'version': 1, 'state': 'future_state'},
+        {'version': 1, 'state': 'in_service'},
+        {'version': 1, 'state': 'in_service', 'resourceWait': {}},
+        {'version': 1, 'state': 'in_service', 'resourceWait': 'future_reason'},
       ]) {
         final ticket = QueueTicket.fromJson({
           ...projected('called'),
@@ -233,4 +276,17 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+}
+
+class _LifecycleAccountApi implements AccountQueueApi {
+  Map<String, dynamic> ticket = {};
+  @override
+  Future<Map<String, dynamic>> loadOverview() async => {
+    'tickets': [ticket],
+  };
+  @override
+  Future<Map<String, dynamic>> loadHistory({
+    required int page,
+    required int limit,
+  }) async => {'tickets': []};
 }
