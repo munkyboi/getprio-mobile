@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -20,6 +21,15 @@ import 'booking_payment_test.dart' show PaymentApi, paymentBooking;
 Uint8List largeImage() {
   final encoded = img.encodePng(img.Image(width: 120, height: 80));
   return Uint8List(300 * 1024)..setRange(0, encoded.length, encoded);
+}
+
+Uint8List noisyImage() {
+  final image = img.Image(width: 360, height: 240);
+  final random = Random(42);
+  for (final pixel in image) {
+    pixel.setRgb(random.nextInt(256), random.nextInt(256), random.nextInt(256));
+  }
+  return img.encodePng(image);
 }
 
 class ProfilePolicyApi extends FakeAccountProfileApi {
@@ -88,6 +98,78 @@ class ReceiptPolicyApi extends PaymentApi {
 
 void main() {
   test(
+    'both upload paths fit real encoded fixtures to each current byte limit',
+    () async {
+      final original = noisyImage();
+      final profile = ProfilePolicyApi();
+      final receipt = ReceiptPolicyApi();
+      final profileRepo = AccountProfileRepository(profile);
+      final bookingRepo = BookingRepository(receipt);
+      expect(original.length, greaterThan(100000));
+      for (final limit in [100000, 64000]) {
+        profile.limit = receipt.limit = limit;
+        await profileRepo.uploadAvatar(
+          fileName: 'photo.png',
+          contentType: 'image/png',
+          bytes: original,
+        );
+        await bookingRepo.submitPaymentProof(
+          CustomerBooking(paymentBooking()),
+          reference: 'reference',
+          bytes: original,
+          contentType: 'image/png',
+          fileName: 'receipt.png',
+        );
+        for (final bytes in [profile.uploaded!, receipt.uploaded!]) {
+          expect(bytes.length, inInclusiveRange(1, limit));
+          final decoded = img.decodeJpg(Uint8List.fromList(bytes))!;
+          expect(decoded.width, 360);
+          expect(decoded.height, 240);
+        }
+        expect(profile.uploadedType, 'image/jpeg');
+        expect(receipt.uploadedType, 'image/jpeg');
+        expect(receipt.submitted!['sizeBytes'], receipt.uploaded!.length);
+      }
+      expect(profile.loads, 2);
+      expect(receipt.loads, 2);
+    },
+  );
+
+  test('cannot-fit images stop both paths before any upload', () async {
+    final bytes = noisyImage();
+    final profile = ProfilePolicyApi()..limit = 1024;
+    final receipt = ReceiptPolicyApi()..limit = 1024;
+    final cannotFit = throwsA(
+      isA<ArgumentError>().having(
+        (error) => error.message,
+        'message',
+        contains('cannot fit within 1024 bytes'),
+      ),
+    );
+    await expectLater(
+      AccountProfileRepository(profile).uploadAvatar(
+        fileName: 'photo.png',
+        contentType: 'image/png',
+        bytes: bytes,
+      ),
+      cannotFit,
+    );
+    await expectLater(
+      BookingRepository(receipt).submitPaymentProof(
+        CustomerBooking(paymentBooking()),
+        reference: 'reference',
+        bytes: bytes,
+        contentType: 'image/png',
+        fileName: 'receipt.png',
+      ),
+      cannotFit,
+    );
+    expect(profile.uploads, 0);
+    expect(receipt.uploads, 0);
+    expect(receipt.submitted, isNull);
+  });
+
+  test(
     'both REST adapters fetch the authenticated versioned policy endpoint',
     () async {
       final auth = AuthRepository(
@@ -121,7 +203,7 @@ void main() {
   );
 
   test('policy validates exact byte limits rather than falling back', () {
-    for (final value in [null, 0, 1000, 204800.0, '204800', 8193 * 1024]) {
+    for (final value in [null, 0, -1, 204800.0, '204800']) {
       expect(
         () => ImageUploadPolicy.fromJson({'maxImageBytes': value}),
         throwsArgumentError,
@@ -131,10 +213,13 @@ void main() {
       ImageUploadPolicy.fromJson({'maxImageBytes': 200000}).maxImageBytes,
       200000,
     );
-    expect(
-      ImageUploadPolicy.fromJson({'maxImageBytes': 1024}).maxImageBytes,
-      1024,
-    );
+    // The server owns the permitted policy range; clients use exact bytes.
+    for (final value in [1000, 1024, 8193 * 1024]) {
+      expect(
+        ImageUploadPolicy.fromJson({'maxImageBytes': value}).maxImageBytes,
+        value,
+      );
+    }
     expect(
       ImageUploadPolicy.fromJson({'maxImageBytes': 8 * 1024 * 1024})
           .maxImageBytes,

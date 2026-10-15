@@ -14,7 +14,7 @@ Future<UploadImage> prepareUploadImage(
   Uint8List bytes, {
   required String fileName,
   required String contentType,
-  int maxBytes = 200 * 1024,
+  required int maxBytes,
 }) async {
   if (!['image/jpeg', 'image/png', 'image/webp'].contains(contentType)) {
     throw ArgumentError('Choose a JPEG, PNG, or WebP image.');
@@ -24,11 +24,17 @@ Future<UploadImage> prepareUploadImage(
   }
   if (maxBytes < 1) throw ArgumentError('Invalid image size limit.');
   final compressed = await compute(_compress, (bytes, maxBytes, contentType));
+  final output = bytes.length <= maxBytes ? bytes : compressed;
+  if (output.isEmpty || output.length > maxBytes) {
+    throw ArgumentError(
+      'Could not prepare an image within the current upload limit. Choose another image.',
+    );
+  }
   if (bytes.length <= maxBytes) {
-    return UploadImage(bytes, fileName, contentType);
+    return UploadImage(output, fileName, contentType);
   }
   final stem = fileName.replaceFirst(RegExp(r'\.[^.]+$'), '');
-  return UploadImage(compressed, '$stem.jpg', 'image/jpeg');
+  return UploadImage(output, '$stem.jpg', 'image/jpeg');
 }
 
 Uint8List _compress((Uint8List, int, String) input) {
@@ -96,6 +102,6 @@ Uint8List _validateAndCompress((Uint8List, int, String) input) {
     if (longest <= edge && edge <= 1024) break;
   }
   throw ArgumentError(
-    'This image cannot fit within ${maxBytes ~/ 1024} KB at a usable quality. Choose a clearer or cropped image.',
+    'This image cannot fit within $maxBytes bytes at a usable quality. Choose a clearer or cropped image.',
   );
 }
