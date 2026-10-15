@@ -51,11 +51,16 @@ void main() {
         .toList();
     expect(owned.map((ticket) => ticket.id).toSet(), allowedIds);
 
-    final list = await client.get(
-      '/api/mobile/tickets',
-      queryParameters: {'limit': '100'},
-    );
-    final rawList = (list['tickets'] as List).whereType<Map<String, dynamic>>();
+    final rawList = <Map<String, dynamic>>[];
+    for (final view in ['active', 'history']) {
+      final list = await client.get(
+        '/api/mobile/tickets',
+        queryParameters: {'view': view, 'limit': '100'},
+      );
+      rawList.addAll(
+        (list['tickets'] as List).whereType<Map<String, dynamic>>(),
+      );
+    }
     for (final ticket in owned) {
       expect(
         rawList.any(
