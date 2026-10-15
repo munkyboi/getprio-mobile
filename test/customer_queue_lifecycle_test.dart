@@ -24,6 +24,25 @@ Map<String, dynamic> projected(String state, {String status = 'called'}) => {
 };
 
 void main() {
+  testWidgets('unfinished service is not shown as served after queue closure', (
+    tester,
+  ) async {
+    final ticket = QueueTicket.fromJson({
+      ...projected('in_service', status: 'served'),
+      'serviceStartedAt': '2026-10-15T01:00:00Z',
+      'serviceEndedAt': null,
+    });
+    await tester.pumpWidget(ShadcnApp(home: TicketDetailsPage(ticket: ticket)));
+    await tester.pumpAndSettle();
+    expect(find.text('Your service is in progress.'), findsOneWidget);
+    expect(find.text('This ticket has already been served.'), findsNothing);
+    expect(find.textContaining('Thank you for your business'), findsNothing);
+    expect(ticket.isActive, isFalse);
+    expect(ticket.canBeCancelled, isFalse);
+    expect(find.byKey(const Key('ticket-qr-fab')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final source in ['account', 'live fallback', 'mobile']) {
     test('$source transport retains customer lifecycle', () async {
       final auth = AuthRepository(
