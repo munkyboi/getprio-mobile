@@ -209,6 +209,7 @@ Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
     'serviceStartedAt': ticket['service_started_at'],
     'serviceEndedAt': ticket['service_ended_at'],
     'serviceOutcome': ticket['service_outcome'],
+    'queueLifecycle': ticket['queue_lifecycle'],
     'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
     'tenantSlug':
         ticket['tenant_slug'] ??
@@ -319,6 +320,7 @@ class RestAccountQueueApi
                 'serviceEndedAt',
                 'serviceOutcome',
                 'statusReason',
+                'queueLifecycle',
               ])
                 if (focus.containsKey(key)) key: focus[key],
             };
