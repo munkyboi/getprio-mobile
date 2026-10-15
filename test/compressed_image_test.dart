@@ -19,6 +19,7 @@ void main() {
           bytes,
           fileName: 'photo.png',
           contentType: 'image/png',
+          maxBytes: 200 * 1024,
         ),
         throwsArgumentError,
       );
@@ -29,6 +30,7 @@ void main() {
         img.encodePng(image),
         fileName: 'animated.png',
         contentType: 'image/png',
+        maxBytes: 200 * 1024,
       ),
       throwsArgumentError,
     );
@@ -40,6 +42,7 @@ void main() {
       bytes,
       fileName: 'receipt.png',
       contentType: 'image/png',
+      maxBytes: 200 * 1024,
     );
     expect(result.bytes, same(bytes));
     expect(result.fileName, 'receipt.png');
@@ -64,6 +67,7 @@ void main() {
         bytes,
         fileName: 'receipt.final.png',
         contentType: 'image/png',
+        maxBytes: 200 * 1024,
       );
       expect(result.bytes.length, lessThanOrEqualTo(200 * 1024));
       expect(result.contentType, 'image/jpeg');
@@ -86,6 +90,7 @@ void main() {
         padded,
         fileName: 'photo.jpeg',
         contentType: 'image/jpeg',
+        maxBytes: 200 * 1024,
       );
       final decoded = img.decodeJpg(result.bytes)!;
       expect(decoded.height, greaterThan(decoded.width));
@@ -108,6 +113,7 @@ void main() {
       img.encodePng(source),
       fileName: 'transparent.png',
       contentType: 'image/png',
+      maxBytes: 200 * 1024,
     );
     final decoded = img.decodeJpg(result.bytes)!;
     expect(decoded.getPixel(350, 350).r, greaterThanOrEqualTo(250));
@@ -121,6 +127,7 @@ void main() {
         Uint8List(210 * 1024),
         fileName: 'bad.jpg',
         contentType: 'image/jpeg',
+        maxBytes: 200 * 1024,
       ),
       throwsArgumentError,
     );
@@ -129,6 +136,7 @@ void main() {
         Uint8List(1),
         fileName: 'bad.heic',
         contentType: 'image/heic',
+        maxBytes: 200 * 1024,
       ),
       throwsArgumentError,
     );
@@ -137,6 +145,7 @@ void main() {
         Uint8List(9 * 1024 * 1024),
         fileName: 'huge.jpg',
         contentType: 'image/jpeg',
+        maxBytes: 200 * 1024,
       ),
       throwsArgumentError,
     );
