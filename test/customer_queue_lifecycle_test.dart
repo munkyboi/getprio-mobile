@@ -83,7 +83,12 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  for (final source in ['account', 'live fallback', 'mobile']) {
+  for (final source in [
+    'account',
+    'live fallback',
+    'live terminal',
+    'mobile',
+  ]) {
     test('$source transport retains customer lifecycle', () async {
       final auth = AuthRepository(
         api: FakeAuthApiForTransport(),
@@ -139,8 +144,11 @@ void main() {
           return http.Response(
             jsonEncode({
               'focusTicket': {
-                ...projected('in_service'),
-                'serviceStartedAt': '2026-10-15T01:00:00Z',
+                ...projected(
+                  source == 'live terminal' ? 'terminal' : 'in_service',
+                ),
+                if (source != 'live terminal')
+                  'serviceStartedAt': '2026-10-15T01:00:00Z',
               },
             }),
             200,
@@ -153,9 +161,18 @@ void main() {
         RestAccountQueueApi(client, sandbox: source == 'mobile'),
       );
       final ticket = (await repository.loadOverview()).single;
-      expect(ticket.queueLifecycle?.state, CustomerQueueState.inService);
-      expect(ticket.displayStatusLabel, 'In service');
-      expect(ticket.needsArrival, isFalse);
+      expect(
+        ticket.queueLifecycle?.state,
+        source == 'live terminal'
+            ? CustomerQueueState.terminal
+            : CustomerQueueState.inService,
+      );
+      expect(
+        ticket.displayStatusLabel,
+        source == 'live terminal' ? 'Closed' : 'In service',
+      );
+      // Presentation enrichment does not manufacture command eligibility.
+      expect(ticket.needsArrival, source == 'live terminal');
     });
   }
 

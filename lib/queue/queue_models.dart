@@ -132,7 +132,10 @@ class QueueTicket {
 
   // Queue lifecycle and actual service timing remain separate API facts.
   int get progressRank =>
-      !status.isActive || isServiceCompleted || isServiceInterrupted
+      queueLifecycle?.state == CustomerQueueState.terminal ||
+          !status.isActive ||
+          isServiceCompleted ||
+          isServiceInterrupted
       ? 4
       : serviceStartedAt != null
       ? 3
