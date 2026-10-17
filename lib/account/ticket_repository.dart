@@ -73,7 +73,8 @@ class QueueTicketRepository {
   void _observeTickets(List<QueueTicket> tickets) {
     for (final ticket in tickets) {
       if (ticket.isActive) _observedActive.add(ticket.lookupCode);
-      if ((ticket.status == TicketStatus.served || ticket.isServiceCompleted) &&
+      if (!ticket.isInService &&
+          (ticket.status == TicketStatus.served || ticket.isServiceCompleted) &&
           _observedActive.remove(ticket.lookupCode)) {
         servedTicket.value = ticket;
       }
@@ -209,6 +210,7 @@ Map<String, dynamic> _accountTicketJson(Map<String, dynamic> ticket) {
     'serviceStartedAt': ticket['service_started_at'],
     'serviceEndedAt': ticket['service_ended_at'],
     'serviceOutcome': ticket['service_outcome'],
+    'queueLifecycle': ticket['queue_lifecycle'],
     'vendorName': profileJson['queue_name'] ?? ticket['display_label'],
     'tenantSlug':
         ticket['tenant_slug'] ??
@@ -319,6 +321,7 @@ class RestAccountQueueApi
                 'serviceEndedAt',
                 'serviceOutcome',
                 'statusReason',
+                'queueLifecycle',
               ])
                 if (focus.containsKey(key)) key: focus[key],
             };

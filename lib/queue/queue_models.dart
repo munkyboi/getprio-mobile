@@ -1,3 +1,39 @@
+/// Customer read projection; schema version is not a ticket freshness revision.
+enum CustomerQueueState {
+  waiting,
+  called,
+  inService,
+  terminal,
+  recovery,
+  pendingCarryOver,
+}
+
+class CustomerQueueLifecycle {
+  const CustomerQueueLifecycle(this.state);
+  final CustomerQueueState state;
+
+  static CustomerQueueLifecycle? fromJson(Object? value) {
+    if (value is! Map<String, dynamic> ||
+        value['version'] is! int ||
+        value['version'] != 1 ||
+        !value.containsKey('resourceWait') ||
+        value['resourceWait'] != null) {
+      return null;
+    }
+    final state = switch (value['state']) {
+      'waiting' => CustomerQueueState.waiting,
+      'called' => CustomerQueueState.called,
+      'in_service' => CustomerQueueState.inService,
+      'terminal' => CustomerQueueState.terminal,
+      'recovery' => CustomerQueueState.recovery,
+      'pending_carry_over' => CustomerQueueState.pendingCarryOver,
+      _ => null,
+    };
+    // v1 has no resource-wait evidence. Never infer it from position or timing.
+    return state == null ? null : CustomerQueueLifecycle(state);
+  }
+}
+
 enum TicketStatus {
   waiting,
   pendingCarryOver,
@@ -62,6 +98,7 @@ class QueueTicket {
     this.serviceStartedAt,
     this.serviceEndedAt,
     this.serviceOutcome,
+    this.queueLifecycle,
   });
 
   final String id;
@@ -86,6 +123,7 @@ class QueueTicket {
   final DateTime? serviceStartedAt;
   final DateTime? serviceEndedAt;
   final String? serviceOutcome;
+  final CustomerQueueLifecycle? queueLifecycle;
 
   bool get isInService => serviceStartedAt != null && serviceEndedAt == null;
   bool get isServiceInterrupted =>
@@ -94,7 +132,10 @@ class QueueTicket {
 
   // Queue lifecycle and actual service timing remain separate API facts.
   int get progressRank =>
-      !status.isActive || isServiceCompleted || isServiceInterrupted
+      queueLifecycle?.state == CustomerQueueState.terminal ||
+          !status.isActive ||
+          isServiceCompleted ||
+          isServiceInterrupted
       ? 4
       : serviceStartedAt != null
       ? 3
@@ -138,7 +179,8 @@ class QueueTicket {
       !isServiceInterrupted &&
       serviceEndedAt == null;
 
-  String? get serviceMessage => isInService
+  String? get serviceMessage =>
+      queueLifecycle?.state == CustomerQueueState.inService || isInService
       ? 'Your service is in progress.'
       : isServiceInterrupted
       ? 'Your service was interrupted. Contact the vendor about the next step.'
@@ -152,7 +194,26 @@ class QueueTicket {
   bool get isConfirmed =>
       status == TicketStatus.called && customerConfirmedAt != null;
 
-  String get displayStatusLabel => isInService
+  String get displayStatusLabel {
+    final projected = queueLifecycle?.state;
+    if (projected != null) {
+      return switch (projected) {
+        CustomerQueueState.inService => 'In service',
+        CustomerQueueState.waiting => 'Waiting',
+        CustomerQueueState.called => isConfirmed ? 'Confirmed' : 'Called',
+        CustomerQueueState.pendingCarryOver => 'Carried over',
+        CustomerQueueState.recovery =>
+          status == TicketStatus.skipped ? 'Skipped' : 'Needs attention',
+        CustomerQueueState.terminal =>
+          isServiceCompleted || isServiceInterrupted || !status.isActive
+              ? _legacyDisplayStatusLabel
+              : 'Closed',
+      };
+    }
+    return _legacyDisplayStatusLabel;
+  }
+
+  String get _legacyDisplayStatusLabel => isInService
       ? 'In service'
       : isServiceInterrupted
       ? 'Interrupted'
@@ -207,6 +268,7 @@ class QueueTicket {
       serviceStartedAt: _asDate(json['serviceStartedAt']),
       serviceEndedAt: _asDate(json['serviceEndedAt']),
       serviceOutcome: _asString(json['serviceOutcome']),
+      queueLifecycle: CustomerQueueLifecycle.fromJson(json['queueLifecycle']),
     );
   }
 
@@ -239,6 +301,7 @@ class QueueTicket {
       serviceStartedAt: serviceStartedAt,
       serviceEndedAt: serviceEndedAt,
       serviceOutcome: serviceOutcome,
+      queueLifecycle: queueLifecycle,
     );
   }
 }

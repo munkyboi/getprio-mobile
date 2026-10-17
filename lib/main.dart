@@ -5963,7 +5963,9 @@ class _TicketDetailsPageState extends State<TicketDetailsPage> {
           final ticket = _displayedTicket ?? details?.ticket ?? widget.ticket;
           final vendor = details?.vendor ?? _fallbackVendor(ticket);
           final completed =
-              ticket.status == TicketStatus.served || ticket.isServiceCompleted;
+              !ticket.isInService &&
+              (ticket.status == TicketStatus.served ||
+                  ticket.isServiceCompleted);
           final showQr =
               ticket.isActive &&
               !ticket.isServiceCompleted &&
@@ -6372,7 +6374,8 @@ class _TicketQueueStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final completed =
-        ticket.status == TicketStatus.served || ticket.isServiceCompleted;
+        !ticket.isInService &&
+        (ticket.status == TicketStatus.served || ticket.isServiceCompleted);
     final message = completed
         ? completedWhileOpen
               ? 'Thank you for your business! We hope to see you again soon.'
